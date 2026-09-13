@@ -1,0 +1,175 @@
+# Acahti: gateway + Forgejo + Woodpecker + one Postgres (two databases).
+# Persist only via host bind mounts under ${ACAHTI_DATA}. Never `compose down -v`.
+name: acahti
+
+services:
+  gateway:
+    build:
+      context: .
+      args:
+        ACAHTI_VERSION: ${ACAHTI_VERSION:-0.1.0}
+    image: acahti-gateway:local
+    restart: unless-stopped
+    depends_on:
+      forgejo:
+        condition: service_started
+      woodpecker:
+        condition: service_started
+    environment:
+      ACAHTI_LISTEN: ":8080"
+      ROOT_URL: ${ROOT_URL:-https://acahti.example.com}
+      DOMAIN: ${DOMAIN:-acahti.example.com}
+      GIT_SSH_PORT: ${GIT_SSH_PORT:-2222}
+      ACAHTI_ORG: ${ACAHTI_ORG:-acme}
+      FORGEJO_URL: http://forgejo:3000
+      WOODPECKER_URL: http://woodpecker:8000/ci
+      ACAHTI_ADMIN_TOKEN: ${ACAHTI_ADMIN_TOKEN:-}
+      WOODPECKER_TOKEN: ${WOODPECKER_TOKEN:-}
+      ACAHTI_SESSION_SECRET: ${ACAHTI_SESSION_SECRET:?set ACAHTI_SESSION_SECRET}
+      ACAHTI_ADMIN_USER: ${ACAHTI_ADMIN_USER:-acahti}
+      ACAHTI_VERSION: ${ACAHTI_VERSION:-0.1.0}
+      FORGEJO_VERSION: ${FORGEJO_VERSION:-15.0.8}
+      WOODPECKER_VERSION: ${WOODPECKER_VERSION:-3.18.1}
+      CADDY_VERSION: ${CADDY_VERSION:-2.10-alpine}
+      POSTGRES_VERSION: ${POSTGRES_VERSION:-16-alpine}
+    mem_limit: 256m
+    ports:
+      - "${GATEWAY_BIND:-127.0.0.1:8080}:8080"
+    networks:
+      - acahti
+
+  caddy:
+    profiles: [caddy]
+    image: caddy:${CADDY_VERSION:-2.10-alpine}
+    restart: unless-stopped
+    depends_on:
+      gateway:
+        condition: service_started
+    ports:
+      - "80:80"
+      - "${CADDY_HTTPS_BIND:-127.0.0.1:8443}:443"
+      - "${CADDY_HTTPS_BIND:-127.0.0.1:8443}:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:-acahti.example.com}
+      CADDY_AUTO_HTTPS: ${CADDY_AUTO_HTTPS:-off}
+      CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:-:80}
+    volumes:
+      - ${CADDY_FILE:-./Caddyfile}:/etc/caddy/Caddyfile:ro
+      - ${ACAHTI_DATA:-/var/lib/acahti}/caddy:/data
+    networks:
+      - acahti
+
+  cloudflared:
+    profiles: [cloudflared]
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    depends_on:
+      gateway:
+        condition: service_started
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARED_TOKEN:-}
+    networks:
+      - acahti
+
+  forgejo:
+    image: data.forgejo.org/forgejo/forgejo:${FORGEJO_VERSION:-15.0.8}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      USER_UID: ${FORGEJO_UID:-1000}
+      USER_GID: ${FORGEJO_GID:-1000}
+      FORGEJO__DEFAULT__APP_NAME: Acahti
+      FORGEJO__server__DOMAIN: ${DOMAIN:-acahti.example.com}
+      FORGEJO__server__ROOT_URL: ${ROOT_URL:-https://acahti.example.com}/
+      FORGEJO__server__HTTP_PORT: "3000"
+      FORGEJO__server__SSH_DOMAIN: ${DOMAIN:-acahti.example.com}
+      FORGEJO__server__SSH_PORT: ${GIT_SSH_PORT:-2222}
+      # Image already runs OpenSSH on :22 (published as GIT_SSH_PORT).
+      FORGEJO__server__START_SSH_SERVER: "false"
+      FORGEJO__server__DISABLE_SSH: "false"
+      FORGEJO__database__DB_TYPE: postgres
+      FORGEJO__database__HOST: postgres:5432
+      FORGEJO__database__NAME: forgejo
+      FORGEJO__database__USER: acahti
+      FORGEJO__database__PASSWD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      FORGEJO__database__SSL_MODE: disable
+      FORGEJO__security__INSTALL_LOCK: "true"
+      FORGEJO__security__COOKIE_SECURE: "false"
+      FORGEJO__session__COOKIE_SECURE: "false"
+      FORGEJO__service__DISABLE_REGISTRATION: "true"
+      FORGEJO__service__REQUIRE_SIGNIN_VIEW: "false"
+      FORGEJO__webhook__ALLOWED_HOST_LIST: external,loopback,woodpecker,gateway
+      FORGEJO__packages__ENABLED: "true"
+      FORGEJO__actions__ENABLED: "false"
+      FORGEJO__repository__ENABLE_PUSH_CREATE_USER: "true"
+      FORGEJO__repository__ENABLE_PUSH_CREATE_ORG: "true"
+    volumes:
+      - ${ACAHTI_DATA:-/var/lib/acahti}/forgejo:/data
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "${GIT_SSH_PORT:-2222}:22"
+    networks:
+      - acahti
+
+  postgres:
+    image: postgres:${POSTGRES_VERSION:-16-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: acahti
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: forgejo
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=100
+    mem_limit: 512m
+    volumes:
+      - ${ACAHTI_DATA:-/var/lib/acahti}/postgres:/var/lib/postgresql/data
+      - ./scripts/postgres-init.sh:/docker-entrypoint-initdb.d/02-woodpecker.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U acahti -d forgejo"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - acahti
+
+  woodpecker:
+    image: woodpeckerci/woodpecker-server:v${WOODPECKER_VERSION:-3.18.1}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      forgejo:
+        condition: service_started
+    environment:
+      WOODPECKER_HOST: ${ROOT_URL:-https://acahti.example.com}/ci
+      WOODPECKER_EXPERT_WEBHOOK_HOST: http://woodpecker:8000/ci
+      WOODPECKER_OPEN: "false"
+      WOODPECKER_ADMIN: ${ACAHTI_ADMIN_USER:-acahti}
+      WOODPECKER_FORGEJO: "true"
+      WOODPECKER_FORGEJO_URL: http://forgejo:3000
+      WOODPECKER_EXPERT_FORGE_OAUTH_HOST: ${ROOT_URL:-https://acahti.example.com}
+      WOODPECKER_FORGE_TIMEOUT: 30s
+      WOODPECKER_FORGEJO_CLIENT: ${WOODPECKER_FORGEJO_CLIENT:-}
+      WOODPECKER_FORGEJO_SECRET: ${WOODPECKER_FORGEJO_SECRET:-}
+      WOODPECKER_DATABASE_DRIVER: postgres
+      WOODPECKER_DATABASE_DATASOURCE: postgres://acahti:${POSTGRES_PASSWORD}@postgres:5432/woodpecker?sslmode=disable
+      WOODPECKER_AGENT_SECRET: ${WOODPECKER_AGENT_SECRET:?set WOODPECKER_AGENT_SECRET in .env}
+      WOODPECKER_GRPC_ADDR: ${WOODPECKER_GRPC_ADDR:-:9000}
+      WOODPECKER_SERVER_ADDR: ":8000"
+    volumes:
+      - ${ACAHTI_DATA:-/var/lib/acahti}/woodpecker:/var/lib/woodpecker
+    ports:
+      - "127.0.0.1:8000:8000"
+      - "9000:9000"
+    networks:
+      - acahti
+
+networks:
+  acahti:
+    driver: bridge

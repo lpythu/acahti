@@ -1,0 +1,31 @@
+# Acahti host deploy. Only tags. Runner lives on the acahti machine.
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acahti-release
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, acahti]
+    steps:
+      - name: checkout tag on host tree
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          root=/home/saidc/acahti
+          cd "$root"
+          git fetch --tags --force origin
+          git checkout --force "refs/tags/${TAG}"
+          test -f .env || { echo "missing ${root}/.env" >&2; exit 1; }
+          bash scripts/up.sh
+          docker compose --env-file .env --env-file versions.env ps

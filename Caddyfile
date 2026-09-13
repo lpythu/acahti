@@ -1,0 +1,8 @@
+{
+	auto_https {$CADDY_AUTO_HTTPS}
+}
+
+{$CADDY_SITE_ADDRESS} {
+	encode gzip
+	reverse_proxy gateway:8080
+}

@@ -1,0 +1,11 @@
+when:
+  - event: [push, pull_request, manual]
+
+labels:
+  build: true
+
+steps:
+  ci:
+    image: bash
+    commands:
+      - bash cicd_acahti/run.sh ci
