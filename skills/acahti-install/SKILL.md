@@ -25,6 +25,6 @@ Do not install a Woodpecker agent on the acahti host, office, or thk.
 4. Return the printed URL, MCP path, invite path, and admin username. Password stays in the host `.env` — do not paste it into chat unless the user asks.
 5. If the runner was not installed by `install.sh`: `scp scripts/agent.sh` to buildof, then `sudo -E ROLE=both SERVER=<acahti-ip>:9000 SECRET=… bash agent.sh`.
 
-Upgrade the island: bump `ACAHTI_VERSION`, push `main`, `bash scripts/tag-release.sh`. The GitHub Actions runner **on the acahti host** (`labels: acahti`) checks out that tag, rsyncs into `/home/saidc/acahti` (keeps `.env`), and runs `scripts/up.sh` (never `compose down -v`). Woodpecker `ROLE=both` stays on buildof; re-run `agent.sh` there only if `WOODPECKER_VERSION` changed.
+Upgrade the island: bump `ACAHTI_VERSION`, push `main`, `bash scripts/tag-release.sh`. The GitHub Actions runner **on the acahti host** (`labels: acahti`) pulls that tag as a tarball (GitHub API; `git` to github.com is blocked on this LAN), rsyncs into `/home/saidc/acahti` (keeps `.env`), and runs `scripts/up.sh` (never `compose down -v`). Woodpecker `ROLE=both` stays on buildof; re-run `agent.sh` there only if `WOODPECKER_VERSION` changed.
 
 Never publish Woodpecker gRPC `:9000` to the internet.

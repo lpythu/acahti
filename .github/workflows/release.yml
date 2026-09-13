@@ -1,5 +1,6 @@
 # Acahti host deploy. Only tags. Runner lives on the acahti machine.
-# Checkout via GITHUB_TOKEN, then rsync into /home/saidc/acahti (keeps host .env).
+# github.com git is unreachable from this LAN; pull the tag tarball via the API
+# (api.github.com + codeload), rsync into /home/saidc/acahti, keep host .env.
 name: release
 
 on:
@@ -18,19 +19,31 @@ jobs:
   deploy:
     runs-on: [self-hosted, acahti]
     steps:
-      - uses: actions/checkout@v5
-      - name: sync host tree and up
+      - name: fetch tag tarball, sync, up
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           dest=/home/saidc/acahti
           test -f "${dest}/.env" || { echo "missing ${dest}/.env" >&2; exit 1; }
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          curl -fsSL --retry 3 \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -o "${tmp}/src.tgz" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/tarball/${TAG}"
+          mkdir -p "${tmp}/tree"
+          tar -xzf "${tmp}/src.tgz" -C "${tmp}/tree" --strip-components=1
           rsync -a --delete \
             --exclude '.env' \
             --exclude '.git/' \
             --exclude 'web/node_modules/' \
             --exclude 'web/dist/' \
             --exclude 'internal/web/dist/' \
-            "${GITHUB_WORKSPACE}/" "${dest}/"
+            "${tmp}/tree/" "${dest}/"
           cd "$dest"
           bash scripts/up.sh
           docker compose --env-file .env --env-file versions.env ps
