@@ -46,7 +46,6 @@ export type Stack = {
   version: string
   forgejo: string
   woodpecker: string
-  caddy: string
   postgres: string
   agents: Agent[]
   upgrade_hint: string

@@ -15,31 +15,14 @@ if command -v curl >/dev/null; then
   pub_ip="$(curl -fsS --max-time 3 https://ifconfig.me/ip 2>/dev/null || true)"
 fi
 
-edge="${EDGE:-}"
-tls="${ACAHTI_TLS:-}"
-if [[ -z "${edge}" ]]; then
-  if [[ -n "${CLOUDFLARED_TOKEN:-}" && -z "${pub_ip}" ]]; then
-    edge=cloudflared
-  elif [[ -n "${DOMAIN:-}" && -n "${pub_ip}" ]]; then
-    edge=caddy
-  else
-    edge=none
-  fi
-fi
-if [[ -z "${tls}" ]]; then
-  if [[ "${edge}" == "caddy" && -n "${pub_ip}" ]]; then
-    tls=auto
-  else
-    tls=off
-  fi
-fi
+# Loopback unless the installer already chose a bind. Laptop / no proxy: 0.0.0.0:8080.
+bind="${GATEWAY_BIND:-127.0.0.1:8080}"
 
 echo "MEM_MB=${mem_mb}"
 echo "HAS_DOCKER=${has_docker}"
 echo "HAS_SUDO=${has_sudo}"
 echo "PUBLIC_IP=${pub_ip}"
-echo "EDGE=${edge}"
-echo "ACAHTI_TLS=${tls}"
+echo "GATEWAY_BIND=${bind}"
 
 if [[ "${has_sudo}" -ne 1 ]]; then
   echo "STOP=need sudo" >&2

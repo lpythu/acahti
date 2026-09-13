@@ -81,8 +81,8 @@ export function AdminHomePage() {
             <section className="flex flex-col gap-2">
               <h2 className="text-sm font-medium">{t("stack")}</h2>
               <p className="text-sm">
-                Acahti {stack.version} · Forgejo {stack.forgejo} · Woodpecker {stack.woodpecker} · Caddy{" "}
-                {stack.caddy} · Postgres {stack.postgres}
+                Acahti {stack.version} · Forgejo {stack.forgejo} · Woodpecker {stack.woodpecker} · Postgres{" "}
+                {stack.postgres}
               </p>
               <CopyField label={t("upgradeHint")} value={stack.upgrade_hint} />
             </section>

@@ -12,6 +12,6 @@ root="$(acahti_root)"
 cd "$root"
 compose_args
 "${COMPOSE[@]}" down || true
-sudo rm -rf "${ACAHTI_DATA:?}/forgejo" "${ACAHTI_DATA}/woodpecker" "${ACAHTI_DATA}/postgres" "${ACAHTI_DATA}/caddy" "${ACAHTI_DATA}/gateway"
+sudo rm -rf "${ACAHTI_DATA:?}/forgejo" "${ACAHTI_DATA}/woodpecker" "${ACAHTI_DATA}/postgres" "${ACAHTI_DATA}/gateway"
 sudo rm -f "${ACAHTI_DATA}/admin.token" "${ACAHTI_DATA}/agent.secret" "${ACAHTI_DATA}/woodpecker.token"
 echo "OK: emptied ${ACAHTI_DATA}. run bootstrap.sh next."

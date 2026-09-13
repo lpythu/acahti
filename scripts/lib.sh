@@ -43,56 +43,6 @@ need_cmd() {
   }
 }
 
-apply_edge_env() {
-  EDGE="${EDGE:-caddy}"
-  ACAHTI_TLS="${ACAHTI_TLS:-auto}"
-  case "${EDGE}" in
-    caddy | cloudflared | none) ;;
-    *)
-      echo "EDGE must be caddy, cloudflared, or none" >&2
-      exit 1
-      ;;
-  esac
-  case "${ACAHTI_TLS}" in
-    auto | off) ;;
-    *)
-      echo "ACAHTI_TLS must be auto or off" >&2
-      exit 1
-      ;;
-  esac
-  if [[ "${EDGE}" == "caddy" && "${ACAHTI_TLS}" == "auto" ]]; then
-    CADDY_AUTO_HTTPS="disable_redirects"
-    CADDY_SITE_ADDRESS="${DOMAIN}"
-    CADDY_FILE="./Caddyfile.acme"
-    CADDY_HTTPS_BIND="${CADDY_HTTPS_BIND:-0.0.0.0:443}"
-    GATEWAY_BIND="${GATEWAY_BIND:-127.0.0.1:8080}"
-  elif [[ "${EDGE}" == "caddy" ]]; then
-    CADDY_AUTO_HTTPS="off"
-    CADDY_SITE_ADDRESS=":80"
-    CADDY_FILE="./Caddyfile"
-    CADDY_HTTPS_BIND="${CADDY_HTTPS_BIND:-127.0.0.1:8443}"
-    GATEWAY_BIND="${GATEWAY_BIND:-127.0.0.1:8080}"
-  elif [[ "${EDGE}" == "none" ]]; then
-    GATEWAY_BIND="${GATEWAY_BIND:-0.0.0.0:8080}"
-    CADDY_AUTO_HTTPS="off"
-    CADDY_SITE_ADDRESS=":80"
-    CADDY_FILE="./Caddyfile"
-  else
-    GATEWAY_BIND="${GATEWAY_BIND:-127.0.0.1:8080}"
-    CADDY_AUTO_HTTPS="off"
-    CADDY_SITE_ADDRESS=":80"
-    CADDY_FILE="./Caddyfile"
-  fi
-  export EDGE ACAHTI_TLS CADDY_AUTO_HTTPS CADDY_SITE_ADDRESS CADDY_FILE CADDY_HTTPS_BIND GATEWAY_BIND
-  _upsert_env EDGE "${EDGE}"
-  _upsert_env ACAHTI_TLS "${ACAHTI_TLS}"
-  _upsert_env CADDY_AUTO_HTTPS "${CADDY_AUTO_HTTPS}"
-  _upsert_env CADDY_SITE_ADDRESS "${CADDY_SITE_ADDRESS}"
-  _upsert_env CADDY_FILE "${CADDY_FILE}"
-  _upsert_env CADDY_HTTPS_BIND "${CADDY_HTTPS_BIND}"
-  _upsert_env GATEWAY_BIND "${GATEWAY_BIND}"
-}
-
 compose_args() {
   local root
   root="$(acahti_root)"
@@ -100,10 +50,6 @@ compose_args() {
   if [[ -f "${root}/versions.env" ]]; then
     COMPOSE+=(--env-file "${root}/versions.env")
   fi
-  case "${EDGE:-caddy}" in
-    caddy) COMPOSE+=(--profile caddy) ;;
-    cloudflared) COMPOSE+=(--profile cloudflared) ;;
-  esac
 }
 
 ensure_env() {
@@ -121,10 +67,9 @@ ensure_env() {
   : "${ACAHTI_ORG:=acme}"
   : "${ACAHTI_DATA:=/var/lib/acahti}"
   : "${ACAHTI_ADMIN_USER:=acahti}"
-  : "${ACAHTI_ADMIN_EMAIL:=admin@example.com}"
+  : "${ACAHTI_ADMIN_EMAIL:=${ACAHTI_ADMIN_USER}@noreply.${DOMAIN}}"
   : "${GIT_SSH_PORT:=2222}"
-  : "${EDGE:=caddy}"
-  : "${ACAHTI_TLS:=auto}"
+  : "${GATEWAY_BIND:=127.0.0.1:8080}"
   if [[ -z "${POSTGRES_PASSWORD:-}" ]]; then
     POSTGRES_PASSWORD="$(gen_secret)"
     _upsert_env POSTGRES_PASSWORD "${POSTGRES_PASSWORD}"
@@ -141,8 +86,8 @@ ensure_env() {
     ACAHTI_SESSION_SECRET="$(gen_secret)"
     _upsert_env ACAHTI_SESSION_SECRET "${ACAHTI_SESSION_SECRET}"
   fi
-  apply_edge_env
   export DOMAIN ROOT_URL ACAHTI_ORG ACAHTI_DATA ACAHTI_ADMIN_USER ACAHTI_ADMIN_EMAIL
+  export GATEWAY_BIND
   export ACAHTI_ADMIN_PASSWORD POSTGRES_PASSWORD WOODPECKER_AGENT_SECRET
   export WOODPECKER_FORGEJO_CLIENT WOODPECKER_FORGEJO_SECRET WOODPECKER_TOKEN
   export ACAHTI_ADMIN_TOKEN ACAHTI_SESSION_SECRET GIT_SSH_PORT
@@ -153,4 +98,5 @@ ensure_env() {
   _upsert_env DOMAIN "${DOMAIN}"
   _upsert_env ROOT_URL "${ROOT_URL}"
   _upsert_env ACAHTI_ORG "${ACAHTI_ORG}"
+  _upsert_env GATEWAY_BIND "${GATEWAY_BIND}"
 }

@@ -302,7 +302,6 @@ func (p *Pages) Stack(w http.ResponseWriter, r *http.Request) {
 		"version":           p.Cfg.Version,
 		"forgejo":           p.Cfg.ForgejoVersion,
 		"woodpecker":        p.Cfg.WoodpeckerVersion,
-		"caddy":             p.Cfg.CaddyVersion,
 		"postgres":          p.Cfg.PostgresVersion,
 		"agents":            agents,
 		"upgrade_hint":      "Ask a coding agent to follow skills/acahti-install: replace the tree, bash scripts/up.sh, then ROLE=both agent.sh on buildof.",

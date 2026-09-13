@@ -29,5 +29,5 @@ fi
 compose_args
 "${COMPOSE[@]}" up -d --build
 "${COMPOSE[@]}" ps
-echo "OK: gateway ${GATEWAY_BIND}  public ${ROOT_URL}  edge=${EDGE}"
+echo "OK: gateway ${GATEWAY_BIND}  public ${ROOT_URL}"
 echo "    git+ssh :${GIT_SSH_PORT}   woodpecker grpc :9000"

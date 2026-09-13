@@ -16,11 +16,9 @@ fi
 echo "==> detect"
 # shellcheck disable=SC1091
 eval "$(bash "${root}/scripts/detect.sh")"
-export EDGE ACAHTI_TLS
 _upsert_env DOMAIN "${DOMAIN}"
 _upsert_env ROOT_URL "${ROOT_URL}"
-_upsert_env EDGE "${EDGE}"
-_upsert_env ACAHTI_TLS "${ACAHTI_TLS}"
+_upsert_env GATEWAY_BIND "${GATEWAY_BIND:-127.0.0.1:8080}"
 
 echo "==> bootstrap"
 bash "${root}/scripts/bootstrap.sh"

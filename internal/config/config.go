@@ -23,7 +23,6 @@ type Config struct {
 	Version           string
 	ForgejoVersion    string
 	WoodpeckerVersion string
-	CaddyVersion      string
 	PostgresVersion   string
 }
 
@@ -50,7 +49,6 @@ func Load() Config {
 		Version:           getenv("ACAHTI_VERSION", Version),
 		ForgejoVersion:    getenv("FORGEJO_VERSION", "15.0.8"),
 		WoodpeckerVersion: getenv("WOODPECKER_VERSION", "3.18.1"),
-		CaddyVersion:      getenv("CADDY_VERSION", "2.10-alpine"),
 		PostgresVersion:   getenv("POSTGRES_VERSION", "16-alpine"),
 	}
 }
