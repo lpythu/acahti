@@ -36,12 +36,12 @@ Gateway is the only public HTTP app. Forgejo and Woodpecker stay on the compose 
 
 | Role | Runs |
 |---|---|
-| **acahti** | gateway, Forgejo, Woodpecker, one Postgres. No Woodpecker agent. |
-| **buildof** | one `woodpecker-agent` with `ROLE=both` (`build=true,deploy=true`) |
+| **acahti** | gateway, Forgejo, Woodpecker server, one Postgres. GitHub Actions self-hosted runner for **this** repo (tag → `up.sh`). No Woodpecker agent. |
+| **buildof** | one `woodpecker-agent` with `ROLE=both` (`build=true,deploy=true`) for island product repos |
 
 Product repos **on this island** still use Woodpecker + [cicd_acahti](cicd_acahti/) (`ci.sh` / `cd.sh`) on buildof. `ssh office` / `ssh thk` only appear inside `cicd_acahti/kube.sh`. Those product branches stay `dev` / `test`.
 
-**This repo** (the island itself): `main` only. Release: bump `ACAHTI_VERSION`, `git push origin main`, `bash scripts/tag-release.sh` → tag `v$ACAHTI_VERSION` → GitHub Actions on the host runner → `scripts/up.sh`.
+**This repo** (the island itself): `main` only. Release: bump `ACAHTI_VERSION`, `git push origin main`, `bash scripts/tag-release.sh` → tag `v$ACAHTI_VERSION` → GitHub Actions on the **acahti** machine → `scripts/up.sh`.
 
 ## Edge
 
