@@ -1,4 +1,5 @@
 # Acahti host deploy. Only tags. Runner lives on the acahti machine.
+# Checkout via GITHUB_TOKEN, then rsync into /home/saidc/acahti (keeps host .env).
 name: release
 
 on:
@@ -17,15 +18,19 @@ jobs:
   deploy:
     runs-on: [self-hosted, acahti]
     steps:
-      - name: checkout tag on host tree
-        env:
-          TAG: ${{ github.ref_name }}
+      - uses: actions/checkout@v5
+      - name: sync host tree and up
         run: |
           set -euo pipefail
-          root=/home/saidc/acahti
-          cd "$root"
-          git fetch --tags --force origin
-          git checkout --force "refs/tags/${TAG}"
-          test -f .env || { echo "missing ${root}/.env" >&2; exit 1; }
+          dest=/home/saidc/acahti
+          test -f "${dest}/.env" || { echo "missing ${dest}/.env" >&2; exit 1; }
+          rsync -a --delete \
+            --exclude '.env' \
+            --exclude '.git/' \
+            --exclude 'web/node_modules/' \
+            --exclude 'web/dist/' \
+            --exclude 'internal/web/dist/' \
+            "${GITHUB_WORKSPACE}/" "${dest}/"
+          cd "$dest"
           bash scripts/up.sh
           docker compose --env-file .env --env-file versions.env ps

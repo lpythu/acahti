@@ -4,7 +4,7 @@ Self-hosted control plane for coding agents. One install: git, required-green ch
 
 Kernels are official **Forgejo** and **Woodpecker** images. This repo is the gateway, compose, and install contract. Do not fork those UIs.
 
-Pinned versions live in [versions.env](versions.env) (`ACAHTI_VERSION` is this repo). Source of truth: **GitHub `saidc-ai/acahti`**, branch **`main` only**. A tag `vX.Y.Z` (must match `ACAHTI_VERSION`) is what deploys the acahti host. Never `compose down -v`.
+Pinned versions live in [versions.env](versions.env) (`ACAHTI_VERSION` is this repo). Source of truth: **GitHub `lpythu/acahti`**, branch **`main` only**. A tag `vX.Y.Z` (must match `ACAHTI_VERSION`) is what deploys the acahti host. Never `compose down -v`.
 
 ## Architecture
 
@@ -76,7 +76,7 @@ Skills: [skills/acahti-install/SKILL.md](skills/acahti-install/SKILL.md) (bootst
 - MCP: `https://$ROOT_URL/mcp` Bearer token from the account page
 - Narrow REST: `/acahti/v1/…` same verbs as MCP
 - Registration is closed
-- Island upgrade: tag `vX.Y.Z` on `saidc-ai/acahti` (not a push to `main`)
+- Island upgrade: tag `vX.Y.Z` on `lpythu/acahti` (not a push to `main`)
 
 Example values in docs: `https://acahti.example.com`, `org=acme`.
 
