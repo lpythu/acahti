@@ -748,12 +748,12 @@ func (c *Client) ProtectDefault(owner, name, branch string) error {
 	if branch == "" {
 		branch = "dev"
 	}
-	_, code, err := c.do(http.MethodPost, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/branch_protections", "", "", map[string]any{
+	body := map[string]any{
 		"rule_name":                         branch,
 		"enable_push":                       false,
 		"enable_force_push":                 false,
 		"enable_merge_whitelist":            false,
-		"enable_status_check":               true,
+		"enable_status_check":               false,
 		"status_check_contexts":             []string{},
 		"block_on_rejected_reviews":         false,
 		"block_on_official_review_requests": false,
@@ -762,11 +762,16 @@ func (c *Client) ProtectDefault(owner, name, branch string) error {
 		"require_signed_commits":            false,
 		"protected_file_patterns":           "",
 		"unprotected_file_patterns":         "",
-	})
-	if err != nil && code != http.StatusConflict && code != http.StatusUnprocessableEntity {
+	}
+	_, code, err := c.do(http.MethodPost, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/branch_protections", "", "", body)
+	if err == nil {
+		return nil
+	}
+	if code != http.StatusConflict && code != http.StatusUnprocessableEntity {
 		return err
 	}
-	return nil
+	_, _, err = c.do(http.MethodPatch, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/branch_protections/"+url.PathEscape(branch), "", "", body)
+	return err
 }
 
 func (c *Client) CreatePR(owner, name, title, head, base, body string) (PR, error) {

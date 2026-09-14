@@ -1,9 +1,31 @@
 #!/usr/bin/env bash
 # buildof: docker buildx → Harbor; also ACR when ENV=hk or branch is test.
+# KIND=pypi|npm: compile the package; no image.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh
 source "${here}/lib.sh"
+: "${ROOT:?set ROOT}"
+: "${KIND:?set KIND}"
+cd "$ROOT"
+
+if [[ "$KIND" == "pypi" ]]; then
+  command -v uv >/dev/null || {
+    echo "uv required" >&2
+    exit 1
+  }
+  rm -rf dist
+  uv build
+  echo "OK ci pypi"
+  exit 0
+fi
+if [[ "$KIND" == "npm" ]]; then
+  : "${PKG_PATH:?set PKG_PATH (package directory)}"
+  npm pack --ignore-scripts --dry-run "${ROOT}/${PKG_PATH}"
+  echo "OK ci npm"
+  exit 0
+fi
+
 require_repo
 commit_id
 cd "$ROOT"
