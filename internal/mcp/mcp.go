@@ -223,9 +223,9 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 	case "whoami":
 		u, err := s.FJ.UserSudo(token)
 		if err != nil {
-			return identity.View(token, s.Cfg.RootURL, s.Cfg.Domain, org), nil
+			return identity.View(token, "", s.Cfg.RootURL, s.Cfg.Domain, org), nil
 		}
-		return identity.View(u.Login, s.Cfg.RootURL, s.Cfg.Domain, org), nil
+		return identity.View(u.Login, u.FullName, s.Cfg.RootURL, s.Cfg.Domain, org), nil
 	case "repo_list":
 		return s.Cat.ListRepos(token, "", pq)
 	case "repo_get":
@@ -259,13 +259,13 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		if base == "" {
 			base = "dev"
 		}
-		return s.FJ.CreatePR(str("owner"), str("name"), str("title"), str("head"), base, str("body"), token)
+		return s.FJ.CreatePR(str("owner"), str("name"), str("title"), str("head"), base, str("body"))
 	case "pr_list":
 		return s.FJ.ListPRs(str("owner"), str("name"), str("state"), pq)
 	case "pr_get":
 		return s.Cat.PRDetail(token, str("owner"), str("name"), int(num("number")))
 	case "pr_comment":
-		return map[string]any{"ok": true}, s.FJ.CommentPR(str("owner"), str("name"), int(num("number")), str("body"), token)
+		return map[string]any{"ok": true}, s.FJ.CommentPR(str("owner"), str("name"), int(num("number")), str("body"))
 	case "pr_comments":
 		return s.Cat.ListComments(token, str("owner"), str("name"), int(num("number")), pq)
 	case "pr_merge":
