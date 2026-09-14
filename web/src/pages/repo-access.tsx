@@ -20,11 +20,11 @@ export function RepoAccessPage() {
     <PageFrame loading={load.loading && !data} error={load.error} header={<p className="text-sm text-muted-foreground">{t("accessDesc")}</p>}>
       {data ? (
         <div className="flex flex-col gap-8">
-          {data.group ? (
+          {data.team ? (
             <section className="flex flex-col gap-3">
               <h2 className="text-sm font-medium">
-                <Link className="hover:underline" to={`/repos?group=${encodeURIComponent(data.group)}`}>
-                  {t("viaGroup", { group: data.group })}
+                <Link className="hover:underline" to={`/repos?team=${encodeURIComponent(data.team)}`}>
+                  {t("viaTeam", { team: data.team })}
                 </Link>
               </h2>
               <PeopleTable people={data.inherited} empty={t("noInherited")} />
@@ -32,7 +32,7 @@ export function RepoAccessPage() {
           ) : null}
           <section className="flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-medium">{data.group ? t("viaDirect") : t("members")}</h2>
+              <h2 className="text-sm font-medium">{data.team ? t("viaDirect") : t("members")}</h2>
               {manage ? (
                 <AddPersonMenu
                   title={t("addMember")}

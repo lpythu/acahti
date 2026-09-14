@@ -36,7 +36,7 @@ const SECTION_KEY: Record<string, MessageKey> = {
   access: "access",
 }
 
-function RepoBreadcrumb({ owner, name, group }: { owner: string; name: string; group: string }) {
+function RepoBreadcrumb({ owner, name, team }: { owner: string; name: string; team: string }) {
   const t = useT()
   const { pathname } = useLocation()
   const [sp] = useSearchParams()
@@ -55,10 +55,10 @@ function RepoBreadcrumb({ owner, name, group }: { owner: string; name: string; g
           <BreadcrumbLink render={<Link to="/repos" />}>{t("repos")}</BreadcrumbLink>
         </BreadcrumbItem>
         <BreadcrumbSeparator />
-        {group ? (
+        {team ? (
           <>
             <BreadcrumbItem>
-              <BreadcrumbLink render={<Link to={`/repos?group=${encodeURIComponent(group)}`} />}>{group}</BreadcrumbLink>
+              <BreadcrumbLink render={<Link to={`/repos?team=${encodeURIComponent(team)}`} />}>{team}</BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator />
           </>
@@ -131,9 +131,9 @@ export function RepoLayout() {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between gap-3 border-b px-4 py-3 lg:px-6">
         <div className="min-w-0">
-          <RepoBreadcrumb owner={owner} name={name} group={data?.repo.group || ""} />
+          <RepoBreadcrumb owner={owner} name={name} team={data?.repo.team || ""} />
         </div>
-        {data ? <CloneMenu https={data.clone_https} ssh={data.clone_ssh} /> : null}
+        {data ? <CloneMenu url={data.clone_https} /> : null}
       </div>
       {error && !data ? <p className="px-4 py-3 text-sm text-destructive">{error}</p> : null}
       <div className="flex min-h-0 flex-1 flex-col">

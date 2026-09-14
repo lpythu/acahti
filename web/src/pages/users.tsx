@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from "react"
 import { Link } from "react-router-dom"
+import { toast } from "sonner"
 
 import { CopyField } from "@/components/copy-field"
 import { PagedList } from "@/components/paged-list"
@@ -17,17 +18,17 @@ import { api, type Invite, type User } from "@/lib/api"
 import { onboardNote, randomPassword } from "@/lib/onboard"
 import { useSession } from "@/lib/session"
 
-async function groupsByLogin() {
+async function teamsByLogin() {
   const map: Record<string, string[]> = {}
   let pageNum = 1
   for (;;) {
-    const listed = await api.repoGroups({ page: pageNum, page_size: 50 })
+    const listed = await api.repoTeams({ page: pageNum, page_size: 50 })
     await Promise.all(
       (listed.items || []).map(async (row) => {
-        const g = await api.group(row.group)
-        for (const m of g.members || []) {
+        const team = await api.team(row.team)
+        for (const m of team.members || []) {
           const cur = map[m.login] || []
-          if (!cur.includes(row.group)) cur.push(row.group)
+          if (!cur.includes(row.team)) cur.push(row.team)
           map[m.login] = cur
         }
       }),
@@ -41,8 +42,8 @@ async function groupsByLogin() {
   return map
 }
 
-function userGroups(u: User, fallback: Record<string, string[]> | null) {
-  if (u.groups) return u.groups
+function userTeams(u: User, fallback: Record<string, string[]> | null) {
+  if (u.teams) return u.teams
   return fallback?.[u.login] || []
 }
 
@@ -260,8 +261,8 @@ export function UsersPage() {
   const [admin, setAdmin] = useState(false)
   const [resets, setResets] = useState<Record<string, string>>({})
   const users = usersLoad.items
-  const apiHasGroups = Boolean(usersLoad.data) && users.every((u) => u.groups !== undefined)
-  const membership = useLoad(groupsByLogin, [], Boolean(usersLoad.data) && !apiHasGroups)
+  const apiHasTeams = Boolean(usersLoad.data) && users.every((u) => u.teams !== undefined)
+  const membership = useLoad(teamsByLogin, [], Boolean(usersLoad.data) && !apiHasTeams)
   const invites = invitesLoad.data?.invites || []
   const joinBase = invitesLoad.data?.join || "/join"
 
@@ -273,13 +274,16 @@ export function UsersPage() {
   }
 
   async function resetRow(login: string) {
-    const pw = resets[login] || ""
-    if (!pw) return
-    setFormErr("")
+    const pw = resets[login]?.trim() || ""
+    if (!pw) {
+      toast.error(t("passwordRequired"))
+      return
+    }
     try {
       await api.setPassword(login, pw)
+      toast.success(t("resetPasswordSuccess"))
     } catch (err) {
-      setFormErr(err instanceof Error ? err.message : t("loadError"))
+      toast.error(err instanceof Error ? err.message : t("resetPasswordFailed"))
     }
   }
 
@@ -320,7 +324,7 @@ export function UsersPage() {
           <TableHeader>
             <TableRow>
               <TableHead>{t("username")}</TableHead>
-              <TableHead>{t("group")}</TableHead>
+              <TableHead>{t("team")}</TableHead>
               <TableHead>{t("admin")}</TableHead>
               <TableHead>{t("password")}</TableHead>
             </TableRow>
@@ -331,13 +335,13 @@ export function UsersPage() {
                 <TableCell>{u.login}</TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1.5">
-                    {userGroups(u, membership.data).map((g) => (
+                    {userTeams(u, membership.data).map((name) => (
                       <Link
-                        key={g}
-                        to={`/repos?group=${encodeURIComponent(g)}`}
+                        key={name}
+                        to={`/repos?team=${encodeURIComponent(name)}`}
                         className="inline-flex rounded-md bg-background px-2 py-0.5 text-xs shadow-sm ring-1 ring-foreground/10 hover:bg-muted"
                       >
-                        {g}
+                        {name}
                       </Link>
                     ))}
                   </div>

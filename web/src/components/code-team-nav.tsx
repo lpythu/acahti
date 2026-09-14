@@ -22,45 +22,45 @@ import { useT } from "@/i18n/i18n"
 import { api, splitRepo } from "@/lib/api"
 import { parsePipelinePath, repoBase } from "@/lib/nav"
 
-export type CodeGroupSection = "repos" | "pipelines"
+export type CodeTeamSection = "repos" | "pipelines"
 
-function groupHref(section: CodeGroupSection, group: string) {
+function teamHref(section: CodeTeamSection, team: string) {
   const base = section === "pipelines" ? "/pipelines" : "/repos"
-  return `${base}?group=${encodeURIComponent(group)}`
+  return `${base}?team=${encodeURIComponent(team)}`
 }
 
-function itemHref(section: CodeGroupSection, owner: string, name: string) {
+function itemHref(section: CodeTeamSection, owner: string, name: string) {
   if (section === "pipelines") {
     return `/pipelines?repo=${encodeURIComponent(`${owner}/${name}`)}`
   }
   return `/repos/${owner}/${name}`
 }
 
-function GroupNode({
+function TeamNode({
   section,
-  group,
+  team,
   pathname,
-  filterGroup,
+  filterTeam,
   filterRepo,
   defaultOpen,
   itemIcon,
 }: {
-  section: CodeGroupSection
-  group: string
+  section: CodeTeamSection
+  team: string
   pathname: string
-  filterGroup: string
+  filterTeam: string
   filterRepo: string
   defaultOpen: boolean
   itemIcon: ReactNode
 }) {
   const pipe = parsePipelinePath(pathname)
-  const groupActive = !filterRepo && !pipe && filterGroup === group && !repoBase(pathname)
-  const [open, setOpen] = useState(defaultOpen || groupActive)
-  const repos = usePage((q) => api.repos(q, group), [group], {
+  const teamActive = !filterRepo && !pipe && filterTeam === team && !repoBase(pathname)
+  const [open, setOpen] = useState(defaultOpen || teamActive)
+  const repos = usePage((q) => api.repos(q, team), [team], {
     url: false,
     enabled: open,
   })
-  const inGroup = repos.items.some((r) => {
+  const inTeam = repos.items.some((r) => {
     const { owner, name } = splitRepo(r.full_name || r.name)
     if (filterRepo === `${owner}/${name}`) return true
     if (pipe?.owner === owner && pipe.name === name) return true
@@ -69,27 +69,27 @@ function GroupNode({
   })
 
   useEffect(() => {
-    if (inGroup || groupActive) setOpen(true)
-  }, [inGroup, groupActive])
+    if (inTeam || teamActive) setOpen(true)
+  }, [inTeam, teamActive])
 
   return (
     <SidebarMenuItem>
       <Collapsible open={open} onOpenChange={setOpen}>
         <div className="flex min-w-0 items-center">
           <SidebarMenuButton
-            tooltip={group}
-            isActive={groupActive}
+            tooltip={team}
+            isActive={teamActive}
             className="flex-1"
-            render={<Link to={groupHref(section, group)} />}
+            render={<Link to={teamHref(section, team)} />}
           >
             <FolderIcon />
-            <span>{group}</span>
+            <span>{team}</span>
           </SidebarMenuButton>
           <CollapsibleTrigger
             className={cn(
               "flex size-8 shrink-0 items-center justify-center rounded-md text-sidebar-foreground ring-sidebar-ring outline-hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 group-data-[collapsible=icon]:hidden",
             )}
-            aria-label={group}
+            aria-label={team}
           >
             <ChevronRightIcon className={cn("size-4 transition-transform", open && "rotate-90")} />
           </CollapsibleTrigger>
@@ -121,13 +121,13 @@ function GroupNode({
   )
 }
 
-export function CodeGroupNav({ section }: { section: CodeGroupSection }) {
+export function CodeTeamNav({ section }: { section: CodeTeamSection }) {
   const t = useT()
   const { pathname } = useLocation()
   const [sp] = useSearchParams()
-  const filterGroup = sp.get("group") || ""
+  const filterTeam = sp.get("team") || ""
   const filterRepo = sp.get("repo") || ""
-  const groups = usePage((q) => api.repoGroups(q), [], { url: false })
+  const teams = usePage((q) => api.repoTeams(q), [], { url: false })
   const pipe = parsePipelinePath(pathname)
   const current = repoBase(pathname)
   const headOwner = pipe?.owner || (current ? current.split("/")[2] : splitRepo(filterRepo).owner)
@@ -137,31 +137,31 @@ export function CodeGroupNav({ section }: { section: CodeGroupSection }) {
     [headOwner, headName],
     Boolean(headOwner && headName),
   )
-  const currentGroup = filterGroup || head.data?.repo.group || ""
-  const openAll = groups.items.length <= 1 && !filterGroup && !currentGroup
+  const currentTeam = filterTeam || head.data?.repo.team || ""
+  const openAll = teams.items.length <= 1 && !filterTeam && !currentTeam
 
-  if (!groups.items.length) return null
+  if (!teams.items.length) return null
 
   const itemIcon = section === "pipelines" ? <WorkflowIcon /> : <BookMarkedIcon />
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>{t("codeGroup")}</SidebarGroupLabel>
+      <SidebarGroupLabel>{t("teams")}</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
-          {groups.items.map((g) => (
-            <GroupNode
-              key={g.group}
+          {teams.items.map((row) => (
+            <TeamNode
+              key={row.team}
               section={section}
-              group={g.group}
+              team={row.team}
               pathname={pathname}
-              filterGroup={filterGroup}
+              filterTeam={filterTeam}
               filterRepo={filterRepo}
-              defaultOpen={openAll || g.group === currentGroup}
+              defaultOpen={openAll || row.team === currentTeam}
               itemIcon={itemIcon}
             />
           ))}
-          <MoreButton page={groups.page} hasMore={groups.hasMore} onPage={groups.setPage} />
+          <MoreButton page={teams.page} hasMore={teams.hasMore} onPage={teams.setPage} />
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>

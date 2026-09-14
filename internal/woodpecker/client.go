@@ -82,13 +82,21 @@ type Pipeline struct {
 	Message  string `json:"message"`
 	Author   string `json:"author"`
 	Avatar   string `json:"avatar"`
-	Commit   string `json:"commit"`
-	Error    string `json:"error"`
-	Created  int64  `json:"created"`
-	Started  int64  `json:"started"`
-	Finished int64  `json:"finished"`
-	Jobs     []Job  `json:"jobs,omitempty"`
-	Repo     string `json:"repo,omitempty"`
+	Commit   string      `json:"commit"`
+	Error    string      `json:"error"`
+	Errors   []PipeError `json:"errors,omitempty"`
+	Created  int64       `json:"created"`
+	Started  int64       `json:"started"`
+	Finished int64       `json:"finished"`
+	Jobs     []Job       `json:"jobs,omitempty"`
+	Repo     string      `json:"repo,omitempty"`
+}
+
+type PipeError struct {
+	Type      string `json:"type"`
+	Message   string `json:"message"`
+	IsWarning bool   `json:"is_warning"`
+	Data      any    `json:"data,omitempty"`
 }
 
 type Job struct {
@@ -122,6 +130,7 @@ func (p *Pipeline) UnmarshalJSON(data []byte) error {
 	if len(p.Jobs) == 0 {
 		p.Jobs = aux.Workflows
 	}
+	p.flattenError()
 	return nil
 }
 
@@ -135,7 +144,7 @@ func (p Pipeline) Steps() []Step {
 		out = append(out, job.Children...)
 	}
 	if len(out) == 0 {
-		out = []Step{{PID: 1, Name: p.Title, State: p.Status, Error: p.Error}}
+		out = []Step{{PID: 1, Name: "", State: p.Status, Error: p.Error}}
 	}
 	return out
 }
@@ -539,8 +548,12 @@ func (c *Client) GetPipeline(fullName string, number int64) (Pipeline, error) {
 		return Pipeline{}, err
 	}
 	var p Pipeline
+	if err := json.Unmarshal(b, &p); err != nil {
+		return Pipeline{}, err
+	}
 	p.Repo = fullName
-	return p, json.Unmarshal(b, &p)
+	p.HydrateJobs()
+	return p, nil
 }
 
 func (c *Client) PipelineLog(fullName string, number, step int64) (string, error) {

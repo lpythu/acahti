@@ -1,5 +1,5 @@
-import { CodeGroupNav } from "@/components/code-group-nav"
+import { CodeTeamNav } from "@/components/code-team-nav"
 
 export function PipelinesNavPanel() {
-  return <CodeGroupNav section="pipelines" />
+  return <CodeTeamNav section="pipelines" />
 }

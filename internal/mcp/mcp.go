@@ -88,7 +88,7 @@ func tools() []toolSpec {
 	return []toolSpec{
 		{Name: "repo_list", Description: "List repositories the token can see", InputSchema: obj(pg)},
 		{Name: "repo_get", Description: "Get one repository", InputSchema: obj(map[string]any{"owner": str, "name": str}, "owner", "name")},
-		{Name: "repo_create", Description: "Create a private org repo and protect dev and test", InputSchema: obj(map[string]any{"name": str, "org": str, "group": str}, "name")},
+		{Name: "repo_create", Description: "Create a private org repo and protect dev and test. Optional team attaches access", InputSchema: obj(map[string]any{"name": str, "team": str}, "name")},
 		{Name: "branch_list", Description: "List branches", InputSchema: obj(map[string]any{"owner": str, "name": str, "page": num, "page_size": num}, "owner", "name")},
 		{Name: "ref_delete", Description: "Delete a git ref", InputSchema: obj(map[string]any{"owner": str, "name": str, "ref": str}, "owner", "name", "ref")},
 		{Name: "pr_create", Description: "Open a pull request", InputSchema: obj(map[string]any{"owner": str, "name": str, "title": str, "head": str, "base": str, "body": str}, "owner", "name", "title", "head")},
@@ -218,28 +218,29 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		}
 		return identity.View(u.Login, u.FullName, s.Cfg.RootURL, s.Cfg.Domain, org), nil
 	case "repo_list":
-		return s.FJ.ListRepos(token, pq)
+		return s.Cat.ListRepos(token, "", pq)
 	case "repo_get":
-		return s.FJ.GetRepo(str("owner"), str("name"), token)
-	case "repo_create":
-		if o := str("org"); o != "" {
-			org = o
+		repo, err := s.FJ.GetRepo(str("owner"), str("name"), token)
+		if err != nil {
+			return nil, err
 		}
+		return s.Cat.PublicRepo(repo), nil
+	case "repo_create":
 		repo, err := s.FJ.CreateOrgRepo(org, str("name"), true)
 		if err != nil {
 			return nil, err
 		}
-		if g := str("group"); g != "" {
-			if err := s.Cat.AttachRepo(g, repo.Name); err != nil {
+		if team := str("team"); team != "" {
+			if err := s.Cat.AttachRepo(team, repo.Name); err != nil {
 				return nil, err
 			}
-			repo.Group = g
+			repo.Team = team
 		}
 		_ = s.FJ.ProtectTrains(org, repo.Name)
 		if s.WP.Ready() {
 			_ = s.WP.Activate(org + "/" + repo.Name)
 		}
-		return repo, nil
+		return s.Cat.PublicRepo(repo), nil
 	case "branch_list":
 		return s.FJ.ListBranches(str("owner"), str("name"), pq)
 	case "ref_delete":

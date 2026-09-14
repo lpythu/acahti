@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useT } from "@/i18n/i18n"
 
-function CopyRow({ label, command }: { label: string; command: string }) {
+export function CloneMenu({ url }: { url: string }) {
   const t = useT()
   const [done, setDone] = useState(false)
+  const command = `git clone ${url}`
 
   async function copy() {
     await navigator.clipboard.writeText(command)
@@ -16,28 +17,17 @@ function CopyRow({ label, command }: { label: string; command: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <div className="flex gap-2">
-        <Input readOnly value={command} className="h-8 font-mono text-xs" />
-        <Button type="button" size="sm" variant="outline" onClick={() => void copy()}>
-          {done ? t("copied") : t("copy")}
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-export function CloneMenu({ https, ssh }: { https: string; ssh: string }) {
-  const t = useT()
-  return (
     <Popover>
       <PopoverTrigger render={<Button type="button" variant="outline" size="sm" />}>
         {t("clone")}
       </PopoverTrigger>
       <PopoverContent className="flex w-96 flex-col gap-3">
-        <CopyRow label={t("https")} command={`git clone ${https}`} />
-        <CopyRow label={t("ssh")} command={`git clone ${ssh}`} />
+        <div className="flex gap-2">
+          <Input readOnly value={command} className="h-8 font-mono text-xs" />
+          <Button type="button" size="sm" variant="outline" onClick={() => void copy()}>
+            {done ? t("copied") : t("copy")}
+          </Button>
+        </div>
       </PopoverContent>
     </Popover>
   )

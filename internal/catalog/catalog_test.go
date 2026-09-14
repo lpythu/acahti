@@ -1,10 +1,13 @@
 package catalog
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"acahti/internal/config"
 	"acahti/internal/forgejo"
+	"acahti/internal/woodpecker"
 )
 
 func TestOwnersTeam(t *testing.T) {
@@ -12,33 +15,33 @@ func TestOwnersTeam(t *testing.T) {
 		t.Fatal("Owners is reserved")
 	}
 	if ownersTeam("Platform") {
-		t.Fatal("Platform is a code group")
+		t.Fatal("Platform is a code team")
 	}
 }
 
-func TestValidGroupName(t *testing.T) {
-	if err := ValidGroupName("Platform"); err != nil {
+func TestValidTeamName(t *testing.T) {
+	if err := ValidTeamName("Platform"); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"", "Owners", "1bad", "foo.bar", "has space"} {
-		if ValidGroupName(name) == nil {
+		if ValidTeamName(name) == nil {
 			t.Fatalf("accepted %q", name)
 		}
 	}
 }
 
 func TestParseRoleTeam(t *testing.T) {
-	g, perm, ok := parseRoleTeam("Platform")
-	if !ok || g != "Platform" || perm != permWrite {
-		t.Fatalf("%s %s %v", g, perm, ok)
+	name, perm, ok := parseRoleTeam("Platform")
+	if !ok || name != "Platform" || perm != permWrite {
+		t.Fatalf("%s %s %v", name, perm, ok)
 	}
-	g, perm, ok = parseRoleTeam("Platform.read")
-	if !ok || g != "Platform" || perm != permRead {
-		t.Fatalf("%s %s %v", g, perm, ok)
+	name, perm, ok = parseRoleTeam("Platform.read")
+	if !ok || name != "Platform" || perm != permRead {
+		t.Fatalf("%s %s %v", name, perm, ok)
 	}
-	g, perm, ok = parseRoleTeam("Platform.admin")
-	if !ok || g != "Platform" || perm != permAdmin {
-		t.Fatalf("%s %s %v", g, perm, ok)
+	name, perm, ok = parseRoleTeam("Platform.admin")
+	if !ok || name != "Platform" || perm != permAdmin {
+		t.Fatalf("%s %s %v", name, perm, ok)
 	}
 	if _, _, ok = parseRoleTeam("Owners"); ok {
 		t.Fatal("owners")
@@ -48,21 +51,32 @@ func TestParseRoleTeam(t *testing.T) {
 	}
 }
 
-func TestMarkGroupVisible(t *testing.T) {
+func TestMarkTeamVisible(t *testing.T) {
 	repos := []forgejo.Repo{
 		{FullName: "saidc/api-gateway"},
 		{FullName: "saidc/ejp"},
 	}
-	got := markGroup(repos, "Platform", map[string]bool{"saidc/api-gateway": true})
-	if len(got) != 1 || got[0].FullName != "saidc/api-gateway" || got[0].Group != "Platform" {
+	got := markTeam(repos, "Platform", map[string]bool{"saidc/api-gateway": true})
+	if len(got) != 1 || got[0].FullName != "saidc/api-gateway" || got[0].Team != "Platform" {
 		t.Fatalf("%+v", got)
 	}
 }
 
 func TestWriteID(t *testing.T) {
-	g := groupTeams{teams: map[string]forgejo.Team{permRead: {ID: 1}, permWrite: {ID: 2}}}
-	if g.writeID() != 2 {
-		t.Fatal(g.writeID())
+	t0 := teamRoles{roles: map[string]forgejo.Team{permRead: {ID: 1}, permWrite: {ID: 2}}}
+	if t0.writeID() != 2 {
+		t.Fatal(t0.writeID())
+	}
+}
+
+func TestDecoratePipeNeedsDeclaredNames(t *testing.T) {
+	c := New(config.Config{}, nil, nil)
+	p := c.decoratePipe(woodpecker.Pipeline{Status: "error", Error: "bad yaml", Repo: "saidc/demo"})
+	if p.Error != "bad yaml" {
+		t.Fatalf("%+v", p)
+	}
+	if len(p.Jobs) != 0 {
+		t.Fatalf("jobs=%+v", p.Jobs)
 	}
 }
 
@@ -76,6 +90,21 @@ func TestStepFailedAndTailLog(t *testing.T) {
 	}
 	if got := tailLog(text, 0); got != text {
 		t.Fatalf("all=%q", got)
+	}
+}
+
+func TestPublicRepoCloneHTTPS(t *testing.T) {
+	c := New(config.Config{RootURL: "https://acahti.example.com", Org: "acme"}, nil, nil)
+	got := c.PublicRepo(forgejo.Repo{FullName: "acme/demo", CloneURL: "http://forgejo:3000/acme/demo.git"})
+	if got.CloneURL != "https://acahti.example.com/acme/demo.git" {
+		t.Fatalf("clone_url=%q", got.CloneURL)
+	}
+	raw, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "ssh_url") || strings.Contains(string(raw), "ssh://") {
+		t.Fatalf("ssh leaked: %s", raw)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/url"
+	"path"
 	"sort"
 	"strings"
 	"sync"
@@ -41,7 +42,6 @@ type FileBlob struct {
 type RepoHeader struct {
 	Repo       forgejo.Repo `json:"repo"`
 	CloneHTTPS string       `json:"clone_https"`
-	CloneSSH   string       `json:"clone_ssh"`
 	Ref        string       `json:"ref"`
 }
 
@@ -53,8 +53,8 @@ type RepoContents struct {
 	Readme string    `json:"readme"`
 }
 
-type RepoGroup struct {
-	Group string `json:"group"`
+type RepoTeam struct {
+	Team  string `json:"team"`
 	Count int    `json:"count"`
 }
 
@@ -86,21 +86,30 @@ func (c *Catalog) CloneHTTPS(fullName string) string {
 	return strings.TrimRight(c.Cfg.RootURL, "/") + "/" + fullName + ".git"
 }
 
-func (c *Catalog) CloneSSH(fullName string) string {
-	host := strings.TrimSpace(c.Cfg.Domain)
-	if host == "" {
-		if u, err := url.Parse(c.Cfg.RootURL); err == nil {
-			host = u.Hostname()
-		}
+func (c *Catalog) PublicRepo(r forgejo.Repo) forgejo.Repo {
+	name := r.FullName
+	if name == "" && r.Name != "" {
+		name = strings.TrimRight(c.Cfg.Org, "/") + "/" + r.Name
 	}
-	if host == "" {
-		host = "localhost"
+	if name != "" {
+		r.CloneURL = c.CloneHTTPS(name)
 	}
-	port := strings.TrimSpace(c.Cfg.GitSSHPort)
-	if port == "" || port == "22" {
-		return fmt.Sprintf("ssh://git@%s/%s.git", host, fullName)
+	return r
+}
+
+func (c *Catalog) PublicRepos(items []forgejo.Repo) []forgejo.Repo {
+	for i := range items {
+		items[i] = c.PublicRepo(items[i])
 	}
-	return fmt.Sprintf("ssh://git@%s:%s/%s.git", host, port, fullName)
+	return items
+}
+
+func (c *Catalog) exposeRepos(res page.Result[forgejo.Repo], err error) (page.Result[forgejo.Repo], error) {
+	if err != nil {
+		return res, err
+	}
+	res.Items = c.PublicRepos(res.Items)
+	return res, nil
 }
 
 func decodeContent(e forgejo.ContentEntry) string {
@@ -113,23 +122,23 @@ func decodeContent(e forgejo.ContentEntry) string {
 	return raw
 }
 
-func (c *Catalog) ListRepoGroups(user string, q page.Query) (page.Result[RepoGroup], error) {
-	clusters, err := c.clusterGroups()
+func (c *Catalog) ListRepoTeams(user string, q page.Query) (page.Result[RepoTeam], error) {
+	clusters, err := c.clusterTeams()
 	if err != nil {
-		return page.Result[RepoGroup]{}, err
+		return page.Result[RepoTeam]{}, err
 	}
 	admin := c.IsOrgAdmin(user)
 	type item struct {
 		name string
-		g    groupTeams
+		t    teamRoles
 	}
 	items := make([]item, 0, len(clusters))
-	for name, g := range clusters {
-		items = append(items, item{name: name, g: g})
+	for name, t := range clusters {
+		items = append(items, item{name: name, t: t})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].name < items[j].name })
 	type row struct {
-		g    RepoGroup
+		t    RepoTeam
 		skip bool
 	}
 	rows := make([]row, len(items))
@@ -138,46 +147,46 @@ func (c *Catalog) ListRepoGroups(user string, q page.Query) (page.Result[RepoGro
 		wg.Add(1)
 		go func(i int, it item) {
 			defer wg.Done()
-			if !admin && !c.inGroup(user, it.g) {
+			if !admin && !c.inTeam(user, it.t) {
 				rows[i].skip = true
 				return
 			}
 			n := 0
-			if id := it.g.writeID(); id > 0 {
+			if id := it.t.writeID(); id > 0 {
 				n, _ = c.FJ.TeamRepoCount(id)
 			}
-			rows[i].g = RepoGroup{Group: it.name, Count: n}
+			rows[i].t = RepoTeam{Team: it.name, Count: n}
 		}(i, it)
 	}
 	wg.Wait()
-	out := make([]RepoGroup, 0, len(rows))
+	out := make([]RepoTeam, 0, len(rows))
 	for _, r := range rows {
 		if r.skip {
 			continue
 		}
-		out = append(out, r.g)
+		out = append(out, r.t)
 	}
 	return page.Take(out, q), nil
 }
 
-func (c *Catalog) ListRepos(user, group string, q page.Query) (page.Result[forgejo.Repo], error) {
+func (c *Catalog) ListRepos(user, team string, q page.Query) (page.Result[forgejo.Repo], error) {
 	if !c.FJ.Ready() {
 		return page.Of([]forgejo.Repo{}, q, false), nil
 	}
-	if group == "" {
+	if team == "" {
 		if c.IsOrgAdmin(user) {
-			return c.FJ.ListOrgRepos(c.Cfg.Org, q)
+			return c.exposeRepos(c.FJ.ListOrgRepos(c.Cfg.Org, q))
 		}
-		return c.FJ.ListRepos(user, q)
+		return c.exposeRepos(c.FJ.ListRepos(user, q))
 	}
-	g, err := c.findGroup(group)
+	t, err := c.findTeam(team)
 	if err != nil {
 		return page.Result[forgejo.Repo]{}, err
 	}
-	if !c.IsOrgAdmin(user) && !c.inGroup(user, g) {
+	if !c.IsOrgAdmin(user) && !c.inTeam(user, t) {
 		return page.Of([]forgejo.Repo{}, q, false), nil
 	}
-	id := g.writeID()
+	id := t.writeID()
 	if id == 0 {
 		return page.Of([]forgejo.Repo{}, q, false), nil
 	}
@@ -186,9 +195,9 @@ func (c *Catalog) ListRepos(user, group string, q page.Query) (page.Result[forge
 		return page.Result[forgejo.Repo]{}, err
 	}
 	for i := range res.Items {
-		res.Items[i].Group = group
+		res.Items[i].Team = team
 	}
-	return res, nil
+	return c.exposeRepos(res, nil)
 }
 
 func (c *Catalog) RepoHeader(user, owner, name, ref string) (RepoHeader, error) {
@@ -203,9 +212,8 @@ func (c *Catalog) RepoHeader(user, owner, name, ref string) (RepoHeader, error) 
 		}
 	}
 	return RepoHeader{
-		Repo:       repo,
+		Repo:       c.PublicRepo(repo),
 		CloneHTTPS: c.CloneHTTPS(repo.FullName),
-		CloneSSH:   c.CloneSSH(repo.FullName),
 		Ref:        ref,
 	}, nil
 }
@@ -465,28 +473,28 @@ func (c *Catalog) acahtiCheckURL(raw string) string {
 	return root + "/pipelines"
 }
 
-func (c *Catalog) pipelineNames(user, group string) ([]string, error) {
+func (c *Catalog) pipelineNames(user, team string) ([]string, error) {
 	repos, err := c.WP.CachedRepos()
 	if err != nil {
 		return nil, err
 	}
 	var want map[string]bool
-	if group != "" {
-		g, err := c.findGroup(group)
+	if team != "" {
+		t, err := c.findTeam(team)
 		if err != nil {
 			return nil, err
 		}
-		id := g.writeID()
+		id := t.writeID()
 		if id == 0 {
 			return []string{}, nil
 		}
-		team, err := page.Walk(func(pq page.Query) (page.Result[forgejo.Repo], error) {
+		owned, err := page.Walk(func(pq page.Query) (page.Result[forgejo.Repo], error) {
 			return c.FJ.ListTeamRepos(id, pq)
 		})
 		if err != nil {
 			return nil, err
 		}
-		want = visibleSet(team)
+		want = visibleSet(owned)
 	} else if !c.IsOrgAdmin(user) {
 		visible, err := c.userRepos(user)
 		if err != nil {
@@ -508,7 +516,7 @@ func (c *Catalog) pipelineNames(user, group string) ([]string, error) {
 	return names, nil
 }
 
-func (c *Catalog) ListPipelines(user, repo, group string, q page.Query) (page.Result[woodpecker.Pipeline], error) {
+func (c *Catalog) ListPipelines(user, repo, team string, q page.Query) (page.Result[woodpecker.Pipeline], error) {
 	if !c.WP.Ready() {
 		return page.Of([]woodpecker.Pipeline{}, q, false), nil
 	}
@@ -524,12 +532,12 @@ func (c *Catalog) ListPipelines(user, repo, group string, q page.Query) (page.Re
 		res.Items = c.WP.EnrichJobs(repo, res.Items)
 		return res, nil
 	}
-	if group != "" {
-		g, err := c.findGroup(group)
+	if team != "" {
+		t, err := c.findTeam(team)
 		if err != nil {
 			return page.Result[woodpecker.Pipeline]{}, err
 		}
-		id := g.writeID()
+		id := t.writeID()
 		if id == 0 {
 			return page.Of([]woodpecker.Pipeline{}, q, false), nil
 		}
@@ -611,6 +619,64 @@ func (c *Catalog) CommitDetail(user, owner, name, sha string, q page.Query) (Com
 	return CommitDetail{Commit: cm, Stats: stats, Result: page.Take(files, q)}, nil
 }
 
+func (c *Catalog) decoratePipes(pipes []woodpecker.Pipeline) []woodpecker.Pipeline {
+	out := append([]woodpecker.Pipeline(nil), pipes...)
+	sem := make(chan struct{}, 8)
+	var wg sync.WaitGroup
+	for i := range out {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			out[i] = c.decoratePipe(out[i])
+		}(i)
+	}
+	wg.Wait()
+	return out
+}
+
+func (c *Catalog) decoratePipe(p woodpecker.Pipeline) woodpecker.Pipeline {
+	p.HydrateJobs()
+	return woodpecker.MergeDeclaredJobs(p, c.declaredJobNames(p))
+}
+
+func (c *Catalog) declaredJobNames(p woodpecker.Pipeline) []string {
+	if c.FJ == nil {
+		return nil
+	}
+	owner, name, ok := strings.Cut(p.Repo, "/")
+	if !ok || owner == "" || name == "" {
+		return nil
+	}
+	ref := p.Commit
+	if ref == "" {
+		ref = p.Branch
+	}
+	ents, err := c.FJ.ListContents(owner, name, ref, ".acahti/pipelines")
+	if err != nil {
+		return nil
+	}
+	var names []string
+	seen := map[string]bool{}
+	for _, e := range ents {
+		if e.Type != "file" && e.Type != "blob" && e.Type != "" {
+			continue
+		}
+		ext := strings.ToLower(path.Ext(e.Name))
+		if ext != ".yaml" && ext != ".yml" {
+			continue
+		}
+		n := strings.TrimSuffix(e.Name, path.Ext(e.Name))
+		if n == "" || seen[n] {
+			continue
+		}
+		seen[n] = true
+		names = append(names, n)
+	}
+	return names
+}
+
 func (c *Catalog) PipelineDetail(user, repo string, number int64) (PipelineDetail, error) {
 	owner, name, _ := strings.Cut(repo, "/")
 	if _, err := c.seeRepo(user, owner, name); err != nil {
@@ -621,6 +687,7 @@ func (c *Catalog) PipelineDetail(user, repo string, number int64) (PipelineDetai
 		return PipelineDetail{}, err
 	}
 	p.Repo = repo
+	p = c.decoratePipe(p)
 	return PipelineDetail{Pipeline: p, Steps: p.Steps()}, nil
 }
 
@@ -677,7 +744,7 @@ func (c *Catalog) PipelineLogs(user, repo string, number, step, tail int64) (map
 		}
 	}
 	if len(failed) == 0 {
-		return map[string]any{"log": "", "steps": detail.Steps}, nil
+		return map[string]any{"log": detail.Pipeline.Error, "steps": detail.Steps}, nil
 	}
 	var b strings.Builder
 	for _, s := range failed {
@@ -687,7 +754,13 @@ func (c *Catalog) PipelineLogs(user, repo string, number, step, tail int64) (map
 		}
 		text, err := c.StepLog(user, repo, number, id)
 		if err != nil {
-			text = err.Error()
+			if s.Error != "" {
+				text = s.Error
+			} else if detail.Pipeline.Error != "" {
+				text = detail.Pipeline.Error
+			} else {
+				text = err.Error()
+			}
 		}
 		fmt.Fprintf(&b, "=== %s (step %d) %s ===\n%s\n", s.Name, id, s.State, tailLog(text, tail))
 	}

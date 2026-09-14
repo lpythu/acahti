@@ -12,9 +12,9 @@ export function PipelinesPage() {
   const t = useT()
   const nav = useNavigate()
   const [sp] = useSearchParams()
-  const group = sp.get("group") || ""
+  const team = sp.get("team") || ""
   const repo = sp.get("repo") || ""
-  const list = usePage((q) => api.pipelines({ ...q, repo, group }), [repo, group])
+  const list = usePage((q) => api.pipelines({ ...q, repo, team }), [repo, team])
   const [busy, setBusy] = useState("")
   const [actionErr, setActionErr] = useState("")
 
@@ -35,7 +35,7 @@ export function PipelinesPage() {
     <PagedList
       list={{ ...list, error: list.error || actionErr }}
       emptyText={t("noPipelines")}
-      header={<p className="text-sm text-muted-foreground">{group || repo || t("pipelinesDesc")}</p>}
+      header={<p className="text-sm text-muted-foreground">{team || repo || t("pipelinesDesc")}</p>}
       skeleton="lines"
     >
       {(items) => (

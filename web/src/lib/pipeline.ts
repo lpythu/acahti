@@ -16,24 +16,93 @@ function jobRank(name: string) {
   return 1
 }
 
-export function jobsOf(p: Pipeline, flat?: Step[]): Job[] {
-  if (p.jobs?.length) {
-    return p.jobs
-      .map((j) => ({
-        name: j.name,
-        state: j.state || p.status,
-        steps: j.children?.length ? j.children : [{ pid: j.pid || 0, name: j.name, state: j.state || p.status }],
-      }))
-      .sort((a, b) => jobRank(a.name) - jobRank(b.name) || a.name.localeCompare(b.name))
-  }
-  if (flat?.length) {
-    return [{ name: p.event || "pipeline", state: p.status, steps: flat }]
-  }
-  return []
+function failedStatus(state?: string) {
+  return /^(failure|error|failed|killed|declined)$/i.test(state || "")
 }
 
-export function jobDotsOf(p: Pipeline, flat?: Step[]): Stage[] {
-  return jobsOf(p, flat || p.steps).map((j) => ({ name: j.name, state: j.state }))
+function pendingStatus(state?: string) {
+  return /^(running|pending|blocked)$/i.test(state || "")
+}
+
+function jobFromRuntime(p: Pipeline, j: NonNullable<Pipeline["jobs"]>[number]): Job {
+  return {
+    name: j.name,
+    state: j.state || p.status,
+    steps: j.children?.length ? j.children : [{ pid: j.pid || 0, name: j.name, state: j.state || p.status, error: p.error }],
+  }
+}
+
+function placeholderJob(name: string, state: string, error?: string): Job {
+  return { name, state, steps: [{ pid: 0, name, state, error }] }
+}
+
+export function declaredJobNames(files?: { name?: string; path?: string }[]): string[] {
+  const names: string[] = []
+  const seen = new Set<string>()
+  for (const f of files || []) {
+    const base = (f.name || f.path?.split("/").pop() || "").replace(/\.ya?ml$/i, "")
+    if (!base || base === "pipeline" || seen.has(base)) continue
+    seen.add(base)
+    names.push(base)
+  }
+  return names
+}
+
+export async function loadDeclaredJobNames(owner: string, name: string, ref: string): Promise<string[]> {
+  if (!ref) return []
+  try {
+    const dir = await api.contents(owner, name, { ref, path: ".acahti/pipelines" })
+    return declaredJobNames((dir.items || []).filter((e) => e.type === "file" || e.type === "blob"))
+  } catch {
+    return []
+  }
+}
+
+export function jobsOf(p: Pipeline, flat?: Step[], declared?: string[]): Job[] {
+  const runtime: Job[] = []
+  if (p.jobs?.length) {
+    for (const j of p.jobs) {
+      if (!j.name || j.name === "pipeline") continue
+      runtime.push(jobFromRuntime(p, j))
+    }
+  }
+  const names = (declared || []).filter((n) => n && n !== "pipeline")
+  if (!names.length) {
+    return runtime.sort((a, b) => jobRank(a.name) - jobRank(b.name) || a.name.localeCompare(b.name))
+  }
+  const byName = new Map(runtime.map((j) => [j.name, j]))
+  const skip = pendingStatus(p.status) ? "pending" : "skipped"
+  const steps = flat?.length ? flat : p.steps || []
+  const failName =
+    runtime.length === 0 && failedStatus(p.status)
+      ? names.slice().sort((a, b) => jobRank(a) - jobRank(b) || a.localeCompare(b))[0]
+      : ""
+  const out: Job[] = []
+  for (const name of names) {
+    const hit = byName.get(name)
+    if (hit) {
+      out.push(hit)
+      byName.delete(name)
+      continue
+    }
+    if (name === failName) {
+      out.push({
+        name,
+        state: p.status,
+        steps: steps.length
+          ? steps.map((s) => ({ ...s, name: s.name || name }))
+          : [{ pid: 0, name, state: p.status, error: p.error }],
+      })
+      continue
+    }
+    out.push(placeholderJob(name, skip))
+  }
+  for (const j of byName.values()) out.push(j)
+  return out.sort((a, b) => jobRank(a.name) - jobRank(b.name) || a.name.localeCompare(b.name))
+}
+
+export function jobDotsOf(p: Pipeline, flat?: Step[], declared?: string[]): Stage[] {
+  return jobsOf(p, flat || p.steps, declared).map((j) => ({ name: j.name, state: j.state }))
 }
 
 export async function loadPipelineFiles(owner: string, name: string, ref: string): Promise<FileBlob[]> {

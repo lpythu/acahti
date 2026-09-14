@@ -3,12 +3,10 @@ export type Section =
   | "repos"
   | "pipelines"
   | "packages"
-  | "keys"
   | "admin"
 
 export function sectionOf(path: string): Section {
   if (path.startsWith("/admin")) return "admin"
-  if (path.startsWith("/account/keys")) return "keys"
   if (path.startsWith("/packages")) return "packages"
   if (path.startsWith("/pipelines")) return "pipelines"
   if (path.startsWith("/repos")) return "repos"

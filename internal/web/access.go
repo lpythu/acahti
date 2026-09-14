@@ -21,12 +21,12 @@ func writeCatErr(w http.ResponseWriter, err error) {
 	}
 }
 
-func (p *Pages) Groups(w http.ResponseWriter, r *http.Request) {
+func (p *Pages) Teams(w http.ResponseWriter, r *http.Request) {
 	user, _, ok := p.requireJSON(w, r)
 	if !ok {
 		return
 	}
-	name := r.PathValue("group")
+	name := r.PathValue("team")
 	switch r.Method {
 	case http.MethodPost:
 		var body struct {
@@ -36,20 +36,20 @@ func (p *Pages) Groups(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, "invalid json")
 			return
 		}
-		out, err := p.Cat.CreateGroup(user, body.Name)
+		out, err := p.Cat.CreateTeam(user, body.Name)
 		if err != nil {
 			writeCatErr(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, out)
 	case http.MethodDelete:
-		if err := p.Cat.DeleteGroup(user, name); err != nil {
+		if err := p.Cat.DeleteTeam(user, name); err != nil {
 			writeCatErr(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	default:
-		out, err := p.Cat.GroupAccess(user, name)
+		out, err := p.Cat.TeamAccess(user, name)
 		if err != nil {
 			writeCatErr(w, err)
 			return
@@ -58,15 +58,15 @@ func (p *Pages) Groups(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (p *Pages) GroupMember(w http.ResponseWriter, r *http.Request) {
+func (p *Pages) TeamMember(w http.ResponseWriter, r *http.Request) {
 	user, _, ok := p.requireJSON(w, r)
 	if !ok {
 		return
 	}
-	group, login := r.PathValue("group"), r.PathValue("login")
+	team, login := r.PathValue("team"), r.PathValue("login")
 	switch r.Method {
 	case http.MethodDelete:
-		if err := p.Cat.RemoveGroupMember(user, group, login); err != nil {
+		if err := p.Cat.RemoveTeamMember(user, team, login); err != nil {
 			writeCatErr(w, err)
 			return
 		}
@@ -75,7 +75,7 @@ func (p *Pages) GroupMember(w http.ResponseWriter, r *http.Request) {
 			Permission string `json:"permission"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		if err := p.Cat.SetGroupMember(user, group, login, body.Permission); err != nil {
+		if err := p.Cat.SetTeamMember(user, team, login, body.Permission); err != nil {
 			writeCatErr(w, err)
 			return
 		}
@@ -83,20 +83,20 @@ func (p *Pages) GroupMember(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-func (p *Pages) GroupRepo(w http.ResponseWriter, r *http.Request) {
+func (p *Pages) TeamRepo(w http.ResponseWriter, r *http.Request) {
 	user, _, ok := p.requireJSON(w, r)
 	if !ok {
 		return
 	}
-	group, repo := r.PathValue("group"), r.PathValue("repo")
+	team, repo := r.PathValue("team"), r.PathValue("repo")
 	switch r.Method {
 	case http.MethodDelete:
-		if err := p.Cat.RemoveGroupRepo(user, group, repo); err != nil {
+		if err := p.Cat.RemoveTeamRepo(user, team, repo); err != nil {
 			writeCatErr(w, err)
 			return
 		}
 	default:
-		if err := p.Cat.AddGroupRepo(user, group, repo); err != nil {
+		if err := p.Cat.AddTeamRepo(user, team, repo); err != nil {
 			writeCatErr(w, err)
 			return
 		}

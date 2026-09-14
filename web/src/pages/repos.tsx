@@ -16,7 +16,7 @@ import { useT } from "@/i18n/i18n"
 import { api, splitRepo } from "@/lib/api"
 import { useSession } from "@/lib/session"
 
-function CreateGroupMenu({ onCreated }: { onCreated: (name: string) => void }) {
+function CreateTeamMenu({ onCreated }: { onCreated: (name: string) => void }) {
   const t = useT()
   const [err, setErr] = useState("")
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -26,7 +26,7 @@ function CreateGroupMenu({ onCreated }: { onCreated: (name: string) => void }) {
     if (!name) return
     setErr("")
     try {
-      await api.createGroup(name)
+      await api.createTeam(name)
       e.currentTarget.reset()
       onCreated(name)
     } catch (e) {
@@ -35,7 +35,7 @@ function CreateGroupMenu({ onCreated }: { onCreated: (name: string) => void }) {
   }
   return (
     <Popover>
-      <PopoverTrigger render={<Button type="button" size="sm" />}>{t("createGroup")}</PopoverTrigger>
+      <PopoverTrigger render={<Button type="button" size="sm" />}>{t("createTeam")}</PopoverTrigger>
       <PopoverContent className="w-72">
         <form onSubmit={(e) => void submit(e)}>
           <FieldGroup>
@@ -52,14 +52,14 @@ function CreateGroupMenu({ onCreated }: { onCreated: (name: string) => void }) {
   )
 }
 
-function AddRepoMenu({ group, onAdd }: { group: string; onAdd: () => Promise<void> }) {
+function AddRepoMenu({ team, onAdd }: { team: string; onAdd: () => Promise<void> }) {
   const t = useT()
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     const repo = String(fd.get("repo") || "").trim()
     if (!repo) return
-    await api.addGroupRepo(group, repo)
+    await api.addTeamRepo(team, repo)
     e.currentTarget.reset()
     await onAdd()
   }
@@ -81,10 +81,10 @@ function AddRepoMenu({ group, onAdd }: { group: string; onAdd: () => Promise<voi
   )
 }
 
-function GroupPage({ group }: { group: string }) {
+function TeamPage({ team }: { team: string }) {
   const t = useT()
   const nav = useNavigate()
-  const load = useLoad(() => api.group(group), [group])
+  const load = useLoad(() => api.team(team), [team])
   const data = load.data
   const manage = Boolean(data?.can_manage)
 
@@ -95,28 +95,28 @@ function GroupPage({ group }: { group: string }) {
       header={
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-base font-medium">{group}</h1>
-            <p className="text-sm text-muted-foreground">{t("groupAccessDesc")}</p>
+            <h1 className="text-base font-medium">{team}</h1>
+            <p className="text-sm text-muted-foreground">{t("teamAccessDesc")}</p>
           </div>
           {manage ? (
             <div className="flex flex-wrap items-center gap-2">
               <AddPersonMenu
                 title={t("addMember")}
                 onAdd={async (login, permission) => {
-                  await api.setGroupMember(group, login, permission)
+                  await api.setTeamMember(team, login, permission)
                   await load.reload()
                 }}
               />
-              <AddRepoMenu group={group} onAdd={() => load.reload()} />
+              <AddRepoMenu team={team} onAdd={() => load.reload()} />
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  void api.deleteGroup(group).then(() => nav("/repos"))
+                  void api.deleteTeam(team).then(() => nav("/repos"))
                 }}
               >
-                {t("deleteGroup")}
+                {t("deleteTeam")}
               </Button>
             </div>
           ) : null}
@@ -153,7 +153,7 @@ function GroupPage({ group }: { group: string }) {
                               type="button"
                               size="sm"
                               variant="outline"
-                              onClick={() => void api.removeGroupRepo(group, name).then(() => load.reload())}
+                              onClick={() => void api.removeTeamRepo(team, name).then(() => load.reload())}
                             >
                               {t("remove")}
                             </Button>
@@ -188,7 +188,7 @@ function GroupPage({ group }: { group: string }) {
                           <PermSelect
                             value={m.permission}
                             onChange={(perm) => {
-                              void api.setGroupMember(group, m.login, perm).then(() => load.reload())
+                              void api.setTeamMember(team, m.login, perm).then(() => load.reload())
                             }}
                           />
                         ) : (
@@ -201,7 +201,7 @@ function GroupPage({ group }: { group: string }) {
                             type="button"
                             size="sm"
                             variant="outline"
-                            onClick={() => void api.removeGroupMember(group, m.login).then(() => load.reload())}
+                            onClick={() => void api.removeTeamMember(team, m.login).then(() => load.reload())}
                           >
                             {t("remove")}
                           </Button>
@@ -226,38 +226,38 @@ export function ReposPage() {
   const nav = useNavigate()
   const { me } = useSession()
   const [sp] = useSearchParams()
-  const group = sp.get("group") || ""
-  const groups = usePage((q) => api.repoGroups(q), [], { enabled: !group })
+  const team = sp.get("team") || ""
+  const teams = usePage((q) => api.repoTeams(q), [], { enabled: !team })
 
-  if (group) {
-    return <GroupPage group={group} />
+  if (team) {
+    return <TeamPage team={team} />
   }
 
   return (
     <PagedList
-      list={groups}
+      list={teams}
       emptyText={t("noRepos")}
       header={
         <div className="flex flex-wrap items-start justify-between gap-3">
           <p className="text-sm text-muted-foreground">{t("reposDesc")}</p>
-          {me?.admin ? <CreateGroupMenu onCreated={(name) => nav(`/repos?group=${encodeURIComponent(name)}`)} /> : null}
+          {me?.admin ? <CreateTeamMenu onCreated={(name) => nav(`/repos?team=${encodeURIComponent(name)}`)} /> : null}
         </div>
       }
     >
       {(items) => (
         <ul className="divide-y rounded-md border">
-          {items.map((g) => (
-            <li key={g.group}>
+          {items.map((row) => (
+            <li key={row.team}>
               <Link
                 className="flex items-center gap-3 px-3 py-3 hover:bg-muted/50"
-                to={`/repos?group=${encodeURIComponent(g.group)}`}
+                to={`/repos?team=${encodeURIComponent(row.team)}`}
               >
                 <Avatar className="rounded-lg after:rounded-lg">
-                  <AvatarFallback className="rounded-lg">{g.group.slice(0, 1).toUpperCase()}</AvatarFallback>
+                  <AvatarFallback className="rounded-lg">{row.team.slice(0, 1).toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{g.group}</p>
-                  <p className="text-xs text-muted-foreground">{t("reposInGroup", { n: g.count })}</p>
+                  <p className="truncate text-sm font-medium">{row.team}</p>
+                  <p className="text-xs text-muted-foreground">{t("reposInTeam", { n: row.count })}</p>
                 </div>
               </Link>
             </li>

@@ -1,11 +1,11 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 
+import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { I18nProvider } from "@/i18n/i18n"
 import { SessionProvider } from "@/lib/session"
 import { AdminHomePage } from "@/pages/admin-home"
 import { BoardPage } from "@/pages/board"
-import { KeysPage } from "@/pages/keys"
 import { LoginPage } from "@/pages/login"
 import { PackageDetailPage } from "@/pages/package-detail"
 import { PackagesPage } from "@/pages/packages"
@@ -55,7 +55,6 @@ export default function App() {
                 <Route path="/pipelines/:owner/:name/:number" element={<PipelinePage />} />
                 <Route path="/packages" element={<PackagesPage />} />
                 <Route path="/packages/:kind/*" element={<PackageDetailPage />} />
-                <Route path="/account/keys" element={<KeysPage />} />
                 <Route element={<AdminGate />}>
                   <Route path="/admin" element={<AdminHomePage />} />
                   <Route path="/admin/users" element={<UsersPage />} />
@@ -63,6 +62,7 @@ export default function App() {
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            <Toaster />
           </SessionProvider>
         </BrowserRouter>
       </TooltipProvider>

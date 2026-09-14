@@ -28,56 +28,56 @@ func ownersTeam(name string) bool {
 	return strings.EqualFold(strings.TrimSpace(name), "Owners")
 }
 
-func ValidGroupName(name string) error {
+func ValidTeamName(name string) error {
 	name = strings.TrimSpace(name)
 	if name == "" || ownersTeam(name) {
-		return fmt.Errorf("%w group name", ErrInvalid)
+		return fmt.Errorf("%w team name", ErrInvalid)
 	}
 	if len(name) > 64 {
-		return fmt.Errorf("%w group name", ErrInvalid)
+		return fmt.Errorf("%w team name", ErrInvalid)
 	}
 	for i, r := range name {
 		if i == 0 && !unicode.IsLetter(r) {
-			return fmt.Errorf("%w group name", ErrInvalid)
+			return fmt.Errorf("%w team name", ErrInvalid)
 		}
 		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' {
 			continue
 		}
-		return fmt.Errorf("%w group name", ErrInvalid)
+		return fmt.Errorf("%w team name", ErrInvalid)
 	}
 	return nil
 }
 
-func roleTeamName(group, perm string) string {
+func roleTeamName(team, perm string) string {
 	switch forgejo.NormalizePerm(perm) {
 	case permRead:
-		return group + ".read"
+		return team + ".read"
 	case permAdmin:
-		return group + ".admin"
+		return team + ".admin"
 	default:
-		return group
+		return team
 	}
 }
 
-func parseRoleTeam(name string) (group, perm string, ok bool) {
+func parseRoleTeam(name string) (team, perm string, ok bool) {
 	if ownersTeam(name) {
 		return "", "", false
 	}
 	switch {
 	case strings.HasSuffix(name, ".read"):
-		g := strings.TrimSuffix(name, ".read")
-		if ValidGroupName(g) != nil {
+		t := strings.TrimSuffix(name, ".read")
+		if ValidTeamName(t) != nil {
 			return "", "", false
 		}
-		return g, permRead, true
+		return t, permRead, true
 	case strings.HasSuffix(name, ".admin"):
-		g := strings.TrimSuffix(name, ".admin")
-		if ValidGroupName(g) != nil {
+		t := strings.TrimSuffix(name, ".admin")
+		if ValidTeamName(t) != nil {
 			return "", "", false
 		}
-		return g, permAdmin, true
+		return t, permAdmin, true
 	default:
-		if ValidGroupName(name) != nil {
+		if ValidTeamName(name) != nil {
 			return "", "", false
 		}
 		return name, permWrite, true
@@ -94,7 +94,7 @@ func visibleSet(repos []forgejo.Repo) map[string]bool {
 	return out
 }
 
-func markGroup(repos []forgejo.Repo, group string, visible map[string]bool) []forgejo.Repo {
+func markTeam(repos []forgejo.Repo, team string, visible map[string]bool) []forgejo.Repo {
 	out := make([]forgejo.Repo, 0, len(repos))
 	seen := map[string]bool{}
 	for _, r := range repos {
@@ -105,7 +105,7 @@ func markGroup(repos []forgejo.Repo, group string, visible map[string]bool) []fo
 			continue
 		}
 		seen[r.FullName] = true
-		r.Group = group
+		r.Team = team
 		out = append(out, r)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].FullName < out[j].FullName })
@@ -196,64 +196,64 @@ func (c *Catalog) seeRepo(user, owner, name string) (forgejo.Repo, error) {
 	if err != nil {
 		return forgejo.Repo{}, fmt.Errorf("%w: %s", ErrNotFound, err)
 	}
-	repo.Group = c.repoGroup(owner, name)
+	repo.Team = c.repoTeam(owner, name)
 	return repo, nil
 }
 
-func (c *Catalog) repoGroup(owner, name string) string {
+func (c *Catalog) repoTeam(owner, name string) string {
 	res, err := c.FJ.ListRepoTeams(owner, name, page.Query{Page: 1, Size: page.MaxSize})
 	if err != nil {
 		return ""
 	}
 	for _, t := range res.Items {
-		if g, _, ok := parseRoleTeam(t.Name); ok {
-			return g
+		if team, _, ok := parseRoleTeam(t.Name); ok {
+			return team
 		}
 	}
 	return ""
 }
 
-type groupTeams struct {
+type teamRoles struct {
 	name  string
-	teams map[string]forgejo.Team
+	roles map[string]forgejo.Team
 }
 
-func (g groupTeams) ids() []int64 {
+func (t teamRoles) ids() []int64 {
 	var out []int64
-	for _, t := range g.teams {
-		out = append(out, t.ID)
+	for _, r := range t.roles {
+		out = append(out, r.ID)
 	}
 	return out
 }
 
-func (g groupTeams) writeID() int64 {
-	if t, ok := g.teams[permWrite]; ok {
-		return t.ID
+func (t teamRoles) writeID() int64 {
+	if r, ok := t.roles[permWrite]; ok {
+		return r.ID
 	}
-	for _, t := range g.teams {
-		return t.ID
+	for _, r := range t.roles {
+		return r.ID
 	}
 	return 0
 }
 
-func (c *Catalog) clusterGroups() (map[string]groupTeams, error) {
+func (c *Catalog) clusterTeams() (map[string]teamRoles, error) {
 	teams, err := c.orgTeams()
 	if err != nil {
 		return nil, err
 	}
-	out := map[string]groupTeams{}
+	out := map[string]teamRoles{}
 	for _, t := range teams {
-		g, perm, ok := parseRoleTeam(t.Name)
+		name, perm, ok := parseRoleTeam(t.Name)
 		if !ok {
 			continue
 		}
-		cur := out[g]
-		cur.name = g
-		if cur.teams == nil {
-			cur.teams = map[string]forgejo.Team{}
+		cur := out[name]
+		cur.name = name
+		if cur.roles == nil {
+			cur.roles = map[string]forgejo.Team{}
 		}
-		cur.teams[perm] = t
-		out[g] = cur
+		cur.roles[perm] = t
+		out[name] = cur
 	}
 	return out, nil
 }
@@ -283,9 +283,9 @@ func (c *Catalog) teamRepos(ids []int64) ([]forgejo.Repo, error) {
 	return all, nil
 }
 
-func (c *Catalog) inGroup(user string, g groupTeams) bool {
-	for _, t := range g.teams {
-		ok, err := c.FJ.TeamHasMember(t.ID, user)
+func (c *Catalog) inTeam(user string, t teamRoles) bool {
+	for _, r := range t.roles {
+		ok, err := c.FJ.TeamHasMember(r.ID, user)
 		if err == nil && ok {
 			return true
 		}

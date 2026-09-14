@@ -19,7 +19,6 @@ services:
       ACAHTI_LISTEN: ":8080"
       ROOT_URL: ${ROOT_URL:-https://acahti.example.com}
       DOMAIN: ${DOMAIN:-acahti.example.com}
-      GIT_SSH_PORT: ${GIT_SSH_PORT:-2222}
       ACAHTI_ORG: ${ACAHTI_ORG:-acme}
       FORGEJO_URL: http://forgejo:3000
       WOODPECKER_URL: http://woodpecker:8000/ci
@@ -53,11 +52,7 @@ services:
       FORGEJO__server__DOMAIN: ${DOMAIN:-acahti.example.com}
       FORGEJO__server__ROOT_URL: ${ROOT_URL:-https://acahti.example.com}/
       FORGEJO__server__HTTP_PORT: "3000"
-      FORGEJO__server__SSH_DOMAIN: ${DOMAIN:-acahti.example.com}
-      FORGEJO__server__SSH_PORT: ${GIT_SSH_PORT:-2222}
-      # Image already runs OpenSSH on :22 (published as GIT_SSH_PORT).
-      FORGEJO__server__START_SSH_SERVER: "false"
-      FORGEJO__server__DISABLE_SSH: "false"
+      FORGEJO__server__DISABLE_SSH: "true"
       FORGEJO__database__DB_TYPE: postgres
       FORGEJO__database__HOST: postgres:5432
       FORGEJO__database__NAME: forgejo
@@ -83,7 +78,6 @@ services:
       - /etc/localtime:/etc/localtime:ro
     ports:
       - "127.0.0.1:3000:3000"
-      - "${GIT_SSH_PORT:-2222}:22"
     networks:
       - acahti
 

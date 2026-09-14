@@ -76,9 +76,7 @@ export type Stack = {
   upgrade_hint: string
 }
 
-export type User = { login: string; email: string; is_admin: boolean; full_name: string; groups?: string[] }
-
-export type PublicKey = { id: number; title: string; key: string }
+export type User = { login: string; email: string; is_admin: boolean; full_name: string; teams?: string[] }
 
 export type Invite = { code: string }
 
@@ -90,13 +88,13 @@ export type Repo = {
   private: boolean
   default_branch: string
   clone_url?: string
-  group?: string
+  team?: string
   permissions?: Perm
 }
 
 export type AccessPerson = { login: string; permission: string }
 
-export type GroupAccess = {
+export type TeamAccess = {
   name: string
   can_manage: boolean
   members: AccessPerson[]
@@ -104,7 +102,7 @@ export type GroupAccess = {
 }
 
 export type RepoAccess = {
-  group: string
+  team: string
   can_manage: boolean
   inherited: AccessPerson[]
   direct: AccessPerson[]
@@ -133,7 +131,7 @@ export type Comment = {
   created_at: string
 }
 
-export type RepoGroup = { group: string; count: number }
+export type RepoTeam = { team: string; count: number }
 
 export type BranchInfo = {
   name: string
@@ -189,7 +187,6 @@ export type FileBlob = {
 export type RepoHeader = {
   repo: Repo
   clone_https: string
-  clone_ssh: string
   ref: string
 }
 
@@ -275,30 +272,27 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ username, password }),
     }),
-  keys: (q?: PageQuery) => req<Page<PublicKey>>(`/ui/keys${pageQS(q)}`),
-  addKey: (title: string, key: string) =>
-    req<{ ok: boolean }>("/ui/keys", { method: "POST", body: JSON.stringify({ title, key }) }),
-  repoGroups: (q?: PageQuery) => req<Page<RepoGroup>>(`/ui/repos${pageQS(q, { groups: "1" })}`),
-  repos: (q?: PageQuery, group?: string) => req<Page<Repo>>(`/ui/repos${pageQS(q, { group })}`),
-  group: (name: string) => req<GroupAccess>(`/ui/groups/${encodeURIComponent(name)}`),
-  createGroup: (name: string) =>
-    req<GroupAccess>("/ui/groups", { method: "POST", body: JSON.stringify({ name }) }),
-  deleteGroup: (name: string) => req<{ ok: boolean }>(`/ui/groups/${encodeURIComponent(name)}`, { method: "DELETE" }),
-  setGroupMember: (group: string, login: string, permission: string) =>
-    req<{ ok: boolean }>(`/ui/groups/${encodeURIComponent(group)}/members/${encodeURIComponent(login)}`, {
+  repoTeams: (q?: PageQuery) => req<Page<RepoTeam>>(`/ui/repos${pageQS(q, { teams: "1" })}`),
+  repos: (q?: PageQuery, team?: string) => req<Page<Repo>>(`/ui/repos${pageQS(q, { team })}`),
+  team: (name: string) => req<TeamAccess>(`/ui/teams/${encodeURIComponent(name)}`),
+  createTeam: (name: string) =>
+    req<TeamAccess>("/ui/teams", { method: "POST", body: JSON.stringify({ name }) }),
+  deleteTeam: (name: string) => req<{ ok: boolean }>(`/ui/teams/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  setTeamMember: (team: string, login: string, permission: string) =>
+    req<{ ok: boolean }>(`/ui/teams/${encodeURIComponent(team)}/members/${encodeURIComponent(login)}`, {
       method: "PUT",
       body: JSON.stringify({ permission }),
     }),
-  removeGroupMember: (group: string, login: string) =>
-    req<{ ok: boolean }>(`/ui/groups/${encodeURIComponent(group)}/members/${encodeURIComponent(login)}`, {
+  removeTeamMember: (team: string, login: string) =>
+    req<{ ok: boolean }>(`/ui/teams/${encodeURIComponent(team)}/members/${encodeURIComponent(login)}`, {
       method: "DELETE",
     }),
-  addGroupRepo: (group: string, repo: string) =>
-    req<{ ok: boolean }>(`/ui/groups/${encodeURIComponent(group)}/repos/${encodeURIComponent(repo)}`, {
+  addTeamRepo: (team: string, repo: string) =>
+    req<{ ok: boolean }>(`/ui/teams/${encodeURIComponent(team)}/repos/${encodeURIComponent(repo)}`, {
       method: "PUT",
     }),
-  removeGroupRepo: (group: string, repo: string) =>
-    req<{ ok: boolean }>(`/ui/groups/${encodeURIComponent(group)}/repos/${encodeURIComponent(repo)}`, {
+  removeTeamRepo: (team: string, repo: string) =>
+    req<{ ok: boolean }>(`/ui/teams/${encodeURIComponent(team)}/repos/${encodeURIComponent(repo)}`, {
       method: "DELETE",
     }),
   repoAccess: (owner: string, name: string) => req<RepoAccess>(`/ui/repos/${owner}/${name}/access`),
@@ -331,8 +325,8 @@ export const api = {
     req<Page<Comment>>(`/ui/repos/${owner}/${name}/pulls/${n}/comments${pageQS(q)}`),
   mergePull: (owner: string, name: string, n: number) =>
     req<{ merged: boolean }>(`/ui/repos/${owner}/${name}/pulls/${n}/merge`, { method: "POST" }),
-  pipelines: (q?: PageQuery & { repo?: string; group?: string }) =>
-    req<Page<Pipeline>>(`/ui/pipelines${pageQS(q, { repo: q?.repo, group: q?.group })}`),
+  pipelines: (q?: PageQuery & { repo?: string; team?: string }) =>
+    req<Page<Pipeline>>(`/ui/pipelines${pageQS(q, { repo: q?.repo, team: q?.team })}`),
   pipeline: (owner: string, name: string, n: number) =>
     req<PipelineDetail>(`/ui/pipelines/${owner}/${name}/${n}`),
   pipelineLog: (owner: string, name: string, n: number, step: number) =>

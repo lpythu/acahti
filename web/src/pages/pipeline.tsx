@@ -24,7 +24,7 @@ import type { FileBlob, Step } from "@/lib/api"
 import { api } from "@/lib/api"
 import { formatUnix } from "@/lib/format"
 import { langOf } from "@/lib/lang"
-import { jobsOf, loadPipelineFiles, triggerKey, triggerVars } from "@/lib/pipeline"
+import { declaredJobNames, jobsOf, loadPipelineFiles, triggerKey, triggerVars } from "@/lib/pipeline"
 
 export function PipelinePage() {
   const t = useT()
@@ -33,7 +33,7 @@ export function PipelinePage() {
   const n = Number(number)
   const { data, error, loading, reload } = useLoad(() => api.pipeline(owner, name, n), [owner, name, n])
   const head = useLoad(() => api.repo(owner, name), [owner, name])
-  const group = head.data?.repo.group || ""
+  const team = head.data?.repo.team || ""
   const p = data?.pipeline
   const ref = p?.commit || p?.branch || ""
   const files = useLoad(() => loadPipelineFiles(owner, name, ref), [owner, name, ref], Boolean(ref))
@@ -44,7 +44,10 @@ export function PipelinePage() {
   const [busy, setBusy] = useState(false)
   useEvents(reload)
 
-  const jobs = useMemo(() => (p ? jobsOf(p, data?.steps) : []), [p, data?.steps])
+  const jobs = useMemo(
+    () => (p ? jobsOf(p, data?.steps, declaredJobNames(files.data ?? undefined)) : []),
+    [p, data?.steps, files.data],
+  )
 
   useEffect(() => {
     if (!jobs.length) return
@@ -125,11 +128,11 @@ export function PipelinePage() {
                 <BreadcrumbLink render={<Link to="/pipelines" />}>{t("pipelines")}</BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbSeparator />
-              {group ? (
+              {team ? (
                 <>
                   <BreadcrumbItem>
-                    <BreadcrumbLink render={<Link to={`/pipelines?group=${encodeURIComponent(group)}`} />}>
-                      {group}
+                    <BreadcrumbLink render={<Link to={`/pipelines?team=${encodeURIComponent(team)}`} />}>
+                      {team}
                     </BreadcrumbLink>
                   </BreadcrumbItem>
                   <BreadcrumbSeparator />
@@ -208,9 +211,9 @@ export function PipelinePage() {
               <Skeleton className="h-4 w-5/6" />
               <Skeleton className="h-4 w-4/6" />
             </div>
-          ) : log ? (
+          ) : log || step?.error || p.error ? (
             <AutoHideScroll className="min-h-0 flex-1">
-              <pre className="p-4 font-mono text-xs whitespace-pre-wrap">{log}</pre>
+              <pre className="p-4 font-mono text-xs whitespace-pre-wrap">{log || step?.error || p.error}</pre>
             </AutoHideScroll>
           ) : (
             <EmptyState>{t("noLog")}</EmptyState>

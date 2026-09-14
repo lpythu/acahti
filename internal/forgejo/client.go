@@ -43,7 +43,7 @@ type User struct {
 	IsAdmin     bool     `json:"is_admin"`
 	FullName    string   `json:"full_name"`
 	Permissions Perm     `json:"permissions"`
-	Groups      []string `json:"groups,omitempty"`
+	Teams       []string `json:"teams,omitempty"`
 }
 
 type Perm struct {
@@ -69,10 +69,9 @@ type Repo struct {
 	Private       bool   `json:"private"`
 	DefaultBranch string `json:"default_branch"`
 	CloneURL      string `json:"clone_url"`
-	SSHURL        string `json:"ssh_url"`
 	HTMLURL       string `json:"html_url"`
 	Repo          string `json:"repo,omitempty"`
-	Group         string `json:"group,omitempty"`
+	Team          string `json:"team,omitempty"`
 	Permissions   Perm   `json:"permissions"`
 }
 
@@ -122,12 +121,6 @@ type Package struct {
 	Version   string `json:"version"`
 	Type      string `json:"type"`
 	CreatedAt string `json:"created_at"`
-}
-
-type PublicKey struct {
-	ID    int64  `json:"id"`
-	Title string `json:"title"`
-	Key   string `json:"key"`
 }
 
 type Comment struct {
@@ -867,18 +860,6 @@ func (c *Client) ListPackages(owner, typ, query string, q page.Query) (page.Resu
 		extra.Set("q", query)
 	}
 	return listPage[Package](c, "/api/v1/packages/"+url.PathEscape(owner), q, extra, "")
-}
-
-func (c *Client) ListKeys(user string, q page.Query) (page.Result[PublicKey], error) {
-	return listPage[PublicKey](c, "/api/v1/users/"+url.PathEscape(user)+"/keys", q, nil, user)
-}
-
-func (c *Client) AddKey(user, title, key string) error {
-	_, _, err := c.do(http.MethodPost, "/api/v1/user/keys", "", user, map[string]any{
-		"title": title,
-		"key":   key,
-	})
-	return err
 }
 
 func (c *Client) ListComments(owner, name string, number int, q page.Query) (page.Result[Comment], error) {

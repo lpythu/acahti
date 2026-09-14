@@ -12,7 +12,6 @@ type Config struct {
 	Listen            string
 	RootURL           string
 	Domain            string
-	GitSSHPort        string
 	Org               string
 	ForgejoURL        string
 	WoodpeckerURL     string
@@ -39,7 +38,6 @@ func Load() Config {
 		Listen:            getenv("ACAHTI_LISTEN", ":8080"),
 		RootURL:           strings.TrimRight(getenv("ROOT_URL", "http://127.0.0.1:8080"), "/"),
 		Domain:            getenv("DOMAIN", ""),
-		GitSSHPort:        getenv("GIT_SSH_PORT", "2222"),
 		Org:               getenv("ACAHTI_ORG", "acme"),
 		ForgejoURL:        strings.TrimRight(getenv("FORGEJO_URL", "http://forgejo:3000"), "/"),
 		WoodpeckerURL:     strings.TrimRight(getenv("WOODPECKER_URL", "http://woodpecker:8000/ci"), "/"),

@@ -184,43 +184,18 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	byLogin, err := p.Cat.GroupsByLogin()
+	byLogin, err := p.Cat.TeamsByLogin()
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
 	for i := range out.Items {
-		gs := byLogin[out.Items[i].Login]
-		if gs == nil {
-			gs = []string{}
+		names := byLogin[out.Items[i].Login]
+		if names == nil {
+			names = []string{}
 		}
-		out.Items[i].Groups = gs
+		out.Items[i].Teams = names
 	}
-	writeJSON(w, http.StatusOK, out)
-}
-
-func (p *Pages) Keys(w http.ResponseWriter, r *http.Request) {
-	user, _, ok := p.requireJSON(w, r)
-	if !ok {
-		return
-	}
-	if r.Method == http.MethodPost {
-		var body struct {
-			Title string `json:"title"`
-			Key   string `json:"key"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
-			return
-		}
-		if err := p.FJ.AddKey(user, body.Title, strings.TrimSpace(body.Key)); err != nil {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
-		return
-	}
-	out, _ := p.FJ.ListKeys(user, page.Parse(r))
 	writeJSON(w, http.StatusOK, out)
 }
 

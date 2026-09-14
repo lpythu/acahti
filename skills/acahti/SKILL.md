@@ -20,10 +20,11 @@ If the browser has no account, open `$ROOT_URL/join` with the admin invite, pick
 
 ## Git
 
-- HTTPS: `$ROOT_URL/$ACAHTI_ORG/<repo>.git`
+- Clone: `$ROOT_URL/$ACAHTI_ORG/<repo>.git`
 - Username: `whoami.login`
 - Password: the OAuth access_token the MCP client already holds
-- SSH optional: `ssh://git@$DOMAIN:2222/$ACAHTI_ORG/<repo>.git`
+
+Clone is always `$ACAHTI_ORG/<repo>`. A team (Platform, ModelCamp, …) is access only; do not clone `modelcamp/<repo>`.
 
 This is not about the `acahti/` product repo on GitHub. That remote stays GitHub.
 

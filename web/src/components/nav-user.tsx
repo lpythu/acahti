@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom"
-import { KeyRoundIcon, LogOutIcon, ShieldIcon } from "lucide-react"
+import { LogOutIcon, ShieldIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -48,16 +48,14 @@ export function NavUser({
             <span className="truncate text-xs text-muted-foreground">{user.email}</span>
           </div>
         </div>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem render={<Link to="/account/keys" />}>
-          <KeyRoundIcon />
-          {t("keys")}
-        </DropdownMenuItem>
         {admin ? (
-          <DropdownMenuItem render={<Link to="/admin" target="_blank" rel="noopener noreferrer" />}>
-            <ShieldIcon />
-            {t("admin")}
-          </DropdownMenuItem>
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem render={<Link to="/admin" target="_blank" rel="noopener noreferrer" />}>
+              <ShieldIcon />
+              {t("admin")}
+            </DropdownMenuItem>
+          </>
         ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => void logout()}>

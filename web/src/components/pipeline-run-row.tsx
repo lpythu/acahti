@@ -11,7 +11,7 @@ import { api, splitRepo, type Pipeline } from "@/lib/api"
 import { formatDuration, formatUnix, formatUnixWhen } from "@/lib/format"
 import { shortSha } from "@/lib/git"
 import { pipelineHref } from "@/lib/nav"
-import { jobDotsOf, runEventKey, runRef, runTitle, triggerVars } from "@/lib/pipeline"
+import { jobDotsOf, loadDeclaredJobNames, runEventKey, runRef, runTitle, triggerVars } from "@/lib/pipeline"
 
 export function PipelineRunRow({
   pipe,
@@ -45,12 +45,15 @@ export function PipelineRunRow({
 
   useEffect(() => {
     setJobs(jobDotsOf(pipe))
-    if (pipe.jobs?.length) return
     let live = true
-    void api
-      .pipeline(owner, name, pipe.number)
-      .then((d) => {
-        if (live) setJobs(jobDotsOf({ ...pipe, jobs: d.pipeline.jobs }))
+    const ref = pipe.commit || pipe.branch || ""
+    void Promise.all([
+      api.pipeline(owner, name, pipe.number).catch(() => ({ pipeline: pipe, steps: pipe.steps || [] })),
+      loadDeclaredJobNames(owner, name, ref),
+    ])
+      .then(([d, declared]) => {
+        if (!live) return
+        setJobs(jobDotsOf({ ...pipe, jobs: d.pipeline.jobs, error: d.pipeline.error }, d.steps, declared))
       })
       .catch(() => {})
     return () => {

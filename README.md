@@ -81,7 +81,7 @@ Join    https://acahti.example.com/join     (invite from an admin)
 
 Give the first line to any coding agent. It pulls this acahti’s skill, connects `$ROOT_URL/mcp`, and completes OAuth. If the browser has no account, open the second line with an admin invite and pick a username and password; existing accounts use `/login`. Then `whoami` and set `--local` git identity only when the remote host is acahti.
 
-- Git HTTPS: `https://acahti.example.com/acme/<repo>.git` — username `whoami.login`, password is the OAuth `access_token` the client already holds. SSH optional: `ssh://git@$DOMAIN:2222/acme/<repo>.git`
+- Git: `https://acahti.example.com/acme/<repo>.git` — username `whoami.login`, password is the OAuth `access_token` the client already holds
 - Packages: `https://acahti.example.com/api/packages/acme/pypi/simple/` and `…/npm/`
 - REST: `/acahti/v1/…` same verbs as MCP
 - Not public: Woodpecker `/ci`, Forgejo UI, Forgejo `/api/v1`
