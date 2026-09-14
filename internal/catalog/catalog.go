@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
 	"acahti/internal/config"
@@ -380,6 +381,38 @@ func (c *Catalog) acahtiCheckURL(raw string) string {
 	return root + "/pipelines"
 }
 
+func (c *Catalog) pipelineNames(user, group string) ([]string, error) {
+	visible, err := c.userRepos(user)
+	if err != nil {
+		return nil, err
+	}
+	allow := visibleSet(visible)
+	var want map[string]bool
+	if group != "" {
+		grouped, err := c.grouped(user)
+		if err != nil {
+			return nil, err
+		}
+		want = visibleSet(grouped[group])
+	}
+	repos, err := c.WP.CachedRepos()
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, r := range repos {
+		if !r.IsActive || !allow[r.FullName] {
+			continue
+		}
+		if want != nil && !want[r.FullName] {
+			continue
+		}
+		names = append(names, r.FullName)
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
 func (c *Catalog) ListPipelines(user, repo, group string, q page.Query) (page.Result[woodpecker.Pipeline], error) {
 	if !c.WP.Ready() {
 		return page.Of([]woodpecker.Pipeline{}, q, false), nil
@@ -391,17 +424,12 @@ func (c *Catalog) ListPipelines(user, repo, group string, q page.Query) (page.Re
 		}
 		return c.WP.ListPipelines(repo, q)
 	}
-	grouped, err := c.grouped(user)
+	names, err := c.pipelineNames(user, group)
 	if err != nil {
 		return page.Result[woodpecker.Pipeline]{}, err
 	}
-	repos := flattenGroups(grouped, group)
-	slice := page.Take(repos, q)
-	names := make([]string, len(slice.Items))
-	for i, r := range slice.Items {
-		names[i] = r.FullName
-	}
-	return page.Of(c.WP.LatestPipelines(names, true), q, slice.HasMore), nil
+	slice := page.Take(names, q)
+	return page.Of(c.WP.LatestPipelines(slice.Items, false), q, slice.HasMore), nil
 }
 
 func (c *Catalog) CommitDetail(user, owner, name, sha string, q page.Query) (CommitDetail, error) {

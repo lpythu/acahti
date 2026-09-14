@@ -2,9 +2,13 @@ package woodpecker
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"acahti/internal/page"
 )
 
 func TestPipelineJobsFromKernelWorkflows(t *testing.T) {
@@ -21,6 +25,22 @@ func TestPipelineJobsFromKernelWorkflows(t *testing.T) {
 	}
 	if !strings.Contains(string(out), `"jobs"`) || strings.Contains(string(out), `"workflows"`) {
 		t.Fatalf("public json=%s", out)
+	}
+}
+
+func TestListReposOmitsAllTrue(t *testing.T) {
+	var raw string
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw = r.URL.RawQuery
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	t.Cleanup(s.Close)
+	c := New(s.URL, "t")
+	if _, err := c.ListRepos(page.Query{Page: 1, Size: 20}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(raw, "all=true") {
+		t.Fatalf("query %q", raw)
 	}
 }
 

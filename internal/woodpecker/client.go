@@ -40,10 +40,12 @@ type Client struct {
 	mu      sync.Mutex
 	loadMu  sync.Mutex
 	ids     map[string]int64
-	repos   []Repo
-	reposAt time.Time
-	latest  map[string]latestEnt
-	flight  sync.Map
+	repos     []Repo
+	reposAt   time.Time
+	latest    map[string]latestEnt
+	flight    sync.Map
+	loadErr   error
+	loadErrAt time.Time
 }
 
 func New(base, token string) *Client {
@@ -241,7 +243,7 @@ func (c *Client) do(method, path string, body any) ([]byte, int, error) {
 
 func (c *Client) ListRepos(q page.Query) (page.Result[Repo], error) {
 	q = q.Norm()
-	path := fmt.Sprintf("/api/user/repos?all=true&page=%d&perPage=%d", q.Page, q.LimitPlus())
+	path := fmt.Sprintf("/api/user/repos?page=%d&perPage=%d", q.Page, q.LimitPlus())
 	b, _, err := c.do(http.MethodGet, path, nil)
 	if err != nil {
 		return page.Result[Repo]{}, err
@@ -281,6 +283,8 @@ func (c *Client) forgetIDs() {
 	c.repos = nil
 	c.reposAt = time.Time{}
 	c.latest = map[string]latestEnt{}
+	c.loadErr = nil
+	c.loadErrAt = time.Time{}
 	c.mu.Unlock()
 }
 
@@ -332,7 +336,19 @@ func (c *Client) ensureRepos() error {
 	if c.reposFresh() {
 		return nil
 	}
-	return c.loadIDs()
+	c.mu.Lock()
+	if c.loadErr != nil && time.Since(c.loadErrAt) < 5*time.Second {
+		err := c.loadErr
+		c.mu.Unlock()
+		return err
+	}
+	c.mu.Unlock()
+	err := c.loadIDs()
+	c.mu.Lock()
+	c.loadErr = err
+	c.loadErrAt = time.Now()
+	c.mu.Unlock()
+	return err
 }
 
 func (c *Client) CachedRepos() ([]Repo, error) {
