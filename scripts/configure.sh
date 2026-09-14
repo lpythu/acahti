@@ -86,7 +86,7 @@ _upsert_env WOODPECKER_FORGEJO_CLIENT "${client_id}"
 _upsert_env WOODPECKER_FORGEJO_SECRET "${client_secret}"
 WOODPECKER_FORGEJO_CLIENT="${client_id}"
 WOODPECKER_FORGEJO_SECRET="${client_secret}"
-"${COMPOSE[@]}" up -d woodpecker
+"${COMPOSE[@]}" up -d --force-recreate --no-deps woodpecker
 
 echo "==> wait for Woodpecker on 127.0.0.1:8000"
 ok=0

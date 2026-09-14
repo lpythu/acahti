@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Ensure the Forgejo OAuth app Woodpecker uses (loopback redirect only).
 
-Prints JSON {client_id, client_secret}. Secret is reused from the
-environment when the app already exists; otherwise a new app is created.
+Always deletes acahti-ci and creates it again so the secret in
+.env matches Forgejo. Prints JSON {client_id, client_secret}.
 """
 
 import json
@@ -40,17 +40,9 @@ def main() -> None:
     apps = req("GET", "/api/v1/user/applications/oauth2") or []
     if not isinstance(apps, list):
         raise SystemExit("oauth app list is not an array")
-    mine = [a for a in apps if isinstance(a, dict) and a.get("name") == NAME]
-    have = os.environ.get("WOODPECKER_FORGEJO_CLIENT", "").strip()
-    secret = os.environ.get("WOODPECKER_FORGEJO_SECRET", "").strip()
-    if have and secret and mine:
-        for app in mine:
-            req("PATCH", f"/api/v1/user/applications/oauth2/{app['id']}", payload)
-        json.dump({"client_id": have, "client_secret": secret}, sys.stdout)
-        sys.stdout.write("\n")
-        return
-    for app in mine:
-        req("DELETE", f"/api/v1/user/applications/oauth2/{app['id']}")
+    for app in apps:
+        if isinstance(app, dict) and app.get("name") == NAME:
+            req("DELETE", f"/api/v1/user/applications/oauth2/{app['id']}")
     created = req("POST", "/api/v1/user/applications/oauth2", payload)
     if not isinstance(created, dict) or not created.get("client_id") or not created.get("client_secret"):
         raise SystemExit("create oauth app returned no client")
