@@ -89,6 +89,7 @@ export type Repo = {
   default_branch: string
   clone_url?: string
   team?: string
+  updated?: number
   permissions?: Perm
 }
 
@@ -278,6 +279,11 @@ export const api = {
     req<{ ok: boolean }>("/ui/password", {
       method: "POST",
       body: JSON.stringify({ username, password }),
+    }),
+  setGitName: (username: string, git_name: string) =>
+    req<{ git_name: string }>(`/ui/users/${encodeURIComponent(username)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ git_name }),
     }),
   navTree: () => req<NavTeam[]>("/ui/nav/tree"),
   repoTeams: (q?: PageQuery) => req<Page<RepoTeam>>(`/ui/repos${pageQS(q, { teams: "1" })}`),

@@ -36,7 +36,11 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 		log.Printf("pipeline index: %v", err)
 	}
 	cat := catalog.New(cfg, fj, wp, idx)
-	go cat.Backfill()
+	cat.Notify = func(kind string, data any) { hub.Publish(kind, data) }
+	go func() {
+		cat.BackfillOrg()
+		cat.Backfill()
+	}()
 	pages := web.New(cfg, cat, fj, wp, a, inv, oa, hub)
 	mc := mcp.New(cfg, a, fj, wp, cat)
 	rest := &api.API{Cfg: cfg, Auth: a, Hub: hub, MCP: mc}
@@ -98,6 +102,7 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 	mux.HandleFunc("POST /ui/pipelines/{owner}/{name}/trigger", pages.TriggerPipeline)
 	mux.HandleFunc("GET /ui/users", pages.Users)
 	mux.HandleFunc("POST /ui/users", pages.Users)
+	mux.HandleFunc("PATCH /ui/users/{login}", pages.PatchUser)
 	mux.HandleFunc("GET /ui/invites", pages.Invites)
 	mux.HandleFunc("POST /ui/invites", pages.Invites)
 	mux.HandleFunc("DELETE /ui/invites/{code}", pages.Invites)

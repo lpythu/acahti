@@ -11,7 +11,7 @@ import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api } from "@/lib/api"
 import { formatRelative, formatStamp } from "@/lib/format"
-import { commitTitle, shortSha } from "@/lib/git"
+import { commitAuthor, commitTitle, shortSha } from "@/lib/git"
 
 export function RepoCommitPage() {
   const t = useT()
@@ -25,7 +25,7 @@ export function RepoCommitPage() {
   const title = commitTitle(c?.commit?.message)
   const body = (c?.commit?.message || "").split("\n").slice(1).join("\n").trim()
   const author = c?.commit?.author
-  const login = c?.author?.login || author?.name || "—"
+  const login = commitAuthor(c)
   const files = data?.items || []
   const stats = data?.stats
   const parents = c?.parents || []

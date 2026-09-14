@@ -7,6 +7,7 @@ import (
 
 	"acahti/internal/forgejo"
 	"acahti/internal/page"
+	"acahti/internal/store"
 )
 
 type AccessPerson struct {
@@ -50,15 +51,17 @@ func (c *Catalog) findTeam(name string) (teamRoles, error) {
 	if err := ValidTeamName(name); err != nil {
 		return teamRoles{}, err
 	}
-	clusters, err := c.clusterTeams()
+	if !c.indexed() {
+		return teamRoles{}, fmt.Errorf("%w: team %s", ErrNotFound, name)
+	}
+	t, ok, err := c.Idx.GetTeam(name)
 	if err != nil {
 		return teamRoles{}, err
 	}
-	t, ok := clusters[name]
 	if !ok {
 		return teamRoles{}, fmt.Errorf("%w: team %s", ErrNotFound, name)
 	}
-	return t, nil
+	return rolesFrom(t), nil
 }
 
 func (c *Catalog) ensureRoleTeam(team, perm string) (forgejo.Team, error) {
@@ -71,75 +74,35 @@ func (c *Catalog) ensureRoleTeam(team, perm string) (forgejo.Team, error) {
 	if err != nil {
 		return forgejo.Team{}, err
 	}
-	if perm == permWrite {
-		return t, nil
+	if perm != permWrite {
+		if repos, err := c.teamRepos(team); err == nil {
+			for _, r := range repos {
+				_ = c.FJ.AddTeamRepo(t.ID, c.Cfg.Org, r.Name)
+			}
+		}
 	}
-	write, err := c.FJ.FindOrgTeam(c.Cfg.Org, team)
-	if err != nil {
-		return t, nil
-	}
-	repos, err := page.Walk(func(q page.Query) (page.Result[forgejo.Repo], error) {
-		return c.FJ.ListTeamRepos(write.ID, q)
-	})
-	if err != nil {
-		return t, nil
-	}
-	for _, r := range repos {
-		_ = c.FJ.AddTeamRepo(t.ID, c.Cfg.Org, r.Name)
-	}
+	c.syncTeamIDs(team)
 	return t, nil
 }
 
 func (c *Catalog) TeamsByLogin() (map[string][]string, error) {
-	if c == nil || !c.FJ.Ready() {
+	if !c.indexed() {
 		return map[string][]string{}, nil
 	}
-	clusters, err := c.clusterTeams()
-	if err != nil {
-		return nil, err
-	}
-	out := map[string][]string{}
-	for name, t := range clusters {
-		members, err := c.membersOf(t)
-		if err != nil {
-			return nil, err
-		}
-		for _, m := range members {
-			out[m.Login] = append(out[m.Login], name)
-		}
-	}
-	for login, names := range out {
-		sort.Strings(names)
-		out[login] = names
-	}
-	return out, nil
+	return c.Idx.TeamsByLogin()
 }
 
 func (c *Catalog) membersOf(t teamRoles) ([]AccessPerson, error) {
-	byLogin := map[string]string{}
-	order := []string{}
-	for perm, role := range t.roles {
-		members, err := page.Walk(func(q page.Query) (page.Result[forgejo.User], error) {
-			return c.FJ.ListTeamMembers(role.ID, q)
-		})
-		if err != nil {
-			return nil, err
-		}
-		for _, u := range members {
-			if u.Login == "" {
-				continue
-			}
-			prev, ok := byLogin[u.Login]
-			if !ok {
-				order = append(order, u.Login)
-			}
-			byLogin[u.Login] = strongerPerm(prev, perm)
-		}
+	if !c.indexed() || t.name == "" {
+		return nil, nil
 	}
-	sort.Strings(order)
-	out := make([]AccessPerson, 0, len(order))
-	for _, login := range order {
-		out = append(out, AccessPerson{Login: login, Permission: byLogin[login]})
+	rows, err := c.Idx.TeamMembers(t.name)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]AccessPerson, 0, len(rows))
+	for _, m := range rows {
+		out = append(out, AccessPerson{Login: m.Login, Permission: forgejo.NormalizePerm(m.Role)})
 	}
 	return out, nil
 }
@@ -162,7 +125,7 @@ func (c *Catalog) TeamAccess(user, name string) (TeamAccess, error) {
 	}
 	admin := c.IsOrgAdmin(user)
 	if !admin && !c.inTeam(user, t) {
-		repos, err := c.teamRepos(t.ids())
+		repos, err := c.teamRepos(name)
 		if err != nil {
 			return TeamAccess{}, err
 		}
@@ -174,7 +137,7 @@ func (c *Catalog) TeamAccess(user, name string) (TeamAccess, error) {
 	if err != nil {
 		return TeamAccess{}, err
 	}
-	repos, err := c.teamRepos(t.ids())
+	repos, err := c.teamRepos(name)
 	if err != nil {
 		return TeamAccess{}, err
 	}
@@ -211,8 +174,10 @@ func (c *Catalog) CreateTeam(user, name string) (TeamAccess, error) {
 	if _, err := c.FJ.CreateTeam(c.Cfg.Org, name, permWrite); err != nil {
 		return TeamAccess{}, err
 	}
+	c.syncTeamIDs(name)
 	_ = c.SetTeamMember(user, name, user, permAdmin)
 	c.forget()
+	c.publishCatalog()
 	return c.TeamAccess(user, name)
 }
 
@@ -229,7 +194,11 @@ func (c *Catalog) DeleteTeam(user, name string) error {
 			return err
 		}
 	}
+	if c.indexed() {
+		_ = c.Idx.DeleteTeam(name)
+	}
 	c.forget()
+	c.publishCatalog()
 	return nil
 }
 
@@ -259,7 +228,11 @@ func (c *Catalog) SetTeamMember(user, team, login, perm string) error {
 		}
 		_ = c.FJ.RemoveTeamMember(role.ID, login)
 	}
+	if c.indexed() {
+		_ = c.Idx.SetTeamMember(team, login, perm)
+	}
 	c.forget()
+	c.publishCatalog()
 	return nil
 }
 
@@ -274,7 +247,11 @@ func (c *Catalog) RemoveTeamMember(user, team, login string) error {
 	for _, role := range t.roles {
 		_ = c.FJ.RemoveTeamMember(role.ID, login)
 	}
+	if c.indexed() {
+		_ = c.Idx.RemoveTeamMember(team, login)
+	}
 	c.forget()
+	c.publishCatalog()
 	return nil
 }
 
@@ -290,7 +267,8 @@ func (c *Catalog) AttachRepo(team, repo string) error {
 	if repo == "" {
 		return fmt.Errorf("%w repo", ErrInvalid)
 	}
-	if _, err := c.FJ.GetRepo(c.Cfg.Org, repo, ""); err != nil {
+	got, err := c.FJ.GetRepo(c.Cfg.Org, repo, "")
+	if err != nil {
 		return fmt.Errorf("%w: %s", ErrNotFound, err)
 	}
 	if _, ok := t.roles[permWrite]; !ok {
@@ -307,7 +285,16 @@ func (c *Catalog) AttachRepo(team, repo string) error {
 			return err
 		}
 	}
+	if c.indexed() {
+		full := got.FullName
+		if full == "" {
+			full = c.Cfg.Org + "/" + repo
+		}
+		_ = c.Idx.UpsertRepo(store.OrgRepo{FullName: full, DefaultBranch: got.DefaultBranch})
+		_ = c.Idx.SetTeamRepo(team, full)
+	}
 	c.forget()
+	c.publishCatalog()
 	return nil
 }
 
@@ -332,7 +319,11 @@ func (c *Catalog) RemoveTeamRepo(user, team, repo string) error {
 	for _, role := range t.roles {
 		_ = c.FJ.RemoveTeamRepo(role.ID, c.Cfg.Org, repo)
 	}
+	if c.indexed() {
+		_ = c.Idx.RemoveTeamRepo(team, c.Cfg.Org+"/"+repo)
+	}
 	c.forget()
+	c.publishCatalog()
 	return nil
 }
 

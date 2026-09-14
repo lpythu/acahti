@@ -72,6 +72,8 @@ type Repo struct {
 	HTMLURL       string `json:"html_url"`
 	Repo          string `json:"repo,omitempty"`
 	Team          string `json:"team,omitempty"`
+	Updated       int64  `json:"updated,omitempty"`
+	UpdatedUnix   int64  `json:"updated_unix,omitempty"`
 	Permissions   Perm   `json:"permissions"`
 }
 
@@ -342,8 +344,8 @@ func (c *Client) EnsureNoreply(rootURL, domain string) error {
 		if want := identity.Email(u.Login, d); u.Email != want {
 			fields["email"] = want
 		}
-		if want := identity.Name(u.Login, u.FullName); u.FullName != want {
-			fields["full_name"] = want
+		if strings.TrimSpace(u.FullName) == "" {
+			fields["full_name"] = identity.Name(u.Login, "")
 		}
 		if len(fields) == 0 {
 			continue
@@ -774,8 +776,8 @@ func (c *Client) ProtectDefault(owner, name, branch string) error {
 	return err
 }
 
-func (c *Client) CreatePR(owner, name, title, head, base, body string) (PR, error) {
-	b, _, err := c.do(http.MethodPost, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/pulls", "", "", map[string]any{
+func (c *Client) CreatePR(owner, name, title, head, base, body, sudo string) (PR, error) {
+	b, _, err := c.do(http.MethodPost, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/pulls", "", sudo, map[string]any{
 		"title": title,
 		"head":  head,
 		"base":  base,
@@ -840,22 +842,22 @@ func (c *Client) GetPR(owner, name string, number int) (PR, error) {
 	return p, json.Unmarshal(b, &p)
 }
 
-func (c *Client) CommentPR(owner, name string, number int, body string) error {
-	_, _, err := c.do(http.MethodPost, fmt.Sprintf("/api/v1/repos/%s/%s/issues/%d/comments", url.PathEscape(owner), url.PathEscape(name), number), "", "", map[string]any{
+func (c *Client) CommentPR(owner, name string, number int, body, sudo string) error {
+	_, _, err := c.do(http.MethodPost, fmt.Sprintf("/api/v1/repos/%s/%s/issues/%d/comments", url.PathEscape(owner), url.PathEscape(name), number), "", sudo, map[string]any{
 		"body": body,
 	})
 	return err
 }
 
-func (c *Client) MergePR(owner, name string, number int) error {
-	_, _, err := c.do(http.MethodPost, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/merge", url.PathEscape(owner), url.PathEscape(name), number), "", "", map[string]any{
+func (c *Client) MergePR(owner, name string, number int, sudo string) error {
+	_, _, err := c.do(http.MethodPost, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d/merge", url.PathEscape(owner), url.PathEscape(name), number), "", sudo, map[string]any{
 		"Do": "merge",
 	})
 	return err
 }
 
-func (c *Client) ClosePR(owner, name string, number int) error {
-	_, _, err := c.do(http.MethodPatch, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d", url.PathEscape(owner), url.PathEscape(name), number), "", "", map[string]any{
+func (c *Client) ClosePR(owner, name string, number int, sudo string) error {
+	_, _, err := c.do(http.MethodPatch, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d", url.PathEscape(owner), url.PathEscape(name), number), "", sudo, map[string]any{
 		"state": "closed",
 	})
 	return err

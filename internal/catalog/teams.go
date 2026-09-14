@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 	"unicode"
 
 	"acahti/internal/forgejo"
-	"acahti/internal/page"
 )
 
 var (
@@ -135,24 +133,6 @@ func (c *Catalog) IsOrgAdmin(user string) bool {
 	return ok
 }
 
-func (c *Catalog) orgTeams() ([]forgejo.Team, error) {
-	if c.mem != nil {
-		if teams, ok := c.mem.teamsOf(); ok {
-			return teams, nil
-		}
-	}
-	teams, err := page.Walk(func(q page.Query) (page.Result[forgejo.Team], error) {
-		return c.FJ.ListOrgTeams(c.Cfg.Org, q)
-	})
-	if err != nil {
-		return nil, err
-	}
-	if c.mem != nil {
-		c.mem.setTeams(teams)
-	}
-	return teams, nil
-}
-
 func (c *Catalog) seeOK(user, owner, name string) error {
 	if _, err := c.FJ.GetRepo(owner, name, user); err != nil {
 		return fmt.Errorf("%w: %s", ErrNotFound, err)
@@ -161,34 +141,14 @@ func (c *Catalog) seeOK(user, owner, name string) error {
 }
 
 func (c *Catalog) userRepos(user string) ([]forgejo.Repo, error) {
-	if !c.FJ.Ready() {
+	if !c.indexed() {
 		return []forgejo.Repo{}, nil
 	}
-	if c.mem != nil {
-		if repos, ok := c.mem.reposOf(user); ok {
-			return repos, nil
-		}
-	}
-	var (
-		repos []forgejo.Repo
-		err   error
-	)
-	if c.IsOrgAdmin(user) {
-		repos, err = page.Walk(func(q page.Query) (page.Result[forgejo.Repo], error) {
-			return c.FJ.ListOrgRepos(c.Cfg.Org, q)
-		})
-	} else {
-		repos, err = page.Walk(func(q page.Query) (page.Result[forgejo.Repo], error) {
-			return c.FJ.ListRepos(user, q)
-		})
-	}
+	repos, err := c.Idx.VisibleRepos(user, c.IsOrgAdmin(user))
 	if err != nil {
 		return nil, err
 	}
-	if c.mem != nil {
-		c.mem.setRepos(user, repos)
-	}
-	return repos, nil
+	return c.asRepos(repos, ""), nil
 }
 
 func (c *Catalog) seeRepo(user, owner, name string) (forgejo.Repo, error) {
@@ -201,29 +161,19 @@ func (c *Catalog) seeRepo(user, owner, name string) (forgejo.Repo, error) {
 }
 
 func (c *Catalog) repoTeam(owner, name string) string {
-	res, err := c.FJ.ListRepoTeams(owner, name, page.Query{Page: 1, Size: page.MaxSize})
-	if err != nil {
+	if !c.indexed() {
 		return ""
 	}
-	for _, t := range res.Items {
-		if team, _, ok := parseRoleTeam(t.Name); ok {
-			return team
-		}
+	team, ok, err := c.Idx.RepoTeam(owner + "/" + name)
+	if err != nil || !ok {
+		return ""
 	}
-	return ""
+	return team
 }
 
 type teamRoles struct {
 	name  string
 	roles map[string]forgejo.Team
-}
-
-func (t teamRoles) ids() []int64 {
-	var out []int64
-	for _, r := range t.roles {
-		out = append(out, r.ID)
-	}
-	return out
 }
 
 func (t teamRoles) writeID() int64 {
@@ -236,11 +186,7 @@ func (t teamRoles) writeID() int64 {
 	return 0
 }
 
-func (c *Catalog) clusterTeams() (map[string]teamRoles, error) {
-	teams, err := c.orgTeams()
-	if err != nil {
-		return nil, err
-	}
+func clusterFrom(teams []forgejo.Team) map[string]teamRoles {
 	out := map[string]teamRoles{}
 	for _, t := range teams {
 		name, perm, ok := parseRoleTeam(t.Name)
@@ -255,40 +201,27 @@ func (c *Catalog) clusterTeams() (map[string]teamRoles, error) {
 		cur.roles[perm] = t
 		out[name] = cur
 	}
-	return out, nil
+	return out
 }
 
-func (c *Catalog) teamRepos(ids []int64) ([]forgejo.Repo, error) {
-	parts := make([][]forgejo.Repo, len(ids))
-	errs := make([]error, len(ids))
-	var wg sync.WaitGroup
-	for i, id := range ids {
-		wg.Add(1)
-		go func(i int, id int64) {
-			defer wg.Done()
-			repos, err := page.Walk(func(q page.Query) (page.Result[forgejo.Repo], error) {
-				return c.FJ.ListTeamRepos(id, q)
-			})
-			parts[i], errs[i] = repos, err
-		}(i, id)
+func (c *Catalog) teamRepos(name string) ([]forgejo.Repo, error) {
+	if !c.indexed() || name == "" {
+		return nil, nil
 	}
-	wg.Wait()
-	var all []forgejo.Repo
-	for i, err := range errs {
-		if err != nil {
-			return nil, err
-		}
-		all = append(all, parts[i]...)
+	rows, err := c.Idx.TeamRepos(name)
+	if err != nil {
+		return nil, err
 	}
-	return all, nil
+	return c.asRepos(rows, name), nil
 }
 
 func (c *Catalog) inTeam(user string, t teamRoles) bool {
-	for _, r := range t.roles {
-		ok, err := c.FJ.TeamHasMember(r.ID, user)
-		if err == nil && ok {
-			return true
-		}
+	if user == "" || t.name == "" {
+		return false
 	}
-	return false
+	if !c.indexed() {
+		return false
+	}
+	ok, err := c.Idx.HasMember(t.name, user)
+	return err == nil && ok
 }

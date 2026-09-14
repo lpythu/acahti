@@ -23,6 +23,48 @@ func TestParseWoodpeckerOwnerName(t *testing.T) {
 	}
 }
 
+func TestParseForgejoRepoEvent(t *testing.T) {
+	action, repo, ok := ParseForgejoRepoEvent(map[string]any{
+		"action": "created",
+		"repository": map[string]any{
+			"full_name":      "saidc/demo",
+			"default_branch": "dev",
+			"description":    "x",
+		},
+	})
+	if !ok || action != "created" || repo.FullName != "saidc/demo" || repo.DefaultBranch != "dev" {
+		t.Fatalf("%s %+v %v", action, repo, ok)
+	}
+	action, repo, ok = ParseForgejoRepoEvent(map[string]any{
+		"ref_type": "branch",
+		"repository": map[string]any{
+			"full_name":    "saidc/demo",
+			"updated_unix": 1700000000.0,
+		},
+	})
+	if !ok || action != "push" || repo.Updated != 1700000000 {
+		t.Fatalf("branch touch %s %+v %v", action, repo, ok)
+	}
+	action, repo, ok = ParseForgejoRepoEvent(map[string]any{
+		"ref":     "refs/heads/dev",
+		"commits": []any{},
+		"repository": map[string]any{
+			"full_name":    "saidc/argos-pack",
+			"updated_unix": 1710000000,
+		},
+	})
+	if !ok || action != "push" || repo.FullName != "saidc/argos-pack" || repo.Updated != 1710000000 {
+		t.Fatalf("push %s %+v %v", action, repo, ok)
+	}
+	action, repo, ok = ParseForgejoRepoEvent(map[string]any{
+		"action":     "deleted",
+		"repository": map[string]any{"full_name": "saidc/demo"},
+	})
+	if !ok || action != "deleted" || repo.FullName != "saidc/demo" {
+		t.Fatalf("delete %s %+v %v", action, repo, ok)
+	}
+}
+
 func TestParseForgejoStatus(t *testing.T) {
 	repo, n, ok := ParseForgejoStatus(map[string]any{
 		"target_url": "http://woodpecker:8000/ci/repos/saidc/demo/pipeline/12",

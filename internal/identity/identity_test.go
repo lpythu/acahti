@@ -10,7 +10,7 @@ func TestEmailAndHosts(t *testing.T) {
 	if Email("alice", "acahti.saidc.ai") != "alice@noreply.acahti.saidc.ai" {
 		t.Fatalf("email=%s", Email("alice", "acahti.saidc.ai"))
 	}
-	if Name("alice", "") != "alice" || Name("alice", "Alice Chen") != "Alice Chen" {
+	if Name("alice", "") != "alice" || Name("  alice  ", "  ") != "alice" || Name("alice", "Ada") != "Ada" {
 		t.Fatal("name")
 	}
 	got := Hosts("https://acahti.saidc.ai", "acahti.saidc.ai")
@@ -30,6 +30,9 @@ func TestView(t *testing.T) {
 	if v["git_name"] != "alice" {
 		t.Fatalf("git_name=%v", v["git_name"])
 	}
+	if View("alice", "Ada", "https://acahti.saidc.ai", "acahti.saidc.ai", "acme")["git_name"] != "Ada" {
+		t.Fatal("git_name from author")
+	}
 	if v["clone_url_template"] != "https://acahti.saidc.ai/acme/<repo>.git" {
 		t.Fatalf("clone=%v", v["clone_url_template"])
 	}
@@ -41,14 +44,14 @@ func TestView(t *testing.T) {
 		t.Fatalf("skill_sha=%v", sha)
 	}
 	cmds, _ := v["setup_local"].([]string)
-	if len(cmds) != 2 || !strings.Contains(cmds[0], "user.name") || !strings.Contains(cmds[1], "user.email") {
+	if len(cmds) != 2 || !strings.Contains(cmds[0], `user.name "alice"`) || !strings.Contains(cmds[1], "user.email") {
 		t.Fatalf("setup_local=%v", cmds)
 	}
 }
 
 func TestInstructions(t *testing.T) {
 	s := Instructions("https://acahti.saidc.ai", "acahti.saidc.ai")
-	for _, need := range []string{"whoami", "apply_when_remote_host", "acahti.saidc.ai", "--local", "--global", "github.com", "api-gateway", "/skill.md", "ANY remote"} {
+	for _, need := range []string{"whoami", "git_name", "apply_when_remote_host", "acahti.saidc.ai", "--local", "--global", "github.com", "api-gateway", "/skill.md", "ANY remote"} {
 		if !strings.Contains(s, need) {
 			t.Fatalf("missing %q in %s", need, s)
 		}

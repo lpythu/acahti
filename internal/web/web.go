@@ -78,7 +78,13 @@ func (p *Pages) Me(w http.ResponseWriter, r *http.Request) {
 	if !admin && p.Cat != nil && p.Cat.IsOrgAdmin(user) {
 		admin = true
 	}
-	writeJSON(w, http.StatusOK, identity.Session(user, admin, p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
+	author := ""
+	if p.FJ != nil {
+		if u, err := p.FJ.UserSudo(user); err == nil {
+			author = u.FullName
+		}
+	}
+	writeJSON(w, http.StatusOK, identity.Session(user, author, admin, p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
 }
 
 func (p *Pages) Login(w http.ResponseWriter, r *http.Request) {
@@ -90,13 +96,13 @@ func (p *Pages) Login(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-	if _, err := p.FJ.BasicUser(strings.TrimSpace(body.Username), body.Password); err != nil {
+	u, err := p.FJ.BasicUser(strings.TrimSpace(body.Username), body.Password)
+	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid username or password"})
 		return
 	}
-	login := strings.TrimSpace(body.Username)
-	p.SetSession(w, login)
-	writeJSON(w, http.StatusOK, identity.Session(login, p.Cat != nil && p.Cat.IsOrgAdmin(login), p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
+	p.SetSession(w, u.Login)
+	writeJSON(w, http.StatusOK, identity.Session(u.Login, u.FullName, p.Cat != nil && p.Cat.IsOrgAdmin(u.Login), p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
 }
 
 func (p *Pages) Logout(w http.ResponseWriter, r *http.Request) {
@@ -144,11 +150,13 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !admin && p.Cat != nil && p.Cat.IsOrgAdmin(user) {
+		admin = true
+	}
 	if !admin {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin only"})
 		return
 	}
-	_ = user
 	if r.Method == http.MethodPost {
 		var body struct {
 			Username string `json:"username"`
@@ -176,6 +184,7 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_ = p.FJ.AddOrgMember(p.Cfg.Org, u.Login)
+		u.FullName = identity.Name(u.Login, u.FullName)
 		writeJSON(w, http.StatusOK, map[string]any{"user": u})
 		return
 	}
@@ -190,6 +199,7 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for i := range out.Items {
+		out.Items[i].FullName = identity.Name(out.Items[i].Login, out.Items[i].FullName)
 		names := byLogin[out.Items[i].Login]
 		if names == nil {
 			names = []string{}
@@ -197,6 +207,38 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 		out.Items[i].Teams = names
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (p *Pages) PatchUser(w http.ResponseWriter, r *http.Request) {
+	user, admin, ok := p.requireJSON(w, r)
+	if !ok {
+		return
+	}
+	if !admin && p.Cat != nil && p.Cat.IsOrgAdmin(user) {
+		admin = true
+	}
+	if !admin {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin only"})
+		return
+	}
+	login := strings.TrimSpace(r.PathValue("login"))
+	if login == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username required"})
+		return
+	}
+	var body struct {
+		GitName string `json:"git_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	name := identity.Name(login, body.GitName)
+	if err := p.FJ.EditUser(login, map[string]any{"full_name": name}); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, identity.View(login, name, p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
 }
 
 func (p *Pages) Skill(w http.ResponseWriter, _ *http.Request) {
@@ -243,7 +285,7 @@ func (p *Pages) Join(w http.ResponseWriter, r *http.Request) {
 	_ = p.InviteStore.Delete(code)
 	_ = p.FJ.AddOrgMember(p.Cfg.Org, u.Login)
 	p.SetSession(w, u.Login)
-	writeJSON(w, http.StatusOK, identity.Session(u.Login, false, p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
+	writeJSON(w, http.StatusOK, identity.Session(u.Login, u.FullName, false, p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
 }
 
 func (p *Pages) Invites(w http.ResponseWriter, r *http.Request) {

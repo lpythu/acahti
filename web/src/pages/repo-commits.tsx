@@ -10,14 +10,14 @@ import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api, type Commit } from "@/lib/api"
 import { dayKey, formatRelative, formatStamp } from "@/lib/format"
-import { commitTitle, shortSha } from "@/lib/git"
+import { commitAuthor, commitTitle, shortSha } from "@/lib/git"
 import { useRepo } from "@/pages/repo-layout"
 
 function CommitRow({ owner, name, c }: { owner: string; name: string; c: Commit }) {
   const t = useT()
   const [copied, setCopied] = useState(false)
   const href = `/repos/${owner}/${name}/commits/${c.sha}`
-  const author = c.commit?.author?.name || c.author?.login || "—"
+  const author = commitAuthor(c)
   const date = c.commit?.author?.date
 
   async function copySha() {

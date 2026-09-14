@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/url"
 	"path"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -19,11 +18,12 @@ import (
 )
 
 type Catalog struct {
-	Cfg config.Config
-	FJ  *forgejo.Client
-	WP  *woodpecker.Client
-	Idx *store.Store
-	mem *memo
+	Cfg    config.Config
+	FJ     *forgejo.Client
+	WP     *woodpecker.Client
+	Idx    *store.Store
+	Notify func(kind string, data any)
+	mem    *memo
 }
 
 func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, idx *store.Store) *Catalog {
@@ -134,81 +134,43 @@ func decodeContent(e forgejo.ContentEntry) string {
 }
 
 func (c *Catalog) ListRepoTeams(user string, q page.Query) (page.Result[RepoTeam], error) {
-	clusters, err := c.clusterTeams()
+	if !c.indexed() {
+		return page.Of([]RepoTeam{}, q, false), nil
+	}
+	rows, err := c.Idx.TeamCounts(user, c.IsOrgAdmin(user))
 	if err != nil {
 		return page.Result[RepoTeam]{}, err
 	}
-	admin := c.IsOrgAdmin(user)
-	type item struct {
-		name string
-		t    teamRoles
-	}
-	items := make([]item, 0, len(clusters))
-	for name, t := range clusters {
-		items = append(items, item{name: name, t: t})
-	}
-	sort.Slice(items, func(i, j int) bool { return items[i].name < items[j].name })
-	type row struct {
-		t    RepoTeam
-		skip bool
-	}
-	rows := make([]row, len(items))
-	var wg sync.WaitGroup
-	for i, it := range items {
-		wg.Add(1)
-		go func(i int, it item) {
-			defer wg.Done()
-			if !admin && !c.inTeam(user, it.t) {
-				rows[i].skip = true
-				return
-			}
-			n := 0
-			if id := it.t.writeID(); id > 0 {
-				n, _ = c.FJ.TeamRepoCount(id)
-			}
-			rows[i].t = RepoTeam{Team: it.name, Count: n}
-		}(i, it)
-	}
-	wg.Wait()
 	out := make([]RepoTeam, 0, len(rows))
 	for _, r := range rows {
-		if r.skip {
-			continue
-		}
-		out = append(out, r.t)
+		out = append(out, RepoTeam{Team: r.Team, Count: r.Count})
 	}
 	return page.Take(out, q), nil
 }
 
 func (c *Catalog) ListRepos(user, team string, q page.Query) (page.Result[forgejo.Repo], error) {
-	if !c.FJ.Ready() {
+	if !c.indexed() {
 		return page.Of([]forgejo.Repo{}, q, false), nil
 	}
-	if team == "" {
-		if c.IsOrgAdmin(user) {
-			return c.exposeRepos(c.FJ.ListOrgRepos(c.Cfg.Org, q))
+	admin := c.IsOrgAdmin(user)
+	if team != "" {
+		if !admin && !c.inTeam(user, teamRoles{name: team}) {
+			return page.Of([]forgejo.Repo{}, q, false), nil
 		}
-		return c.exposeRepos(c.FJ.ListRepos(user, q))
 	}
-	t, err := c.findTeam(team)
+	res, err := c.Idx.ListReposPage(user, team, admin, q)
 	if err != nil {
 		return page.Result[forgejo.Repo]{}, err
 	}
-	if !c.IsOrgAdmin(user) && !c.inTeam(user, t) {
-		return page.Of([]forgejo.Repo{}, q, false), nil
+	items := c.asRepos(res.Items, team)
+	if team == "" {
+		for i := range items {
+			if items[i].Team == "" {
+				items[i].Team, _, _ = c.Idx.RepoTeam(items[i].FullName)
+			}
+		}
 	}
-	id := t.writeID()
-	if id == 0 {
-		return page.Of([]forgejo.Repo{}, q, false), nil
-	}
-	res, err := c.FJ.ListTeamRepos(id, q)
-	if err != nil {
-		return page.Result[forgejo.Repo]{}, err
-	}
-	for i := range res.Items {
-		res.Items[i].Team = team
-	}
-	return c.exposeRepos(res, nil)
+	return page.Result[forgejo.Repo]{Items: items, Page: res.Page, Size: res.Size, HasMore: res.HasMore}, nil
 }
 
 func (c *Catalog) RepoHeader(user, owner, name, ref string) (RepoHeader, error) {
@@ -442,7 +404,7 @@ func (c *Catalog) MergePR(user, owner, name string, number int) (map[string]any,
 	if !ok {
 		return nil, fmt.Errorf("checks not green")
 	}
-	if err := c.FJ.MergePR(owner, name, number); err != nil {
+	if err := c.FJ.MergePR(owner, name, number, user); err != nil {
 		return nil, err
 	}
 	c.rewriteChecks(st)
@@ -453,7 +415,7 @@ func (c *Catalog) ClosePR(user, owner, name string, number int) (map[string]any,
 	if _, err := c.seeRepo(user, owner, name); err != nil {
 		return nil, err
 	}
-	if err := c.FJ.ClosePR(owner, name, number); err != nil {
+	if err := c.FJ.ClosePR(owner, name, number, user); err != nil {
 		return nil, err
 	}
 	return map[string]any{"ok": true, "state": "closed"}, nil
@@ -495,9 +457,8 @@ func (c *Catalog) acahtiCheckURL(raw string) string {
 }
 
 func (c *Catalog) ListRepoPipelines(user, repo, sha, branch, status string, q page.Query) (page.Result[woodpecker.Pipeline], error) {
-	owner, name, _ := strings.Cut(repo, "/")
-	if err := c.seeOK(user, owner, name); err != nil {
-		return page.Result[woodpecker.Pipeline]{}, err
+	if !c.canSeeIndexedRepo(user, repo) {
+		return page.Of([]woodpecker.Pipeline{}, q, false), nil
 	}
 	f := store.Filter{Repos: []string{repo}, SHA: sha, Branch: branch}
 	if status != "" {
@@ -514,9 +475,8 @@ func (c *Catalog) ListRepoPipelines(user, repo, sha, branch, status string, q pa
 func (c *Catalog) ListPipelines(user, repo, team string, q page.Query) (page.Result[woodpecker.Pipeline], error) {
 	f := store.Filter{}
 	if repo != "" {
-		owner, name, _ := strings.Cut(repo, "/")
-		if err := c.seeOK(user, owner, name); err != nil {
-			return page.Result[woodpecker.Pipeline]{}, err
+		if !c.canSeeIndexedRepo(user, repo) {
+			return page.Of([]woodpecker.Pipeline{}, q, false), nil
 		}
 		f.Repos = []string{repo}
 	} else {
@@ -535,46 +495,31 @@ func (c *Catalog) ListPipelines(user, repo, team string, q page.Query) (page.Res
 }
 
 func (c *Catalog) visiblePipeRepos(user, team string) ([]string, error) {
+	if !c.indexed() {
+		return []string{}, nil
+	}
+	admin := c.IsOrgAdmin(user)
 	if team != "" {
-		t, err := c.findTeam(team)
-		if err != nil {
-			return nil, err
-		}
-		if !c.IsOrgAdmin(user) && !c.inTeam(user, t) {
+		if !admin && !c.inTeam(user, teamRoles{name: team}) {
 			return []string{}, nil
 		}
-		id := t.writeID()
-		if id == 0 {
-			return []string{}, nil
-		}
-		owned, err := page.Walk(func(pq page.Query) (page.Result[forgejo.Repo], error) {
-			return c.FJ.ListTeamRepos(id, pq)
-		})
-		if err != nil {
-			return nil, err
-		}
-		names := make([]string, 0, len(owned))
-		for _, r := range owned {
-			if r.FullName != "" {
-				names = append(names, r.FullName)
-			}
-		}
-		return names, nil
+		return c.Idx.TeamRepoNames(team)
+	}
+	return c.Idx.VisibleRepoNames(user, admin)
+}
+
+func (c *Catalog) canSeeIndexedRepo(user, repo string) bool {
+	if repo == "" {
+		return false
 	}
 	if c.IsOrgAdmin(user) {
-		return nil, nil
+		return true
 	}
-	visible, err := c.userRepos(user)
-	if err != nil {
-		return nil, err
+	if !c.indexed() {
+		return false
 	}
-	names := make([]string, 0, len(visible))
-	for _, r := range visible {
-		if r.FullName != "" {
-			names = append(names, r.FullName)
-		}
-	}
-	return names, nil
+	ok, err := c.Idx.HasVisibleRepo(user, repo)
+	return err == nil && ok
 }
 
 func (c *Catalog) listIndexed(f store.Filter, q page.Query) (page.Result[woodpecker.Pipeline], error) {
@@ -647,7 +592,7 @@ func (c *Catalog) CommitDetail(user, owner, name, sha string, q page.Query) (Com
 func (c *Catalog) paintPipes(pipes []woodpecker.Pipeline) []woodpecker.Pipeline {
 	out := append([]woodpecker.Pipeline(nil), pipes...)
 	for i := range out {
-		out[i] = c.decoratePipe(out[i])
+		out[i].HydrateJobs()
 	}
 	return out
 }
@@ -772,15 +717,17 @@ func (c *Catalog) IngestWoodpecker(raw []byte) (woodpecker.Pipeline, bool) {
 
 func (c *Catalog) IngestForgejo(payload map[string]any) (woodpecker.Pipeline, bool) {
 	repo, n, ok := store.ParseForgejoStatus(payload)
-	if !ok {
+	if ok {
+		p, err := c.Refresh(repo, n)
+		if err != nil {
+			return woodpecker.Pipeline{}, false
+		}
+		return p, true
+	}
+	if !c.ApplyForgejoCatalog(payload) {
 		c.forget()
-		return woodpecker.Pipeline{}, false
 	}
-	p, err := c.Refresh(repo, n)
-	if err != nil {
-		return woodpecker.Pipeline{}, false
-	}
-	return p, true
+	return woodpecker.Pipeline{}, false
 }
 
 func (c *Catalog) Backfill() {
@@ -822,32 +769,16 @@ func (c *Catalog) Backfill() {
 }
 
 func (c *Catalog) NavTree(user string) ([]NavTeam, error) {
-	teams, err := c.ListRepoTeams(user, page.Query{Page: 1, Size: page.MaxSize})
+	if !c.indexed() {
+		return []NavTeam{}, nil
+	}
+	rows, err := c.Idx.NavTree(user, c.IsOrgAdmin(user))
 	if err != nil {
 		return nil, err
 	}
-	out := make([]NavTeam, len(teams.Items))
-	var wg sync.WaitGroup
-	errs := make([]error, len(teams.Items))
-	for i, t := range teams.Items {
-		wg.Add(1)
-		go func(i int, team string) {
-			defer wg.Done()
-			repos, err := page.Walk(func(q page.Query) (page.Result[forgejo.Repo], error) {
-				return c.ListRepos(user, team, q)
-			})
-			if err != nil {
-				errs[i] = err
-				return
-			}
-			out[i] = NavTeam{Team: team, Repos: repos}
-		}(i, t.Team)
-	}
-	wg.Wait()
-	for _, err := range errs {
-		if err != nil {
-			return nil, err
-		}
+	out := make([]NavTeam, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, NavTeam{Team: row.Team, Repos: c.asRepos(row.Repos, row.Team)})
 	}
 	return out, nil
 }

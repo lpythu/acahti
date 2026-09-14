@@ -7,6 +7,7 @@ import (
 
 	"acahti/internal/config"
 	"acahti/internal/forgejo"
+	"acahti/internal/store"
 	"acahti/internal/woodpecker"
 )
 
@@ -90,6 +91,14 @@ func TestStepFailedAndTailLog(t *testing.T) {
 	}
 	if got := tailLog(text, 0); got != text {
 		t.Fatalf("all=%q", got)
+	}
+}
+
+func TestAsRepoUpdated(t *testing.T) {
+	c := New(config.Config{RootURL: "https://acahti.example.com", Org: "saidc"}, nil, nil, nil)
+	got := c.asRepo(store.OrgRepo{FullName: "saidc/argos-pack", DefaultBranch: "dev", Updated: 1710000000}, "")
+	if got.Name != "argos-pack" || got.Updated != 1710000000 || got.Team != "" {
+		t.Fatalf("%+v", got)
 	}
 }
 

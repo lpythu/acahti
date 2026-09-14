@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -45,5 +46,61 @@ func TestSetPasswordSendsAuthSource(t *testing.T) {
 	}
 	if patch["password"] != "secret" || patch["must_change_password"] != false {
 		t.Fatalf("password %v", patch)
+	}
+}
+
+func TestEnsureNoreplyFillsEmptyAuthorKeepsSetName(t *testing.T) {
+	var patches []map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/admin/users":
+			_ = json.NewEncoder(w).Encode([]User{
+				{Login: "empty", LoginName: "empty", Email: "old@example.com"},
+				{Login: "ada", LoginName: "ada", FullName: "Ada", Email: "ada@noreply.acahti.saidc.ai"},
+			})
+		case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/api/v1/admin/users/"):
+			b, _ := io.ReadAll(r.Body)
+			var patch map[string]any
+			if err := json.Unmarshal(b, &patch); err != nil {
+				t.Fatal(err)
+			}
+			patch["_login"] = strings.TrimPrefix(r.URL.Path, "/api/v1/admin/users/")
+			patches = append(patches, patch)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			t.Fatalf("%s %s", r.Method, r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	c := New(srv.URL, "admin")
+	if err := c.EnsureNoreply("https://acahti.saidc.ai", "acahti.saidc.ai"); err != nil {
+		t.Fatal(err)
+	}
+	if len(patches) != 1 || patches[0]["_login"] != "empty" {
+		t.Fatalf("patches %v", patches)
+	}
+	if patches[0]["full_name"] != "empty" || patches[0]["email"] != "empty@noreply.acahti.saidc.ai" {
+		t.Fatalf("empty %v", patches[0])
+	}
+}
+
+func TestMergePRSudoesActor(t *testing.T) {
+	var sudo string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/repos/saidc/docs/pulls/3/merge" {
+			t.Fatalf("%s %s", r.Method, r.URL.Path)
+		}
+		sudo = r.Header.Get("Sudo")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+	c := New(srv.URL, "admin")
+	if err := c.MergePR("saidc", "docs", 3, "lipeiyang"); err != nil {
+		t.Fatal(err)
+	}
+	if sudo != "lipeiyang" {
+		t.Fatalf("sudo=%q", sudo)
 	}
 }

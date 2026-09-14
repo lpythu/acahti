@@ -159,7 +159,7 @@ existing="$(api GET "/api/v1/orgs/${ACAHTI_ORG}/hooks" || echo '[]')"
 hook_body="$(python3 -c "import json; print(json.dumps({
   'type': 'gitea',
   'active': True,
-  'events': ['create','delete','push','pull_request','pull_request_assign','pull_request_review','pull_request_review_request','pull_request_comment','pull_request_reject','release','status'],
+  'events': ['create','delete','push','pull_request','pull_request_assign','pull_request_review','pull_request_review_request','pull_request_comment','pull_request_reject','release','status','repository'],
   'config': {'url': 'http://gateway:8080/hooks/forgejo', 'content_type': 'json', 'http_method': 'post'},
 }))")"
 hook_id="$(python3 -c "import json,sys

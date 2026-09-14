@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react"
+import { type FormEvent, useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -56,6 +56,53 @@ async function copyText(text: string) {
 }
 
 const PASSWORD_MASK = "••••••••"
+
+function AuthorInput({
+  login,
+  value,
+  onSaved,
+}: {
+  login: string
+  value: string
+  onSaved: () => Promise<void>
+}) {
+  const t = useT()
+  const [text, setText] = useState(value)
+
+  useEffect(() => {
+    setText(value)
+  }, [value])
+
+  async function save() {
+    const next = text.trim() || login
+    if (next === value) {
+      setText(value)
+      return
+    }
+    try {
+      await api.setGitName(login, next)
+      toast.success(t("gitNameSaved"))
+      await onSaved()
+    } catch (err) {
+      setText(value)
+      toast.error(err instanceof Error ? err.message : t("gitNameFailed"))
+    }
+  }
+
+  return (
+    <Input
+      value={text}
+      placeholder={login}
+      autoComplete="off"
+      aria-label={t("gitName")}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => void save()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur()
+      }}
+    />
+  )
+}
 
 function PasswordInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [focused, setFocused] = useState(false)
@@ -324,6 +371,7 @@ export function UsersPage() {
           <TableHeader>
             <TableRow>
               <TableHead>{t("username")}</TableHead>
+              <TableHead>{t("gitName")}</TableHead>
               <TableHead>{t("team")}</TableHead>
               <TableHead>{t("admin")}</TableHead>
               <TableHead>{t("password")}</TableHead>
@@ -333,6 +381,9 @@ export function UsersPage() {
             {users.map((u) => (
               <TableRow key={u.login}>
                 <TableCell>{u.login}</TableCell>
+                <TableCell>
+                  <AuthorInput login={u.login} value={u.full_name || u.login} onSaved={() => usersLoad.reload()} />
+                </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1.5">
                     {userTeams(u, membership.data).map((name) => (

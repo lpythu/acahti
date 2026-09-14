@@ -29,8 +29,8 @@ func Email(login, domain string) string {
 	return login + "@noreply." + domain
 }
 
-func Name(login, fullName string) string {
-	if s := strings.TrimSpace(fullName); s != "" {
+func Name(login, author string) string {
+	if s := strings.TrimSpace(author); s != "" {
 		return s
 	}
 	return strings.TrimSpace(login)
@@ -64,9 +64,9 @@ func SetupLocal(name, email string) []string {
 	}
 }
 
-func View(login, fullName, rootURL, domain, org string) map[string]any {
+func View(login, author, rootURL, domain, org string) map[string]any {
 	d := Domain(rootURL, domain)
-	name := Name(login, fullName)
+	name := Name(login, author)
 	email := Email(login, d)
 	root := strings.TrimRight(strings.TrimSpace(rootURL), "/")
 	return map[string]any{
@@ -83,8 +83,8 @@ func View(login, fullName, rootURL, domain, org string) map[string]any {
 	}
 }
 
-func Session(login string, admin bool, rootURL, domain, org string) map[string]any {
-	v := View(login, login, rootURL, domain, org)
+func Session(login, author string, admin bool, rootURL, domain, org string) map[string]any {
+	v := View(login, author, rootURL, domain, org)
 	v["user"] = login
 	v["admin"] = admin
 	return v
@@ -97,5 +97,5 @@ func Instructions(rootURL, domain string) string {
 		list = "the acahti host"
 	}
 	root := strings.TrimRight(strings.TrimSpace(rootURL), "/")
-	return fmt.Sprintf("GET %s/skill.md this turn and follow it. Discover MCP tools this session. Git author: before any commit, run git remote -v and call whoami. If ANY remote URL host is in apply_when_remote_host (%s), run setup_local (git config --local only). Do not use git config --global. Keep the laptop identity only when no remote is an acahti host (github.com, codeup.aliyun.com, or the acahti product repo on GitHub, for example api-gateway).", root, list)
+	return fmt.Sprintf("GET %s/skill.md this turn and follow it. Discover MCP tools this session. Git author: before any commit, run git remote -v and call whoami. If ANY remote URL host is in apply_when_remote_host (%s), run setup_local (git config --local only) with whoami.git_name and whoami.git_email. git_name is the admin-set commit author and defaults to login. Do not use git config --global. Keep the laptop identity only when no remote is an acahti host (github.com, codeup.aliyun.com, or the acahti product repo on GitHub, for example api-gateway).", root, list)
 }

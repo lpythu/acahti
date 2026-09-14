@@ -4,16 +4,17 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { AddPersonMenu, PermSelect, permLabel } from "@/components/access-fields"
 import { PageFrame } from "@/components/page-frame"
 import { PagedList } from "@/components/paged-list"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useEvents } from "@/hooks/use-events"
 import { useLoad } from "@/hooks/use-load"
 import { usePage } from "@/hooks/use-page"
-import { useT } from "@/i18n/i18n"
+import { useLocale, useT } from "@/i18n/i18n"
 import { api, splitRepo } from "@/lib/api"
+import { formatUnixWhen } from "@/lib/format"
 import { useSession } from "@/lib/session"
 
 function CreateTeamMenu({ onCreated }: { onCreated: (name: string) => void }) {
@@ -85,6 +86,9 @@ function TeamPage({ team }: { team: string }) {
   const t = useT()
   const nav = useNavigate()
   const load = useLoad(() => api.team(team), [team])
+  useEvents((ev) => {
+    if (ev.type === "catalog.updated") void load.reload()
+  })
   const data = load.data
   const manage = Boolean(data?.can_manage)
 
@@ -223,11 +227,15 @@ function TeamPage({ team }: { team: string }) {
 
 export function ReposPage() {
   const t = useT()
+  const locale = useLocale()
   const nav = useNavigate()
   const { me } = useSession()
   const [sp] = useSearchParams()
   const team = sp.get("team") || ""
-  const teams = usePage((q) => api.repoTeams(q), [], { enabled: !team })
+  const repos = usePage((q) => api.repos(q), [], { enabled: !team })
+  useEvents((ev) => {
+    if (ev.type === "catalog.updated") void repos.reload()
+  })
 
   if (team) {
     return <TeamPage team={team} />
@@ -235,8 +243,9 @@ export function ReposPage() {
 
   return (
     <PagedList
-      list={teams}
+      list={repos}
       emptyText={t("noRepos")}
+      skeleton="table"
       header={
         <div className="flex flex-wrap items-start justify-between gap-3">
           <p className="text-sm text-muted-foreground">{t("reposDesc")}</p>
@@ -245,24 +254,39 @@ export function ReposPage() {
       }
     >
       {(items) => (
-        <ul className="divide-y rounded-md border">
-          {items.map((row) => (
-            <li key={row.team}>
-              <Link
-                className="flex items-center gap-3 px-3 py-3 hover:bg-muted/50"
-                to={`/repos?team=${encodeURIComponent(row.team)}`}
-              >
-                <Avatar className="rounded-lg after:rounded-lg">
-                  <AvatarFallback className="rounded-lg">{row.team.slice(0, 1).toUpperCase()}</AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{row.team}</p>
-                  <p className="text-xs text-muted-foreground">{t("reposInTeam", { n: row.count })}</p>
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("repo")}</TableHead>
+              <TableHead>{t("team")}</TableHead>
+              <TableHead>{t("lastUpdated")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((r) => {
+              const { owner, name } = splitRepo(r.full_name || r.name)
+              return (
+                <TableRow key={r.full_name || r.name}>
+                  <TableCell>
+                    <Link className="hover:underline" to={`/repos/${owner}/${name}`}>
+                      {name}
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    {r.team ? (
+                      <Link className="hover:underline" to={`/repos?team=${encodeURIComponent(r.team)}`}>
+                        {r.team}
+                      </Link>
+                    ) : (
+                      <span className="text-muted-foreground">{t("unassignedRepos")}</span>
+                    )}
+                  </TableCell>
+                  <TableCell>{formatUnixWhen(r.updated, locale)}</TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
       )}
     </PagedList>
   )

@@ -8,7 +8,7 @@ Pinned versions live in [versions.env](versions.env) (`ACAHTI_VERSION` is this r
 
 ## Architecture
 
-See [architecture.md](architecture.md) for the current stack, pipeline read/write split, and page contracts.
+See [architecture.md](architecture.md) for the current stack, org and pipeline read models, and page contracts.
 
 ```mermaid
 flowchart LR

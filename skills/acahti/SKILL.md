@@ -37,7 +37,7 @@ Before any `git commit` in the current repo:
 3. If **any** remote URL host is in `apply_when_remote_host`, run `setup_local` (`git config --local` only)
 4. Keep the laptop identity only when **no** remote is an acahti host
 
-`git_email` is `{login}@noreply.$DOMAIN`. Do not ask the user for an email.
+`git_name` is the commit author the admin set on the user (default `login`). `git_email` is `{login}@noreply.$DOMAIN`. Run `setup_local` with `whoami.git_name` and `whoami.git_email`. Do not ask the user for a name or email.
 
 `dev` and `test` are protected. If push is declined, open a PR. Do not push `main` / `release`; open a PR.
 

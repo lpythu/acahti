@@ -70,6 +70,68 @@ func ParseForgejoStatus(payload map[string]any) (repo string, number int64, ok b
 	return repo, n, true
 }
 
+func ParseForgejoRepoEvent(payload map[string]any) (action string, repo OrgRepo, ok bool) {
+	if payload == nil {
+		return "", OrgRepo{}, false
+	}
+	raw := payload["repository"]
+	full := repoFrom(raw)
+	if full == "" {
+		return "", OrgRepo{}, false
+	}
+	action, _ = payload["action"].(string)
+	if action == "" {
+		refType, _ := payload["ref_type"].(string)
+		switch {
+		case refType == "repository":
+			action = "created"
+		case forgejoRepoTouch(payload) || refType == "branch" || refType == "tag":
+			action = "push"
+		default:
+			return "", OrgRepo{}, false
+		}
+	}
+	switch action {
+	case "created", "deleted", "edited", "transferred", "privatized", "unarchived", "archived", "push":
+	default:
+		return "", OrgRepo{}, false
+	}
+	repo = OrgRepo{FullName: full}
+	if m, _ := raw.(map[string]any); m != nil {
+		repo.DefaultBranch, _ = m["default_branch"].(string)
+		repo.Description, _ = m["description"].(string)
+		repo.Updated = unixFrom(m["updated_unix"])
+	}
+	return action, repo, true
+}
+
+func forgejoRepoTouch(payload map[string]any) bool {
+	if ref, _ := payload["ref"].(string); strings.HasPrefix(ref, "refs/") {
+		return true
+	}
+	_, ok := payload["commits"]
+	return ok
+}
+
+func unixFrom(v any) int64 {
+	switch n := v.(type) {
+	case int64:
+		return n
+	case int:
+		return int64(n)
+	case float64:
+		return int64(n)
+	case json.Number:
+		i, err := n.Int64()
+		if err != nil {
+			return 0
+		}
+		return i
+	default:
+		return 0
+	}
+}
+
 func repoFrom(v any) string {
 	m, _ := v.(map[string]any)
 	if m == nil {

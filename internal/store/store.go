@@ -97,10 +97,39 @@ CREATE TABLE IF NOT EXISTS pipelines (
 );
 CREATE INDEX IF NOT EXISTS pipelines_created_idx ON pipelines (created DESC, number DESC);
 CREATE INDEX IF NOT EXISTS pipelines_status_created_idx ON pipelines (status, created DESC);
+CREATE TABLE IF NOT EXISTS repos (
+  full_name text PRIMARY KEY,
+  default_branch text NOT NULL DEFAULT '',
+  description text NOT NULL DEFAULT '',
+  updated bigint NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS teams (
+  name text PRIMARY KEY,
+  write_id bigint NOT NULL DEFAULT 0,
+  read_id bigint NOT NULL DEFAULT 0,
+  admin_id bigint NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS team_repos (
+  team text NOT NULL REFERENCES teams(name) ON DELETE CASCADE,
+  repo text NOT NULL REFERENCES repos(full_name) ON DELETE CASCADE,
+  PRIMARY KEY (team, repo)
+);
+CREATE TABLE IF NOT EXISTS team_members (
+  team text NOT NULL REFERENCES teams(name) ON DELETE CASCADE,
+  login text NOT NULL,
+  role text NOT NULL DEFAULT 'write',
+  PRIMARY KEY (team, login)
+);
+CREATE INDEX IF NOT EXISTS team_members_login_idx ON team_members (login);
+CREATE INDEX IF NOT EXISTS team_repos_repo_idx ON team_repos (repo);
 `)
 	return err
 }
 
-func (s *Store) ready() bool {
+func (s *Store) Ready() bool {
 	return s != nil && s.pool != nil
+}
+
+func (s *Store) ready() bool {
+	return s.Ready()
 }

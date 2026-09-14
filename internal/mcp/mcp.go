@@ -109,7 +109,7 @@ func tools() []toolSpec {
 		{Name: "inbox", Description: "Island inbox: open PRs, blocked deploys, or failed pipelines", InputSchema: obj(map[string]any{"section": str, "page": num, "page_size": num})},
 		{Name: "pkg_publish", Description: "Publish a language package (pypi wheel URL or npm tarball URL)", InputSchema: obj(map[string]any{"kind": str, "url": str, "filename": str}, "kind", "url")},
 		{Name: "pkg_list", Description: "List language packages", InputSchema: obj(map[string]any{"owner": str, "kind": str, "page": num, "page_size": num})},
-		{Name: "whoami", Description: "Acahti git identity: git_name, git_email, clone_url_template, skill_url, skill_sha, apply_when_remote_host, setup_local", InputSchema: obj(map[string]any{})},
+		{Name: "whoami", Description: "Acahti git identity. git_name is the admin-set commit author (default login). Also git_email, clone_url_template, skill_url, skill_sha, apply_when_remote_host, setup_local", InputSchema: obj(map[string]any{})},
 		{Name: "agent_status", Description: "Host agent last contact", InputSchema: obj(pg)},
 		{Name: "deploy_approve", Description: "Approve a gated deploy pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 	}
@@ -239,6 +239,7 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+		s.Cat.RememberRepo(repo)
 		if team := str("team"); team != "" {
 			if err := s.Cat.AttachRepo(team, repo.Name); err != nil {
 				return nil, err
@@ -259,13 +260,13 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		if base == "" {
 			base = "dev"
 		}
-		return s.FJ.CreatePR(str("owner"), str("name"), str("title"), str("head"), base, str("body"))
+		return s.FJ.CreatePR(str("owner"), str("name"), str("title"), str("head"), base, str("body"), token)
 	case "pr_list":
 		return s.FJ.ListPRs(str("owner"), str("name"), str("state"), pq)
 	case "pr_get":
 		return s.Cat.PRDetail(token, str("owner"), str("name"), int(num("number")))
 	case "pr_comment":
-		return map[string]any{"ok": true}, s.FJ.CommentPR(str("owner"), str("name"), int(num("number")), str("body"))
+		return map[string]any{"ok": true}, s.FJ.CommentPR(str("owner"), str("name"), int(num("number")), str("body"), token)
 	case "pr_comments":
 		return s.Cat.ListComments(token, str("owner"), str("name"), int(num("number")), pq)
 	case "pr_merge":
