@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Activate every org repo in Woodpecker and pin .acahti/pipelines.
+"""Activate every org repo in Woodpecker and pin .acahti/pipelines/.
 
 Woodpecker 3 only accepts POST /api/repos?forge_remote_id=<forge id>.
 The id is Forgejo's numeric repository id, not owner/name. A 409 body is
@@ -18,7 +18,7 @@ FJ = os.environ.get("FORGEJO_LOOPBACK", "http://127.0.0.1:3000").rstrip("/")
 WP = os.environ.get("WOODPECKER_LOOPBACK", "http://127.0.0.1:8000").rstrip("/")
 FJ_TOKEN = os.environ.get("ACAHTI_ADMIN_TOKEN", "").strip()
 WP_TOKEN = os.environ.get("WOODPECKER_TOKEN", "").strip()
-CONFIG = ".acahti/pipelines"
+CONFIG = ".acahti/pipelines/"
 CSRF_MARK = 'WOODPECKER_CSRF = "'
 _csrf = ""
 
@@ -195,8 +195,8 @@ def selftest() -> None:
         raise SystemExit("decode plain")
     if not isinstance(decode(b"{not-json"), str):
         raise SystemExit("decode broken json")
-    if CONFIG != ".acahti/pipelines":
-        raise SystemExit("CONFIG")
+    if CONFIG != ".acahti/pipelines/":
+        raise SystemExit("CONFIG must be a directory (trailing slash)")
     print("ok", file=sys.stderr)
 
 

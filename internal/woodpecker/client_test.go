@@ -76,7 +76,7 @@ func TestActivatePostsForgeRemoteID(t *testing.T) {
 			if _, ok := body["config"]; ok {
 				t.Fatal("Woodpecker 3.18 patch field is config_file")
 			}
-			_, _ = w.Write([]byte(`{"id":7,"config_file":".acahti/pipelines"}`))
+			_, _ = w.Write([]byte(`{"id":7,"config_file":".acahti/pipelines/"}`))
 		default:
 			t.Errorf("unexpected %s %s", r.Method, r.URL.RequestURI())
 			w.WriteHeader(http.StatusNotFound)
@@ -90,7 +90,7 @@ func TestActivatePostsForgeRemoteID(t *testing.T) {
 	if len(posts) < 2 || !strings.Contains(posts[1], "POST /api/repos?forge_remote_id=99") {
 		t.Fatalf("posts=%v", posts)
 	}
-	if patch != ".acahti/pipelines" {
+	if patch != ".acahti/pipelines/" {
 		t.Fatalf("config_file=%q", patch)
 	}
 }

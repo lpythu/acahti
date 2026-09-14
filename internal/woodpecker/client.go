@@ -300,7 +300,7 @@ func (c *Client) Activate(fullName, forgeRemoteID string) error {
 		return fmt.Errorf("woodpecker repo %s has no id", fullName)
 	}
 	_, _, err = c.do(http.MethodPatch, "/api/repos/"+strconv.FormatInt(id, 10), map[string]any{
-		"config_file": ".acahti/pipelines",
+		"config_file": ".acahti/pipelines/",
 	})
 	return err
 }

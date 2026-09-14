@@ -127,7 +127,7 @@ if [[ -z "${wp_token}" ]] || ! curl -fsS \
   exit 1
 fi
 
-echo "==> Woodpecker pipeline path .acahti/pipelines"
+echo "==> Woodpecker pipeline path .acahti/pipelines/"
 ACAHTI_ORG="${ACAHTI_ORG}" ACAHTI_ADMIN_TOKEN="${token}" WOODPECKER_TOKEN="${wp_token}" \
   python3 "${root}/scripts/woodpecker-activate.py"
 
