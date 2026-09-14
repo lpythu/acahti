@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"acahti/internal/identity"
 )
 
 type Client struct {
@@ -84,10 +86,17 @@ type Status struct {
 }
 
 type Package struct {
-	ID      int64  `json:"id"`
-	Name    string `json:"name"`
-	Version string `json:"version"`
-	Type    string `json:"type"`
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	Version   string `json:"version"`
+	Type      string `json:"type"`
+	CreatedAt string `json:"created_at"`
+}
+
+type PackageFile struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+	Size int64  `json:"Size"`
 }
 
 type PublicKey struct {
@@ -101,12 +110,6 @@ type Comment struct {
 	Body    string `json:"body"`
 	User    User   `json:"user"`
 	Created string `json:"created_at"`
-}
-
-type AccessToken struct {
-	ID             int64  `json:"id"`
-	Name           string `json:"name"`
-	TokenLastEight string `json:"token_last_eight"`
 }
 
 type BranchProtection struct {
@@ -151,7 +154,15 @@ func (c *Client) do(method, path, token, sudo string, body any) ([]byte, int, er
 }
 
 func (c *Client) User(token string) (User, error) {
-	b, _, err := c.do(http.MethodGet, "/api/v1/user", token, "", nil)
+	return c.user("", token)
+}
+
+func (c *Client) UserSudo(login string) (User, error) {
+	return c.user(login, "")
+}
+
+func (c *Client) user(sudo, token string) (User, error) {
+	b, _, err := c.do(http.MethodGet, "/api/v1/user", token, sudo, nil)
 	if err != nil {
 		return User{}, err
 	}
@@ -195,9 +206,55 @@ func (c *Client) SetPassword(login, password string) error {
 	return err
 }
 
+func (c *Client) EditUser(login string, fields map[string]any) error {
+	if fields == nil {
+		fields = map[string]any{}
+	}
+	fields["login_name"] = login
+	_, _, err := c.do(http.MethodPatch, "/api/v1/admin/users/"+url.PathEscape(login), "", "", fields)
+	return err
+}
+
+func (c *Client) EnsureNoreply(rootURL, domain string) error {
+	if !c.Ready() {
+		return nil
+	}
+	users, err := c.ListUsers()
+	if err != nil {
+		return err
+	}
+	d := identity.Domain(rootURL, domain)
+	if d == "" {
+		return nil
+	}
+	for _, u := range users {
+		login := u.Login
+		if login == "" {
+			continue
+		}
+		wantEmail := identity.Email(login, d)
+		wantName := identity.Name(login, u.FullName)
+		fields := map[string]any{}
+		if u.Email != wantEmail {
+			fields["email"] = wantEmail
+		}
+		if u.FullName != wantName {
+			fields["full_name"] = wantName
+		}
+		if len(fields) == 0 {
+			continue
+		}
+		if err := c.EditUser(login, fields); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *Client) CreateUser(login, email, password string, admin bool) (User, error) {
 	b, _, err := c.do(http.MethodPost, "/api/v1/admin/users", "", "", map[string]any{
 		"username":                  login,
+		"full_name":                 login,
 		"email":                     email,
 		"password":                  password,
 		"must_change_password":      false,
@@ -266,8 +323,8 @@ func (c *Client) CreateOrgRepo(org, name string, private bool) (Repo, error) {
 	return r, json.Unmarshal(b, &r)
 }
 
-func (c *Client) GetRepo(owner, name string, token string) (Repo, error) {
-	b, _, err := c.do(http.MethodGet, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name), token, "", nil)
+func (c *Client) GetRepo(owner, name string, sudo string) (Repo, error) {
+	b, _, err := c.do(http.MethodGet, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name), "", sudo, nil)
 	if err != nil {
 		return Repo{}, err
 	}
@@ -275,8 +332,8 @@ func (c *Client) GetRepo(owner, name string, token string) (Repo, error) {
 	return r, json.Unmarshal(b, &r)
 }
 
-func (c *Client) ListRepos(token string) ([]Repo, error) {
-	b, _, err := c.do(http.MethodGet, "/api/v1/user/repos?limit=50", token, "", nil)
+func (c *Client) ListRepos(sudo string) ([]Repo, error) {
+	b, _, err := c.do(http.MethodGet, "/api/v1/user/repos?limit=50", "", sudo, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -523,10 +580,20 @@ func (c *Client) ChecksGreen(owner, name, sha string) (bool, []Status, error) {
 	return ok, st, nil
 }
 
+func (c *Client) ListPackageFiles(owner, typ, name, version string) ([]PackageFile, error) {
+	p := "/api/v1/packages/" + url.PathEscape(owner) + "/" + url.PathEscape(typ) + "/" + url.PathEscape(name) + "/" + url.PathEscape(version) + "/files"
+	b, _, err := c.do(http.MethodGet, p, "", "", nil)
+	if err != nil {
+		return nil, err
+	}
+	var out []PackageFile
+	return out, json.Unmarshal(b, &out)
+}
+
 func (c *Client) ListPackages(owner, typ string) ([]Package, error) {
-	q := "/api/v1/packages/" + url.PathEscape(owner)
+	q := "/api/v1/packages/" + url.PathEscape(owner) + "?limit=50"
 	if typ != "" {
-		q += "?type=" + url.QueryEscape(typ)
+		q += "&type=" + url.QueryEscape(typ)
 	}
 	b, _, err := c.do(http.MethodGet, q, "", "", nil)
 	if err != nil {
@@ -534,34 +601,6 @@ func (c *Client) ListPackages(owner, typ string) ([]Package, error) {
 	}
 	var out []Package
 	return out, json.Unmarshal(b, &out)
-}
-
-func (c *Client) CreateToken(user, name string) (string, error) {
-	b, _, err := c.do(http.MethodPost, "/api/v1/users/"+url.PathEscape(user)+"/tokens", "", user, map[string]any{
-		"name":   name,
-		"scopes": []string{"all"},
-	})
-	if err != nil {
-		// fallback without sudo: admin token create for that user via CLI-equivalent API
-		b, _, err = c.do(http.MethodPost, "/api/v1/users/"+url.PathEscape(user)+"/tokens", "", "", map[string]any{
-			"name":   name,
-			"scopes": []string{"all"},
-		})
-		if err != nil {
-			return "", err
-		}
-	}
-	var t struct {
-		Sha1  string `json:"sha1"`
-		Token string `json:"token"`
-	}
-	if err := json.Unmarshal(b, &t); err != nil {
-		return "", err
-	}
-	if t.Sha1 != "" {
-		return t.Sha1, nil
-	}
-	return t.Token, nil
 }
 
 func (c *Client) ListKeys(user string) ([]PublicKey, error) {
@@ -599,29 +638,15 @@ func (c *Client) ListBranchProtections(owner, name string) ([]BranchProtection, 
 	return out, json.Unmarshal(b, &out)
 }
 
-func (c *Client) ListTokens(user string) ([]AccessToken, error) {
-	b, _, err := c.do(http.MethodGet, "/api/v1/users/"+url.PathEscape(user)+"/tokens", "", user, nil)
-	if err != nil {
-		return nil, err
-	}
-	var out []AccessToken
-	return out, json.Unmarshal(b, &out)
-}
-
-func (c *Client) DeleteToken(user string, id int64) error {
-	_, _, err := c.do(http.MethodDelete, fmt.Sprintf("/api/v1/users/%s/tokens/%d", url.PathEscape(user), id), "", user, nil)
-	return err
-}
-
-func (c *Client) PutBytes(path, token, contentType string, body []byte) (int, []byte, error) {
+func (c *Client) PutBytes(path, sudo, contentType string, body []byte) (int, []byte, error) {
 	req, err := http.NewRequest(http.MethodPut, c.base+path, bytes.NewReader(body))
 	if err != nil {
 		return 0, nil, err
 	}
-	if token == "" {
-		token = c.admin
+	req.Header.Set("Authorization", "token "+c.admin)
+	if sudo != "" {
+		req.Header.Set("Sudo", sudo)
 	}
-	req.Header.Set("Authorization", "token "+token)
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}

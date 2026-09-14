@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# After up.sh: admin, org, OAuth, gateway tokens, default policy.
+# After up.sh: admin, org, CI OAuth app, gateway admin token, default policy.
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
@@ -36,7 +36,7 @@ if ! fj admin user list 2>/dev/null | grep -q "${ACAHTI_ADMIN_USER}"; then
     --admin \
     --username "${ACAHTI_ADMIN_USER}" \
     --password "${ACAHTI_ADMIN_PASSWORD}" \
-    --email "${ACAHTI_ADMIN_EMAIL}" \
+    --email "${ACAHTI_ADMIN_USER}@noreply.${DOMAIN}" \
     --must-change-password=false
 fi
 
@@ -139,6 +139,7 @@ fi
 # Reload gateway with tokens.
 "${COMPOSE[@]}" up -d gateway
 
-echo "OK: admin=${ACAHTI_ADMIN_USER}  org=${ACAHTI_ORG}  mcp=${ROOT_URL}/mcp"
+echo "Install ${ROOT_URL}/skill.md"
+echo "Join    ${ROOT_URL}/join     (invite from an admin)"
+echo "    admin=${ACAHTI_ADMIN_USER}  org=${ACAHTI_ORG}"
 echo "    password is in ${root}/.env (ACAHTI_ADMIN_PASSWORD); do not commit"
-echo "    invite users at ${ROOT_URL}/users"

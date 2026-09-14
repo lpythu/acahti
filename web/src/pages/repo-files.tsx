@@ -1,30 +1,37 @@
-import { FileIcon, FolderIcon } from "lucide-react"
 import { useSearchParams } from "react-router-dom"
-import { cn } from "cn"
 
-import { PageFrame } from "@/components/page-frame"
-import { Button } from "@/components/ui/button"
+import { Markdown, isMarkdownPath } from "@/components/markdown"
+import { RepoFileTree } from "@/components/repo-file-tree"
+import { CodeBlock } from "@/components/ui/code-block"
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
+import { AutoHideScroll } from "@/components/ui/auto-hide-scroll"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useLoad } from "@/hooks/use-load"
-import { useT } from "@/i18n/i18n"
 import { api } from "@/lib/api"
+import { langOf } from "@/lib/lang"
 import { useRepo } from "@/pages/repo-layout"
 
 export function RepoFilesPage() {
-  const t = useT()
   const repo = useRepo()
   const [sp, setSp] = useSearchParams()
   const ref = sp.get("ref") || ""
   const path = sp.get("path") || ""
-  const browse = Boolean(ref || path)
-  const extra = useLoad(
+  const root = repo.data
+  const preview = useLoad(
     () => api.repo(repo.owner, repo.name, ref || undefined, path || undefined),
     [repo.owner, repo.name, ref, path],
-    browse,
+    Boolean(path),
   )
-  const data = browse ? extra.data : repo.data
-  const error = browse ? extra.error : repo.error
-  const loading = browse ? extra.loading && !extra.data : repo.loading && !repo.data
+  const currentRef = root?.ref || ref || "dev"
+  const branches = root?.branches.length ? root.branches : [{ name: currentRef }]
+  const entries = root?.entries || []
+  const file = path ? preview.data?.file : undefined
+  const readme = path ? preview.data?.readme : root?.readme
+  const readmeName = path ? `${path.replace(/\/$/, "")}/README.md` : "README.md"
+  const loading = repo.loading && !root
+  const error = repo.error || (path ? preview.error : "")
+  const previewLoading = Boolean(path) && preview.loading && !preview.data
 
   function setQuery(next: { ref?: string; path?: string }) {
     const q = new URLSearchParams(sp)
@@ -39,75 +46,78 @@ export function RepoFilesPage() {
     setSp(q, { replace: true })
   }
 
-  const parent = path.includes("/") ? path.replace(/\/[^/]+$/, "") : ""
-  const entries = data?.file
-    ? [{ name: data.file.name, path: data.file.path, type: "file" }]
-    : data?.entries || []
-  const body = data?.file?.content || data?.readme || ""
-  const empty = !!data && !data.file && !data.readme && entries.length === 0
-  const branches = data?.branches.length ? data.branches : [{ name: data?.ref || ref || "dev" }]
+  const title = file?.name || (readme ? readmeName.split("/").pop() : "")
+  const md = file ? isMarkdownPath(file.name) : Boolean(readme)
 
   return (
-    <PageFrame
-      loading={loading}
-      error={error}
-      empty={empty}
-      emptyText={t("noRepos")}
-      className="min-h-0 flex-1"
-      header={
-        <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={data?.ref || ref || "dev"}
-            onValueChange={(v) => setQuery({ ref: String(v ?? ""), path: "" })}
-          >
-            <SelectTrigger size="sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {branches.map((b) => (
-                <SelectItem key={b.name} value={b.name}>
-                  {b.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {path ? (
-            <Button variant="outline" size="sm" onClick={() => setQuery({ path: parent })}>
-              ..
-            </Button>
-          ) : null}
-          {path ? <span className="font-mono text-xs text-muted-foreground">{path}</span> : null}
-        </div>
-      }
-    >
-      {data ? (
-        <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[16rem_1fr]">
-          <ul className="flex flex-col gap-0.5 rounded-md border p-1">
-            {entries.map((e) => (
-              <li key={e.path}>
-                <button
-                  type="button"
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted",
-                    data.file?.path === e.path && "bg-muted font-medium",
-                  )}
-                  onClick={() => setQuery({ path: e.path })}
-                >
-                  {e.type === "dir" ? <FolderIcon className="size-4 shrink-0" /> : <FileIcon className="size-4 shrink-0" />}
-                  <span className="truncate">{e.name}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          {body ? (
-            <pre className="min-h-40 overflow-auto rounded-md border bg-muted/40 p-3 text-xs whitespace-pre-wrap">
-              {body}
-            </pre>
-          ) : (
-            <p className="text-sm text-muted-foreground">{t("readme")}</p>
-          )}
-        </div>
-      ) : null}
-    </PageFrame>
+    <div className="flex min-h-0 flex-1 flex-col">
+      {error && !root ? <p className="px-4 py-3 text-sm text-destructive">{error}</p> : null}
+      <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+        <ResizablePanel defaultSize={22} minSize={14} className="flex min-h-0 flex-col">
+          <div className="border-b p-2">
+            <Select
+              value={currentRef}
+              onValueChange={(v) => setQuery({ ref: String(v ?? ""), path: "" })}
+            >
+              <SelectTrigger size="sm" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {branches.map((b) => (
+                  <SelectItem key={b.name} value={b.name}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <AutoHideScroll className="min-h-0 flex-1">
+            {loading ? (
+              <div className="flex flex-col gap-2 p-3">
+                {Array.from({ length: 8 }, (_, i) => (
+                  <Skeleton key={i} className="h-5 w-full" />
+                ))}
+              </div>
+            ) : (
+              <RepoFileTree
+                owner={repo.owner}
+                name={repo.name}
+                gitRef={currentRef === (root?.repo.default_branch || "dev") ? "" : currentRef}
+                entries={entries}
+                selected={path || (root?.readme ? "README.md" : "")}
+                onPick={(next) => setQuery({ path: next })}
+              />
+            )}
+          </AutoHideScroll>
+        </ResizablePanel>
+        <ResizableHandle />
+        <ResizablePanel defaultSize={78} className="flex min-h-0 flex-col">
+          {title ? <div className="border-b px-4 py-2 text-sm font-medium">{title}</div> : null}
+          <div className="min-h-0 flex-1">
+            {previewLoading ? (
+              <div className="flex flex-col gap-2 p-4">
+                {Array.from({ length: 10 }, (_, i) => (
+                  <Skeleton key={i} className="h-4 w-full" />
+                ))}
+              </div>
+            ) : file && !md ? (
+              <CodeBlock code={file.content} language={langOf(file.name)} />
+            ) : file && md ? (
+              <AutoHideScroll className="size-full">
+                <div className="p-6">
+                  <Markdown>{file.content}</Markdown>
+                </div>
+              </AutoHideScroll>
+            ) : readme ? (
+              <AutoHideScroll className="size-full">
+                <div className="p-6">
+                  <Markdown>{readme}</Markdown>
+                </div>
+              </AutoHideScroll>
+            ) : null}
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    </div>
   )
 }

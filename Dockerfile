@@ -12,6 +12,7 @@ ARG ACAHTI_VERSION=0.1.0
 COPY go.mod ./
 COPY cmd ./cmd
 COPY internal ./internal
+COPY skills ./skills
 COPY --from=web /web/dist ./internal/web/dist
 RUN CGO_ENABLED=0 go build -trimpath \
   -ldflags="-s -w -X acahti/internal/config.Version=${ACAHTI_VERSION}" \

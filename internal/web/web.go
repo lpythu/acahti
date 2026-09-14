@@ -1,86 +1,57 @@
 package web
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"io/fs"
 	"net/http"
-	"strconv"
 	"strings"
-	"time"
 
+	"acahti/internal/auth"
 	"acahti/internal/catalog"
 	"acahti/internal/config"
 	"acahti/internal/events"
 	"acahti/internal/forgejo"
+	"acahti/internal/identity"
+	"acahti/internal/invite"
+	"acahti/internal/oauth"
 	"acahti/internal/woodpecker"
+	"acahti/skills"
 )
 
 type Pages struct {
-	Cfg    config.Config
-	Cat    *catalog.Catalog
-	FJ     *forgejo.Client
-	WP     *woodpecker.Client
-	Hub    *events.Hub
-	Secret []byte
-	files  fs.FS
+	Cfg         config.Config
+	Cat         *catalog.Catalog
+	FJ          *forgejo.Client
+	WP          *woodpecker.Client
+	Hub         *events.Hub
+	Auth        *auth.Service
+	InviteStore *invite.Store
+	OAuth       *oauth.Server
+	files       fs.FS
 }
 
-func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, secret []byte, hub *events.Hub) *Pages {
+func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, a *auth.Service, inv *invite.Store, oa *oauth.Server, hub *events.Hub) *Pages {
 	sub, err := fs.Sub(distFS, "dist")
 	if err != nil {
 		sub = distFS
 	}
 	return &Pages{
-		Cfg:    cfg,
-		Cat:    catalog.New(cfg, fj, wp),
-		FJ:     fj,
-		WP:     wp,
-		Hub:    hub,
-		Secret: secret,
-		files:  sub,
+		Cfg: cfg, Cat: catalog.New(cfg, fj, wp), FJ: fj, WP: wp, Hub: hub,
+		Auth: a, InviteStore: inv, OAuth: oa, files: sub,
 	}
 }
 
 func (p *Pages) SessionUser(r *http.Request) (string, bool) {
-	c, err := r.Cookie("acahti")
-	if err != nil || c.Value == "" {
-		return "", false
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(c.Value)
-	if err != nil {
-		return "", false
-	}
-	parts := strings.Split(string(raw), "|")
-	if len(parts) != 3 {
-		return "", false
-	}
-	user, exp, sig := parts[0], parts[1], parts[2]
-	mac := hmac.New(sha256.New, p.Secret)
-	mac.Write([]byte(user + "|" + exp))
-	if !hmac.Equal([]byte(sig), []byte(hex.EncodeToString(mac.Sum(nil)))) {
-		return "", false
-	}
-	until, _ := strconv.ParseInt(exp, 10, 64)
-	if time.Now().Unix() > until {
-		return "", false
-	}
-	return user, user == p.Cfg.AdminUser
+	user := p.Auth.CookieUser(r)
+	return user, p.Auth.IsAdmin(user)
 }
 
 func (p *Pages) SetSession(w http.ResponseWriter, user string) {
-	exp := strconv.FormatInt(time.Now().Add(30*24*time.Hour).Unix(), 10)
-	mac := hmac.New(sha256.New, p.Secret)
-	mac.Write([]byte(user + "|" + exp))
-	val := base64.RawURLEncoding.EncodeToString([]byte(user + "|" + exp + "|" + hex.EncodeToString(mac.Sum(nil))))
-	http.SetCookie(w, &http.Cookie{Name: "acahti", Value: val, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 30 * 24 * 3600})
+	p.Auth.SetCookie(w, user)
 }
 
 func (p *Pages) ClearSession(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{Name: "acahti", Path: "/", MaxAge: -1})
+	p.Auth.ClearCookie(w)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -103,7 +74,7 @@ func (p *Pages) Me(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"user": user, "admin": admin, "root_url": p.Cfg.RootURL, "org": p.Cfg.Org})
+	writeJSON(w, http.StatusOK, identity.Session(user, admin, p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
 }
 
 func (p *Pages) Login(w http.ResponseWriter, r *http.Request) {
@@ -119,13 +90,9 @@ func (p *Pages) Login(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid username or password"})
 		return
 	}
-	p.SetSession(w, strings.TrimSpace(body.Username))
-	writeJSON(w, http.StatusOK, map[string]any{
-		"user":     strings.TrimSpace(body.Username),
-		"admin":    strings.TrimSpace(body.Username) == p.Cfg.AdminUser,
-		"root_url": p.Cfg.RootURL,
-		"org":      p.Cfg.Org,
-	})
+	login := strings.TrimSpace(body.Username)
+	p.SetSession(w, login)
+	writeJSON(w, http.StatusOK, identity.Session(login, login == p.Cfg.AdminUser, p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
 }
 
 func (p *Pages) Logout(w http.ResponseWriter, r *http.Request) {
@@ -157,7 +124,6 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		var body struct {
 			Username string `json:"username"`
-			Email    string `json:"email"`
 			Password string `json:"password"`
 			Admin    bool   `json:"admin"`
 		}
@@ -171,9 +137,10 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username and password required"})
 			return
 		}
-		email := strings.TrimSpace(body.Email)
+		email := identity.Email(login, identity.Domain(p.Cfg.RootURL, p.Cfg.Domain))
 		if email == "" {
-			email = login + "@users.local"
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "DOMAIN or ROOT_URL required"})
+			return
 		}
 		u, err := p.FJ.CreateUser(login, email, pw, body.Admin)
 		if err != nil {
@@ -219,17 +186,90 @@ func (p *Pages) Keys(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"keys": keys})
 }
 
-func (p *Pages) Token(w http.ResponseWriter, r *http.Request) {
-	user, _, ok := p.requireJSON(w, r)
-	if !ok {
+func (p *Pages) Skill(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	_, _ = w.Write([]byte(skills.Acahti(p.Cfg.RootURL, p.Cfg.Org, identity.Domain(p.Cfg.RootURL, p.Cfg.Domain))))
+}
+
+func (p *Pages) Public(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{
+		"root_url": p.Cfg.RootURL,
+		"org":      p.Cfg.Org,
+		"skill":    p.Cfg.RootURL + "/skill.md",
+		"join":     p.Cfg.RootURL + "/join",
+		"mcp":      p.Cfg.RootURL + "/mcp",
+	})
+}
+
+func (p *Pages) Join(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Code     string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-	tok, err := p.FJ.CreateToken(user, "mcp-"+strconv.FormatInt(time.Now().Unix(), 10))
+	login := strings.TrimSpace(body.Username)
+	if login == "" || body.Password == "" || strings.TrimSpace(body.Code) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username, password, and invite required"})
+		return
+	}
+	if p.InviteStore == nil || !p.InviteStore.Valid(strings.TrimSpace(body.Code)) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "invalid invite"})
+		return
+	}
+	email := identity.Email(login, identity.Domain(p.Cfg.RootURL, p.Cfg.Domain))
+	u, err := p.FJ.CreateUser(login, email, body.Password, false)
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"token": tok})
+	_ = p.FJ.AddOrgMember(p.Cfg.Org, u.Login)
+	p.SetSession(w, u.Login)
+	writeJSON(w, http.StatusOK, identity.Session(u.Login, false, p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
+}
+
+func (p *Pages) Invites(w http.ResponseWriter, r *http.Request) {
+	_, admin, ok := p.requireJSON(w, r)
+	if !ok {
+		return
+	}
+	if !admin {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin only"})
+		return
+	}
+	if p.InviteStore == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "invites unavailable"})
+		return
+	}
+	switch r.Method {
+	case http.MethodPost:
+		c, err := p.InviteStore.Create()
+		if err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"code": c.Code, "url": p.Cfg.RootURL + "/join?code=" + c.Code})
+	case http.MethodDelete:
+		_ = p.InviteStore.Delete(r.PathValue("code"))
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"invites": p.InviteStore.List(), "join": p.Cfg.RootURL + "/join"})
+	}
+}
+
+func (p *Pages) OAuthApprove(w http.ResponseWriter, r *http.Request) {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
+		return
+	}
+	if p.OAuth == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "oauth unavailable"})
+		return
+	}
+	p.OAuth.Approve(w, r, user)
 }
 
 func (p *Pages) Password(w http.ResponseWriter, r *http.Request) {

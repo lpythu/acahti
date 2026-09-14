@@ -9,31 +9,37 @@ import (
 	"strings"
 	"time"
 
+	"acahti/internal/auth"
 	"acahti/internal/catalog"
 	"acahti/internal/config"
 	"acahti/internal/forgejo"
 	"acahti/internal/httperr"
+	"acahti/internal/identity"
+	"acahti/internal/oauth"
 	"acahti/internal/woodpecker"
 )
 
 type Server struct {
-	Cfg ConfigView
-	FJ  *forgejo.Client
-	WP  *woodpecker.Client
-	Cat *catalog.Catalog
+	Cfg  ConfigView
+	Auth *auth.Service
+	FJ   *forgejo.Client
+	WP   *woodpecker.Client
+	Cat  *catalog.Catalog
 }
 
 type ConfigView struct {
 	Org     string
 	RootURL string
+	Domain  string
 }
 
-func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client) *Server {
+func New(cfg config.Config, a *auth.Service, fj *forgejo.Client, wp *woodpecker.Client) *Server {
 	return &Server{
-		Cfg: ConfigView{Org: cfg.Org, RootURL: cfg.RootURL},
-		FJ:  fj,
-		WP:  wp,
-		Cat: catalog.New(cfg, fj, wp),
+		Cfg:  ConfigView{Org: cfg.Org, RootURL: cfg.RootURL, Domain: cfg.Domain},
+		Auth: a,
+		FJ:   fj,
+		WP:   wp,
+		Cat:  catalog.New(cfg, fj, wp),
 	}
 }
 
@@ -89,6 +95,7 @@ func tools() []toolSpec {
 		{Name: "pipeline_rerun", Description: "Rerun a pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 		{Name: "pkg_publish", Description: "Publish a language package (pypi wheel URL or npm tarball URL)", InputSchema: obj(map[string]any{"kind": str, "url": str, "filename": str}, "kind", "url")},
 		{Name: "pkg_list", Description: "List language packages", InputSchema: obj(map[string]any{"owner": str, "kind": str})},
+		{Name: "whoami", Description: "Island git identity for this token: git_name, git_email, apply_when_remote_host, setup_local", InputSchema: obj(nil)},
 		{Name: "agent_status", Description: "Host agent last contact", InputSchema: obj(nil)},
 		{Name: "deploy_approve", Description: "Approve a gated deploy pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 	}
@@ -103,6 +110,11 @@ func ToolNames() []string {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	login, ok := s.Auth.Parse(auth.Bearer(r))
+	if !ok {
+		oauth.Challenge(w, s.Cfg.RootURL+"/.well-known/oauth-protected-resource")
+		return
+	}
 	if r.Method == http.MethodGet {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -110,15 +122,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method != http.MethodPost {
 		httperr.Write(w, http.StatusMethodNotAllowed, "bad_request", "POST JSON-RPC to /mcp")
-		return
-	}
-	token := bearer(r)
-	if token == "" {
-		httperr.Write(w, http.StatusUnauthorized, "unauthorized", "Bearer token required")
-		return
-	}
-	if _, err := s.FJ.User(token); err != nil {
-		httperr.Write(w, http.StatusUnauthorized, "unauthorized", "invalid token")
 		return
 	}
 	raw, err := io.ReadAll(r.Body)
@@ -131,7 +134,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeRPC(w, nil, nil, &rpcErr{Code: -32700, Message: "parse error"})
 		return
 	}
-	res, rerr := s.dispatch(token, req)
+	res, rerr := s.dispatch(login, req)
 	writeRPC(w, req.ID, res, rerr)
 }
 
@@ -142,6 +145,7 @@ func (s *Server) dispatch(token string, req rpcReq) (any, *rpcErr) {
 			"protocolVersion": "2025-03-26",
 			"capabilities":    map[string]any{"tools": map[string]any{}},
 			"serverInfo":      map[string]any{"name": "acahti", "version": "1"},
+			"instructions":    identity.Instructions(s.Cfg.RootURL, s.Cfg.Domain),
 		}, nil
 	case "notifications/initialized", "ping":
 		return map[string]any{}, nil
@@ -197,6 +201,12 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 	}
 	org := s.Cfg.Org
 	switch name {
+	case "whoami":
+		u, err := s.FJ.UserSudo(token)
+		if err != nil {
+			return identity.View(token, token, s.Cfg.RootURL, s.Cfg.Domain, org), nil
+		}
+		return identity.View(u.Login, u.FullName, s.Cfg.RootURL, s.Cfg.Domain, org), nil
 	case "repo_list":
 		return s.FJ.ListRepos(token)
 	case "repo_get":
@@ -320,17 +330,6 @@ func (s *Server) publish(token, kind, fileURL, filename string) (any, error) {
 		return nil, fmt.Errorf("publish %d: %s", code, strings.TrimSpace(string(raw)))
 	}
 	return map[string]any{"ok": true, "filename": filename}, nil
-}
-
-func bearer(r *http.Request) string {
-	h := r.Header.Get("Authorization")
-	if strings.HasPrefix(strings.ToLower(h), "bearer ") {
-		return strings.TrimSpace(h[7:])
-	}
-	if strings.HasPrefix(strings.ToLower(h), "token ") {
-		return strings.TrimSpace(h[6:])
-	}
-	return ""
 }
 
 func writeRPC(w http.ResponseWriter, id, result any, err *rpcErr) {

@@ -1,6 +1,6 @@
 # Acahti
 
-Self-hosted control plane for coding agents. One install: git, required-green checks, language packages, **one MCP, one token**.
+Self-hosted control plane for coding agents. One install: git, required-green checks, language packages, **one MCP**. People sign in with a password; agents use OAuth.
 
 Kernels are official **Forgejo** and **Woodpecker** images. This repo is the gateway, compose, and install contract. Do not fork those UIs.
 
@@ -27,7 +27,7 @@ flowchart LR
   fj --> pg
   wp --> pg
   wp --> buildof
-  agents -->|"git HTTPS"| fj
+  agents -->|"git HTTPS"| gw
 ```
 
 Gateway is the only HTTP app this repo starts. Bind is `GATEWAY_BIND` (default `127.0.0.1:8080`). TLS and the public hostname are **out of tree**: point your reverse proxy or tunnel at that bind and set `ROOT_URL` / `DOMAIN` to the public URL. Public identity is **Acahti**: SPA, MCP, `/acahti/v1`, git HTTPS, and `/api/packages`. Forgejo and Woodpecker stay on the compose network (plus loopback for setup). `/ci` and Forgejo HTML (`/login/oauth`, `/user/login`, `/api/v1`) are not public.
@@ -55,35 +55,39 @@ Chicken and egg: the laptop agent SSHs to an empty host and follows this list. D
    - `up.sh` — `compose up` (never `down -v`)
    - `configure.sh` — admin, org, Actions off, OAuth on the compose net, gateway tokens
    - if `ACAHTI_BUILD` is set, SSH-install one `ROLE=both` agent on that host
-5. Print `ROOT_URL`, MCP `…/mcp`, invite URL `…/admin/users`. On failure stop and return logs; do not leave a half install.
+5. Print the Use contract (same two lines as `/`, `/skill.md`, and README Usage). On failure stop and return logs; do not leave a half install.
 
 gRPC is published as `WOODPECKER_GRPC_PUBLISH` (default `127.0.0.1:9000`). With `ACAHTI_BUILD`, install binds the LAN IP. Do not publish it to the internet (`lan` or `ssh-reverse`).
 
-Skills: [skills/acahti-install/SKILL.md](skills/acahti-install/SKILL.md) (bootstrap) and [skills/acahti/SKILL.md](skills/acahti/SKILL.md) (use after URL + token).
+Skills: [skills/acahti-install/SKILL.md](skills/acahti-install/SKILL.md) (stand up the island) and the live `GET /skill.md` (use after it is up).
 
 ## Web preview
 
-Do not tag to look at UI. The SPA is Vite; `/ui` is proxied to the live island.
+Do not tag to look at UI. `scripts/web-dev.sh` proxies `/ui` to the host `:8080` (`192.168.0.180` or Tailscale). Not `acahti.saidc.ai` (Cloudflare).
 
 ```bash
 bash scripts/web-dev.sh
 # http://127.0.0.1:5173  — log in with an island account
 ```
 
-Override the API: `ACAHTI_DEV_ORIGIN=https://acahti.saidc.ai bash scripts/web-dev.sh`. Confirm there, then bump `ACAHTI_VERSION` and `bash scripts/tag-release.sh`.
+Override: `ACAHTI_DEV_ORIGIN=http://192.168.0.180:8080 bash scripts/web-dev.sh`. Confirm locally, then bump `ACAHTI_VERSION` and `bash scripts/tag-release.sh`.
 
 ## Usage
 
-- Git: `https://$ROOT_URL/$org/$repo.git` (token as password). SSH optional: `ssh://git@$SSH_HOST:$GIT_SSH_PORT/$org/$repo.git`
-- Git author on island remotes: MCP `whoami` then `setup_local` (`git config --local` only). Not GitHub `acahti/`.
-- Packages: `https://$ROOT_URL/api/packages/$org/pypi/simple/` and `…/npm/`
-- MCP: `https://$ROOT_URL/mcp` Bearer token from the account page
-- Narrow REST: `/acahti/v1/…` same verbs as MCP
+```text
+Install https://acahti.example.com/skill.md
+Join    https://acahti.example.com/join     (invite from an admin)
+```
+
+Give the first line to any coding agent. It pulls this island’s skill, connects `$ROOT_URL/mcp`, and completes OAuth. If the browser has no account, open the second line with an admin invite and pick a username and password; existing accounts use `/login`. Then `whoami` and set `--local` git identity only when the remote host is the island.
+
+- Git HTTPS: `https://acahti.example.com/acme/<repo>.git` — username `whoami.login`, password is the OAuth `access_token` the client already holds. SSH optional: `ssh://git@$DOMAIN:2222/acme/<repo>.git`
+- Packages: `https://acahti.example.com/api/packages/acme/pypi/simple/` and `…/npm/`
+- REST: `/acahti/v1/…` same verbs as MCP
 - Not public: Woodpecker `/ci`, Forgejo UI, Forgejo `/api/v1`
-- Registration is closed
 - Island upgrade: tag `vX.Y.Z` on `lpythu/acahti` (not a push to `main`)
 
-Example values in docs: `https://acahti.example.com`, `org=acme`.
+Examples use `https://acahti.example.com`. Do not hard-code a live island hostname.
 
 ## Data
 

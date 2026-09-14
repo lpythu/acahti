@@ -55,11 +55,6 @@ elif [[ -n "${ACAHTI_DEPLOY:-}" ]]; then
 fi
 
 echo
-echo "OK: Acahti is up"
-echo "    URL     ${ROOT_URL}"
-echo "    MCP     ${ROOT_URL}/mcp"
-echo "    invite  ${ROOT_URL}/users"
+echo "Install ${ROOT_URL}/skill.md"
+echo "Join    ${ROOT_URL}/join     (invite from an admin)"
 echo "    admin   ${ACAHTI_ADMIN_USER}  (password in ${root}/.env)"
-echo "    git     ${ROOT_URL}/${ACAHTI_ORG}/<repo>.git"
-echo "    pypi    ${ROOT_URL}/api/packages/${ACAHTI_ORG}/pypi/simple/"
-echo "    npm     ${ROOT_URL}/api/packages/${ACAHTI_ORG}/npm/"

@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import { cn } from "cn"
 
 import { EmptyState } from "@/components/empty-state"
+import { AutoHideScroll } from "@/components/ui/auto-hide-scroll"
 import { Skeleton } from "@/components/ui/skeleton"
 
 export function PageSkeleton({ lines = 6 }: { lines?: number }) {
@@ -45,16 +46,18 @@ export function PageFrame({
   skeleton?: "lines" | "table"
 }) {
   return (
-    <div className={cn("flex flex-col gap-4 px-4 py-4 lg:px-6 md:py-6", className)}>
-      {header}
-      {error && !loading ? <p className="text-sm text-destructive">{error}</p> : null}
-      {loading ? (
-        skeleton === "table" ? <TableSkeleton /> : <PageSkeleton />
-      ) : empty ? (
-        <EmptyState>{emptyText || ""}</EmptyState>
-      ) : (
-        children
-      )}
-    </div>
+    <AutoHideScroll className="min-h-0 flex-1">
+      <div className={cn("flex flex-col gap-4 px-4 py-4 lg:px-6 md:py-6", className)}>
+        {header}
+        {error && !loading ? <p className="text-sm text-destructive">{error}</p> : null}
+        {loading ? (
+          skeleton === "table" ? <TableSkeleton /> : <PageSkeleton />
+        ) : empty ? (
+          <EmptyState>{emptyText || ""}</EmptyState>
+        ) : (
+          children
+        )}
+      </div>
+    </AutoHideScroll>
   )
 }

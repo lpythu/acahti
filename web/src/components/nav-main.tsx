@@ -9,8 +9,8 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
-function navActive(path: string, url: string) {
-  if (url === "/" || url === "/admin") return path === url
+function navActive(path: string, url: string, end?: boolean) {
+  if (end || url === "/" || url === "/admin") return path === url
   return path === url || path.startsWith(url + "/")
 }
 
@@ -23,6 +23,7 @@ export function NavMain({
     title: string
     url: string
     icon?: React.ReactNode
+    end?: boolean
   }[]
   active: string
   label?: string
@@ -36,7 +37,7 @@ export function NavMain({
             <SidebarMenuItem key={item.url}>
               <SidebarMenuButton
                 tooltip={item.title}
-                isActive={navActive(active, item.url)}
+                isActive={navActive(active, item.url, item.end)}
                 render={<Link to={item.url} />}
               >
                 {item.icon}

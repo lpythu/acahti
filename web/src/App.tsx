@@ -20,13 +20,15 @@ import { RepoLayout } from "@/pages/repo-layout"
 import { RepoPipelinesPage } from "@/pages/repo-pipelines"
 import { RepoPullsPage } from "@/pages/repo-pulls"
 import { ReposPage } from "@/pages/repos"
-import { AdminShell, ConsoleShell } from "@/pages/shell"
-import { TokenPage } from "@/pages/token"
+import { AdminGate, AppShell } from "@/pages/shell"
+import { ConsentPage } from "@/pages/consent"
+import { JoinPage } from "@/pages/join"
+import { UsePage } from "@/pages/use"
 import { UsersPage } from "@/pages/users"
 
-function PipelineRedirect() {
+function RepoPipelineRedirect() {
   const { owner, name, number } = useParams()
-  return <Navigate to={`/repos/${owner}/${name}/pipelines/${number}`} replace />
+  return <Navigate to={`/pipelines/${owner}/${name}/${number}`} replace />
 }
 
 export default function App() {
@@ -36,12 +38,14 @@ export default function App() {
         <BrowserRouter>
           <SessionProvider>
             <Routes>
+              <Route path="/" element={<UsePage />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/join" element={<JoinPage />} />
+              <Route path="/oauth/consent" element={<ConsentPage />} />
               <Route path="/keys" element={<Navigate to="/account/keys" replace />} />
-              <Route path="/token" element={<Navigate to="/account/token" replace />} />
               <Route path="/users" element={<Navigate to="/admin/users" replace />} />
-              <Route element={<ConsoleShell />}>
-                <Route path="/" element={<BoardPage />} />
+              <Route element={<AppShell />}>
+                <Route path="/board" element={<BoardPage />} />
                 <Route path="/repos" element={<ReposPage />} />
                 <Route path="/repos/:owner/:name" element={<RepoLayout />}>
                   <Route index element={<RepoFilesPage />} />
@@ -50,18 +54,17 @@ export default function App() {
                   <Route path="pulls" element={<RepoPullsPage />} />
                   <Route path="pulls/:number" element={<PullPage />} />
                   <Route path="pipelines" element={<RepoPipelinesPage />} />
-                  <Route path="pipelines/:number" element={<PipelinePage />} />
+                  <Route path="pipelines/:number" element={<RepoPipelineRedirect />} />
                 </Route>
                 <Route path="/pipelines" element={<PipelinesPage />} />
-                <Route path="/pipelines/:owner/:name/:number" element={<PipelineRedirect />} />
+                <Route path="/pipelines/:owner/:name/:number" element={<PipelinePage />} />
                 <Route path="/packages" element={<PackagesPage />} />
-                <Route path="/packages/:kind/:name" element={<PackageDetailPage />} />
+                <Route path="/packages/:kind/*" element={<PackageDetailPage />} />
                 <Route path="/account/keys" element={<KeysPage />} />
-                <Route path="/account/token" element={<TokenPage />} />
-              </Route>
-              <Route element={<AdminShell />}>
-                <Route path="/admin" element={<AdminHomePage />} />
-                <Route path="/admin/users" element={<UsersPage />} />
+                <Route element={<AdminGate />}>
+                  <Route path="/admin" element={<AdminHomePage />} />
+                  <Route path="/admin/users" element={<UsersPage />} />
+                </Route>
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

@@ -6,20 +6,23 @@ import (
 	"strconv"
 	"strings"
 
+	"acahti/internal/auth"
 	"acahti/internal/config"
 	"acahti/internal/events"
 	"acahti/internal/forgejo"
 	"acahti/internal/httperr"
 	"acahti/internal/mcp"
+	"acahti/internal/oauth"
 	"acahti/internal/woodpecker"
 )
 
 type API struct {
-	Cfg config.Config
-	FJ  *forgejo.Client
-	WP  *woodpecker.Client
-	Hub *events.Hub
-	MCP *mcp.Server
+	Cfg  config.Config
+	Auth *auth.Service
+	FJ   *forgejo.Client
+	WP   *woodpecker.Client
+	Hub  *events.Hub
+	MCP  *mcp.Server
 }
 
 func (a *API) token(r *http.Request) string {
@@ -36,27 +39,17 @@ func (a *API) token(r *http.Request) string {
 func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/acahti/v1")
 	if path == "/events" && r.Method == http.MethodGet {
-		if a.token(r) == "" {
-			user, pass, ok := r.BasicAuth()
-			if !ok || user == "" {
-				httperr.Write(w, http.StatusUnauthorized, "unauthorized", "token required")
-				return
-			}
-			if _, err := a.FJ.BasicUser(user, pass); err != nil {
-				httperr.Write(w, http.StatusUnauthorized, "unauthorized", "invalid credentials")
-				return
-			}
+		if _, ok := a.Auth.Parse(a.token(r)); !ok {
+			oauth.Challenge(w, a.Cfg.RootURL+"/.well-known/oauth-protected-resource")
+			return
 		}
 		a.Hub.SSE(w, r)
 		return
 	}
 	tok := a.token(r)
-	if tok == "" {
-		httperr.Write(w, http.StatusUnauthorized, "unauthorized", "Bearer token required")
-		return
-	}
-	if _, err := a.FJ.User(tok); err != nil {
-		httperr.Write(w, http.StatusUnauthorized, "unauthorized", "invalid token")
+	login, ok := a.Auth.Parse(tok)
+	if !ok {
+		oauth.Challenge(w, a.Cfg.RootURL+"/.well-known/oauth-protected-resource")
 		return
 	}
 	args := map[string]any{}
@@ -77,7 +70,7 @@ func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for k, v := range extra {
 		args[k] = v
 	}
-	out, err := a.MCP.CallForAPI(tok, tool, args)
+	out, err := a.MCP.CallForAPI(login, tool, args)
 	if err != nil {
 		httperr.Write(w, http.StatusUnprocessableEntity, "failed_precondition", err.Error())
 		return
@@ -89,6 +82,9 @@ func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func route(path, method string, args map[string]any) (string, map[string]any) {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	extra := map[string]any{}
+	if len(parts) == 1 && parts[0] == "me" && method == http.MethodGet {
+		return "whoami", extra
+	}
 	if len(parts) == 1 && parts[0] == "repos" && method == http.MethodGet {
 		return "repo_list", extra
 	}

@@ -45,7 +45,7 @@ export function BoardPage() {
                 return (
                   <TableRow key={`${p.repo}-${p.number}`}>
                     <TableCell>
-                      <Link className="hover:underline" to={`/repos/${owner}/${name}/pipelines/${p.number}`}>
+                      <Link className="hover:underline" to={`/pipelines/${owner}/${name}/${p.number}`}>
                         {p.repo}
                       </Link>
                     </TableCell>
@@ -89,7 +89,7 @@ export function BoardPage() {
                 return (
                   <TableRow key={`${p.repo}-${p.number}`}>
                     <TableCell>
-                      <Link className="hover:underline" to={`/repos/${owner}/${name}/pipelines/${p.number}`}>
+                      <Link className="hover:underline" to={`/pipelines/${owner}/${name}/${p.number}`}>
                         {p.repo}
                       </Link>
                     </TableCell>

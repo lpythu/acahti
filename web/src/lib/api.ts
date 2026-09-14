@@ -1,4 +1,11 @@
-export type Me = { user: string; admin: boolean; root_url: string; org: string }
+export type Me = {
+  user: string
+  admin: boolean
+  root_url: string
+  org: string
+  git_name?: string
+  git_email?: string
+}
 
 export type PR = {
   number: number
@@ -15,23 +22,40 @@ export type PR = {
   base?: { ref: string }
 }
 
-export type Pipeline = {
-  repo: string
-  number: number
-  status: string
-  event: string
-  title: string
-  branch?: string
-  author?: string
-  error?: string
-}
-
 export type Step = {
   id?: number
   pid: number
   name: string
   state: string
   error?: string
+  type?: string
+}
+
+export type PipelineWorkflow = {
+  name: string
+  state: string
+  pid?: number
+  children?: Step[]
+}
+
+export type Pipeline = {
+  repo: string
+  number: number
+  status: string
+  event: string
+  title: string
+  message?: string
+  branch?: string
+  ref?: string
+  author?: string
+  avatar?: string
+  commit?: string
+  error?: string
+  created?: number
+  started?: number
+  finished?: number
+  workflows?: PipelineWorkflow[]
+  steps?: Step[]
 }
 
 export type Agent = {
@@ -55,7 +79,7 @@ export type User = { login: string; email: string; is_admin: boolean; full_name:
 
 export type PublicKey = { id: number; title: string; key: string }
 
-export type AccessToken = { id: number; name: string; token_last_eight: string }
+export type Invite = { code: string }
 
 export type Repo = {
   name: string
@@ -65,7 +89,17 @@ export type Repo = {
   clone_url?: string
 }
 
-export type Package = { id: number; name: string; version: string; type: string }
+export type Package = { id: number; name: string; version: string; type: string; created_at?: string }
+
+export type PackageRow = {
+  type: string
+  name: string
+  latest: string
+  updated_at: string
+  size: number
+  versions: number
+  downloads: number
+}
 
 export type Status = {
   status: string
@@ -157,7 +191,18 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     throw Object.assign(new Error("unauthorized"), { status: 401 })
   }
   const text = await res.text()
-  const data = text ? JSON.parse(text) : {}
+  const ct = res.headers.get("content-type") || ""
+  if (text && !ct.includes("application/json")) {
+    throw Object.assign(new Error(res.ok ? `${path} returned ${ct || "html"}` : res.statusText), {
+      status: res.status,
+    })
+  }
+  let data: { error?: string; message?: string } = {}
+  try {
+    data = text ? JSON.parse(text) : {}
+  } catch {
+    throw Object.assign(new Error(`${path} returned invalid JSON`), { status: res.status })
+  }
   if (!res.ok) {
     throw Object.assign(new Error(data.error || data.message || res.statusText), {
       status: res.status,
@@ -167,9 +212,17 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  public: () => req<{ root_url: string; org: string; skill: string; join: string; mcp: string }>("/ui/public"),
   me: () => req<Me>("/ui/me"),
   login: (username: string, password: string) =>
     req<Me>("/ui/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+  join: (username: string, password: string, code: string) =>
+    req<Me>("/ui/join", { method: "POST", body: JSON.stringify({ username, password, code }) }),
+  oauthApprove: (body: { client_id: string; redirect_uri: string; state: string; code_challenge: string }) =>
+    req<{ redirect: string }>("/ui/oauth/approve", { method: "POST", body: JSON.stringify(body) }),
+  invites: () => req<{ invites: Invite[]; join: string }>("/ui/invites"),
+  createInvite: () => req<{ code: string; url: string }>("/ui/invites", { method: "POST" }),
+  deleteInvite: (code: string) => req<{ ok: boolean }>(`/ui/invites/${code}`, { method: "DELETE" }),
   logout: () => req<{ ok: boolean }>("/ui/logout", { method: "POST" }),
   board: () => req<Inbox>("/ui/board"),
   users: () => req<{ users: User[] }>("/ui/users"),
@@ -187,9 +240,6 @@ export const api = {
   keys: () => req<{ keys: PublicKey[] }>("/ui/keys"),
   addKey: (title: string, key: string) =>
     req<{ ok: boolean }>("/ui/keys", { method: "POST", body: JSON.stringify({ title, key }) }),
-  tokens: () => req<{ tokens: AccessToken[] }>("/ui/tokens"),
-  revokeToken: (id: number) => req<{ ok: boolean }>(`/ui/tokens/${id}`, { method: "DELETE" }),
-  issueToken: () => req<{ token: string }>("/ui/token", { method: "POST" }),
   repos: () => req<{ repos: Repo[] }>("/ui/repos"),
   repo: (owner: string, name: string, ref?: string, path?: string) => {
     const q = new URLSearchParams()
@@ -213,7 +263,7 @@ export const api = {
   approve: (owner: string, name: string, n: number) =>
     req<{ ok: boolean }>(`/ui/pipelines/${owner}/${name}/${n}/approve`, { method: "POST" }),
   packages: (kind?: string) =>
-    req<{ packages: Package[] }>(kind ? `/ui/packages?kind=${encodeURIComponent(kind)}` : "/ui/packages"),
+    req<{ packages: PackageRow[] }>(kind ? `/ui/packages?kind=${encodeURIComponent(kind)}` : "/ui/packages"),
   packageGroup: (kind: string, name: string) =>
     req<PackageGroup>(`/ui/packages/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`),
   trigger: (owner: string, name: string, ref?: string) =>
@@ -226,4 +276,26 @@ export const api = {
 export function splitRepo(full: string): { owner: string; name: string } {
   const [owner, name] = full.split("/")
   return { owner: owner || "", name: name || full }
+}
+
+export function codeGroupOf(name: string): string {
+  const i = name.indexOf("-")
+  return i > 0 ? name.slice(0, i) : name
+}
+
+export function groupRepos(repos: Repo[]): { group: string; repos: Repo[] }[] {
+  const map = new Map<string, Repo[]>()
+  for (const r of repos) {
+    const { name } = splitRepo(r.full_name || r.name)
+    const group = codeGroupOf(name)
+    const list = map.get(group) || []
+    list.push(r)
+    map.set(group, list)
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([group, items]) => ({
+      group,
+      repos: items.slice().sort((a, b) => (a.name || a.full_name).localeCompare(b.name || b.full_name)),
+    }))
 }

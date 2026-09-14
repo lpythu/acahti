@@ -1,13 +1,8 @@
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useT } from "@/i18n/i18n"
 
 function CopyRow({ label, command }: { label: string; command: string }) {
@@ -21,7 +16,7 @@ function CopyRow({ label, command }: { label: string; command: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-1.5 px-1.5 py-1">
+    <div className="flex flex-col gap-1.5">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <div className="flex gap-2">
         <Input readOnly value={command} className="h-8 font-mono text-xs" />
@@ -36,14 +31,14 @@ function CopyRow({ label, command }: { label: string; command: string }) {
 export function CloneMenu({ https, ssh }: { https: string; ssh: string }) {
   const t = useT()
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>{t("clone")}</DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-96 min-w-80 p-2">
-        <DropdownMenuLabel>{t("cloneHttps")}</DropdownMenuLabel>
+    <Popover>
+      <PopoverTrigger render={<Button type="button" variant="outline" size="sm" />}>
+        {t("clone")}
+      </PopoverTrigger>
+      <PopoverContent className="flex w-96 flex-col gap-3">
         <CopyRow label={t("https")} command={`git clone ${https}`} />
-        <DropdownMenuLabel>{t("cloneSsh")}</DropdownMenuLabel>
         <CopyRow label={t("ssh")} command={`git clone ${ssh}`} />
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </PopoverContent>
+    </Popover>
   )
 }

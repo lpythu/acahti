@@ -24,6 +24,7 @@ type Config struct {
 	ForgejoVersion    string
 	WoodpeckerVersion string
 	PostgresVersion   string
+	DataDir           string
 }
 
 func getenv(key, fallback string) string {
@@ -50,5 +51,6 @@ func Load() Config {
 		ForgejoVersion:    getenv("FORGEJO_VERSION", "15.0.8"),
 		WoodpeckerVersion: getenv("WOODPECKER_VERSION", "3.18.1"),
 		PostgresVersion:   getenv("POSTGRES_VERSION", "16-alpine"),
+		DataDir:           getenv("ACAHTI_DATA", "/var/lib/acahti"),
 	}
 }

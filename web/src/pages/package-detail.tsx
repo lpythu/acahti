@@ -10,7 +10,7 @@ import { api, type Me } from "@/lib/api"
 export function PackageDetailPage() {
   const t = useT()
   const me = useOutletContext<Me>()
-  const { kind = "", name = "" } = useParams()
+  const { kind = "", "*": name = "" } = useParams()
   const { data, error, loading } = useLoad(() => api.packageGroup(kind, name), [kind, name])
   const root = me.root_url.replace(/\/$/, "")
   const org = me.org

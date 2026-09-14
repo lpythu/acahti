@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react"
-import { useNavigate } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
@@ -19,6 +19,7 @@ import { useSession } from "@/lib/session"
 export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
   const t = useT()
   const nav = useNavigate()
+  const [params] = useSearchParams()
   const { refresh } = useSession()
   const [error, setError] = useState("")
   const [pending, setPending] = useState(false)
@@ -31,7 +32,8 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
     try {
       await api.login(String(fd.get("username") || ""), String(fd.get("password") || ""))
       await refresh()
-      nav("/", { replace: true })
+      const next = params.get("next") || "/board"
+      nav(next.startsWith("/") ? next : "/board", { replace: true })
     } catch {
       setError(t("loginError"))
     } finally {
@@ -75,6 +77,11 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                 <Button type="submit" disabled={pending}>
                   {t("login")}
                 </Button>
+                <FieldDescription>
+                  <Link to={params.get("next") ? `/join?next=${encodeURIComponent(params.get("next") || "")}` : "/join"}>
+                    {t("join")}
+                  </Link>
+                </FieldDescription>
               </Field>
             </FieldGroup>
           </form>

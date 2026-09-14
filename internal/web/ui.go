@@ -166,7 +166,7 @@ func (p *Pages) Packages(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, g)
 		return
 	}
-	pkgs, err := p.Cat.ListPackages(r.URL.Query().Get("kind"))
+	pkgs, err := p.Cat.ListPackageRows(r.URL.Query().Get("kind"))
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
@@ -174,28 +174,3 @@ func (p *Pages) Packages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"packages": pkgs})
 }
 
-func (p *Pages) Tokens(w http.ResponseWriter, r *http.Request) {
-	user, _, ok := p.requireJSON(w, r)
-	if !ok {
-		return
-	}
-	if r.Method == http.MethodDelete {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil || id <= 0 {
-			writeErr(w, http.StatusBadRequest, "invalid token id")
-			return
-		}
-		if err := p.FJ.DeleteToken(user, id); err != nil {
-			writeErr(w, http.StatusUnprocessableEntity, err.Error())
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
-		return
-	}
-	toks, err := p.FJ.ListTokens(user)
-	if err != nil {
-		writeErr(w, http.StatusBadGateway, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"tokens": toks})
-}

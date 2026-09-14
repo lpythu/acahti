@@ -10,6 +10,7 @@ import (
 
 func TestToolSet(t *testing.T) {
 	need := []string{
+		"whoami",
 		"repo_list", "repo_get", "repo_create",
 		"branch_list", "ref_delete",
 		"pr_create", "pr_list", "pr_get", "pr_comment", "pr_merge",
@@ -45,5 +46,18 @@ func TestStructuredError(t *testing.T) {
 func TestCodeForStatus(t *testing.T) {
 	if httperr.CodeForStatus(404) != "not_found" {
 		t.Fatal(httperr.CodeForStatus(404))
+	}
+}
+
+func TestInitializeInstructions(t *testing.T) {
+	s := &Server{Cfg: ConfigView{RootURL: "https://acahti.saidc.ai", Domain: "acahti.saidc.ai", Org: "acme"}}
+	res, err := s.dispatch("", rpcReq{Method: "initialize"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, _ := res.(map[string]any)
+	inst, _ := m["instructions"].(string)
+	if !strings.Contains(inst, "apply_when_remote_host") || !strings.Contains(inst, "acahti.saidc.ai") {
+		t.Fatalf("instructions=%s", inst)
 	}
 }

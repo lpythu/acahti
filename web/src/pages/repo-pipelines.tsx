@@ -22,7 +22,7 @@ export function RepoPipelinesPage() {
     setActionErr("")
     try {
       const p = await api.trigger(owner, name, data?.ref || "dev")
-      nav(`/repos/${owner}/${name}/pipelines/${p.number}`)
+      nav(`/pipelines/${owner}/${name}/${p.number}`)
     } catch (err) {
       setActionErr(err instanceof Error ? err.message : t("loadError"))
       setBusy(false)
@@ -56,7 +56,7 @@ export function RepoPipelinesPage() {
             {pipes.map((p) => (
               <TableRow key={p.number}>
                 <TableCell>
-                  <Link className="hover:underline" to={`/repos/${owner}/${name}/pipelines/${p.number}`}>
+                  <Link className="hover:underline" to={`/pipelines/${owner}/${name}/${p.number}`}>
                     {p.number}
                   </Link>
                 </TableCell>

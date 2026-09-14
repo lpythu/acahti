@@ -36,7 +36,8 @@ fi
 echo "==> ${ACAHTI_DATA}"
 sudo mkdir -p "${ACAHTI_DATA}"/{forgejo,woodpecker,postgres,gateway}
 sudo chown "${FORGEJO_UID}:${FORGEJO_GID}" "${ACAHTI_DATA}"
-sudo chown -R "${FORGEJO_UID}:${FORGEJO_GID}" "${ACAHTI_DATA}/forgejo" "${ACAHTI_DATA}/woodpecker" "${ACAHTI_DATA}/gateway"
+sudo chown -R "${FORGEJO_UID}:${FORGEJO_GID}" "${ACAHTI_DATA}/forgejo" "${ACAHTI_DATA}/woodpecker"
+sudo chown -R 65532:65532 "${ACAHTI_DATA}/gateway"
 # Official postgres 16-alpine runs as uid 70.
 sudo chown -R 70:70 "${ACAHTI_DATA}/postgres"
 sudo chmod 755 "${ACAHTI_DATA}"

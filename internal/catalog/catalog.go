@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
 	"acahti/internal/config"
@@ -55,6 +56,16 @@ type PackageGroup struct {
 	Name     string            `json:"name"`
 	Latest   string            `json:"latest"`
 	Versions []forgejo.Package `json:"versions"`
+}
+
+type PackageRow struct {
+	Type      string `json:"type"`
+	Name      string `json:"name"`
+	Latest    string `json:"latest"`
+	UpdatedAt string `json:"updated_at"`
+	Size      int64  `json:"size"`
+	Versions  int    `json:"versions"`
+	Downloads int64  `json:"downloads"`
 }
 
 type PRDetail struct {
@@ -234,6 +245,7 @@ func (c *Catalog) PRDetail(owner, name string, number int) (PRDetail, error) {
 		if err == nil {
 			out.Green = ok
 			if st != nil {
+				c.rewriteChecks(st)
 				out.Checks = st
 			}
 		}
@@ -259,7 +271,50 @@ func (c *Catalog) MergePR(owner, name string, number int) (map[string]any, error
 	if err := c.FJ.MergePR(owner, name, number); err != nil {
 		return nil, err
 	}
+	c.rewriteChecks(st)
 	return map[string]any{"merged": true, "statuses": st}, nil
+}
+
+func (c *Catalog) rewriteChecks(st []forgejo.Status) {
+	for i := range st {
+		st[i].TargetURL = c.acahtiCheckURL(st[i].TargetURL)
+	}
+}
+
+func (c *Catalog) acahtiCheckURL(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	p := strings.TrimRight(u.Path, "/")
+	root := strings.TrimRight(c.Cfg.RootURL, "/")
+	if p == "/ci" {
+		return root + "/pipelines"
+	}
+	rest, ok := strings.CutPrefix(p, "/ci/")
+	if !ok {
+		return raw
+	}
+	rest = strings.TrimPrefix(rest, "repos/")
+	rest = strings.ReplaceAll(rest, "/pipeline/", "/")
+	parts := strings.Split(rest, "/")
+	if len(parts) >= 3 && parts[0] != "" && parts[1] != "" && parts[2] != "" {
+		return root + "/pipelines/" + parts[0] + "/" + parts[1] + "/" + parts[2]
+	}
+	if len(parts) >= 2 && parts[0] != "" && parts[1] != "" {
+		return root + "/pipelines?repo=" + parts[0] + "/" + parts[1]
+	}
+	return root + "/pipelines"
+}
+
+func pipelineStamp(p woodpecker.Pipeline) int64 {
+	if p.Started > 0 {
+		return p.Started
+	}
+	return p.Created
 }
 
 func (c *Catalog) ListPipelines(repo string) ([]woodpecker.Pipeline, error) {
@@ -276,10 +331,24 @@ func (c *Catalog) ListPipelines(repo string) ([]woodpecker.Pipeline, error) {
 		}
 		return ps, nil
 	}
-	ps, err := c.WP.ListRecentPipelines(20)
+	ps, err := c.WP.ListRecentPipelines(1)
 	if err != nil {
 		return nil, err
 	}
+	for i, p := range ps {
+		if len(p.Workflows) > 0 || p.Number <= 0 || p.Repo == "" {
+			continue
+		}
+		detail, err := c.WP.GetPipeline(p.Repo, p.Number)
+		if err != nil {
+			continue
+		}
+		detail.Repo = p.Repo
+		ps[i] = detail
+	}
+	sort.Slice(ps, func(i, j int) bool {
+		return pipelineStamp(ps[i]) > pipelineStamp(ps[j])
+	})
 	if ps == nil {
 		return []woodpecker.Pipeline{}, nil
 	}
@@ -318,6 +387,44 @@ func (c *Catalog) ListPackages(kind string) ([]forgejo.Package, error) {
 		return []forgejo.Package{}, nil
 	}
 	return pkgs, nil
+}
+
+func (c *Catalog) ListPackageRows(kind string) ([]PackageRow, error) {
+	pkgs, err := c.ListPackages(kind)
+	if err != nil {
+		return nil, err
+	}
+	type key struct{ typ, name string }
+	groups := map[key][]forgejo.Package{}
+	for _, p := range pkgs {
+		k := key{p.Type, p.Name}
+		groups[k] = append(groups[k], p)
+	}
+	out := make([]PackageRow, 0, len(groups))
+	for k, vers := range groups {
+		row := PackageRow{Type: k.typ, Name: k.name, Versions: len(vers)}
+		for _, v := range vers {
+			if row.UpdatedAt == "" || v.CreatedAt > row.UpdatedAt {
+				row.UpdatedAt = v.CreatedAt
+				row.Latest = v.Version
+			}
+			files, err := c.FJ.ListPackageFiles(c.Cfg.Org, v.Type, v.Name, v.Version)
+			if err != nil {
+				continue
+			}
+			for _, f := range files {
+				row.Size += f.Size
+			}
+		}
+		out = append(out, row)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Type != out[j].Type {
+			return out[i].Type < out[j].Type
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out, nil
 }
 
 func (c *Catalog) Inbox() Inbox {

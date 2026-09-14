@@ -15,6 +15,9 @@ import (
 func main() {
 	cfg := config.Load()
 	fj := forgejo.New(cfg.ForgejoURL, cfg.AdminToken)
+	if err := fj.EnsureNoreply(cfg.RootURL, cfg.Domain); err != nil {
+		log.Printf("noreply migrate: %v", err)
+	}
 	wp := woodpecker.New(cfg.WoodpeckerURL, cfg.WoodpeckerTok)
 	hub := events.New()
 	h := server.New(cfg, fj, wp, hub)

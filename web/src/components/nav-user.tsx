@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom"
-import { LayoutDashboardIcon, LogOutIcon, ShieldIcon } from "lucide-react"
+import { KeyRoundIcon, LogOutIcon, ShieldIcon } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -16,11 +16,9 @@ import { useSession } from "@/lib/session"
 export function NavUser({
   user,
   admin,
-  area,
 }: {
   user: { name: string; email: string }
   admin: boolean
-  area: "console" | "admin"
 }) {
   const t = useT()
   const nav = useNavigate()
@@ -51,18 +49,17 @@ export function NavUser({
           </div>
         </div>
         <DropdownMenuSeparator />
-        {admin && area === "console" ? (
-          <DropdownMenuItem render={<Link to="/admin" />}>
+        <DropdownMenuItem render={<Link to="/account/keys" />}>
+          <KeyRoundIcon />
+          {t("keys")}
+        </DropdownMenuItem>
+        {admin ? (
+          <DropdownMenuItem render={<Link to="/admin" target="_blank" rel="noopener noreferrer" />}>
             <ShieldIcon />
             {t("admin")}
           </DropdownMenuItem>
         ) : null}
-        {area === "admin" ? (
-          <DropdownMenuItem render={<Link to="/" />}>
-            <LayoutDashboardIcon />
-            {t("backConsole")}
-          </DropdownMenuItem>
-        ) : null}
+        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => void logout()}>
           <LogOutIcon />
           {t("logout")}

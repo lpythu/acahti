@@ -31,6 +31,9 @@ services:
       FORGEJO_VERSION: ${FORGEJO_VERSION:-15.0.8}
       WOODPECKER_VERSION: ${WOODPECKER_VERSION:-3.18.1}
       POSTGRES_VERSION: ${POSTGRES_VERSION:-16-alpine}
+      ACAHTI_DATA: /var/lib/acahti
+    volumes:
+      - ${ACAHTI_DATA:-/var/lib/acahti}/gateway:/var/lib/acahti
     mem_limit: 256m
     ports:
       - "${GATEWAY_BIND:-127.0.0.1:8080}:8080"
@@ -66,6 +69,10 @@ services:
       FORGEJO__session__COOKIE_SECURE: "false"
       FORGEJO__service__DISABLE_REGISTRATION: "true"
       FORGEJO__service__REQUIRE_SIGNIN_VIEW: "false"
+      FORGEJO__service__ENABLE_REVERSE_PROXY_AUTHENTICATION: "true"
+      FORGEJO__security__REVERSE_PROXY_AUTHENTICATION_USER: X-WEBAUTH-USER
+      FORGEJO__security__REVERSE_PROXY_LIMIT: "1"
+      FORGEJO__security__REVERSE_PROXY_TRUSTED_PROXIES: "*"
       FORGEJO__webhook__ALLOWED_HOST_LIST: external,loopback,woodpecker,gateway
       FORGEJO__packages__ENABLED: "true"
       FORGEJO__actions__ENABLED: "false"

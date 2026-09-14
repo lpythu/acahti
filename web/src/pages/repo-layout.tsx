@@ -1,11 +1,18 @@
-import { NavLink, Outlet, useOutletContext, useParams } from "react-router-dom"
-import { FileIcon, GitBranchIcon, GitPullRequestIcon, HistoryIcon, WorkflowIcon } from "lucide-react"
-import { cn } from "cn"
+import { Link, Outlet, useLocation, useOutletContext, useParams, useSearchParams } from "react-router-dom"
 
 import { CloneMenu } from "@/components/clone-menu"
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb"
 import { useLoad } from "@/hooks/use-load"
 import { useT } from "@/i18n/i18n"
-import { api, type RepoOverview } from "@/lib/api"
+import type { MessageKey } from "@/i18n/messages"
+import { api, codeGroupOf, type RepoOverview } from "@/lib/api"
 
 export type RepoCtx = {
   owner: string
@@ -20,48 +27,110 @@ export function useRepo() {
   return useOutletContext<RepoCtx>()
 }
 
-export function RepoLayout() {
+const SECTION_KEY: Record<string, MessageKey> = {
+  commits: "commits",
+  branches: "branches",
+  pulls: "tabPulls",
+  pipelines: "tabPipes",
+}
+
+function RepoBreadcrumb({ owner, name }: { owner: string; name: string }) {
   const t = useT()
-  const { owner = "", name = "" } = useParams()
-  const { data, error, loading, reload } = useLoad(() => api.repo(owner, name), [owner, name])
+  const { pathname } = useLocation()
+  const [sp] = useSearchParams()
   const base = `/repos/${owner}/${name}`
-  const nav = [
-    { to: base, end: true, label: t("files"), icon: FileIcon },
-    { to: `${base}/commits`, label: t("commits"), icon: HistoryIcon },
-    { to: `${base}/branches`, label: t("branches"), icon: GitBranchIcon },
-    { to: `${base}/pulls`, label: t("tabPulls"), icon: GitPullRequestIcon },
-    { to: `${base}/pipelines`, label: t("tabPipes"), icon: WorkflowIcon },
-  ]
+  const extra = pathname.slice(base.length).replace(/^\//, "")
+  const [section, ...rest] = extra ? extra.split("/") : []
+  const filePath = section ? "" : sp.get("path") || ""
+  const fileParts = filePath ? filePath.split("/").filter(Boolean) : []
+  const sectionKey = section ? SECTION_KEY[section] : undefined
+  const onRepoRoot = !section && fileParts.length === 0
 
   return (
-    <div className="flex min-h-0 flex-1">
-      <nav className="flex w-44 shrink-0 flex-col gap-0.5 border-r p-2">
-        {nav.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted",
-                isActive && "bg-muted font-medium",
-              )
-            }
-          >
-            <item.icon className="size-4 shrink-0" />
-            {item.label}
-          </NavLink>
-        ))}
-      </nav>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center justify-between gap-3 border-b px-4 py-3 lg:px-6">
-          <div className="min-w-0">
-            <h2 className="truncate text-lg font-medium">{data?.repo.full_name || `${owner}/${name}`}</h2>
-            <p className="text-sm text-muted-foreground">{t("protectNote")}</p>
-          </div>
-          {data ? <CloneMenu https={data.clone_https} ssh={data.clone_ssh} /> : null}
+    <Breadcrumb>
+      <BreadcrumbList>
+        <BreadcrumbItem>
+          <BreadcrumbLink render={<Link to="/repos" />}>{t("repos")}</BreadcrumbLink>
+        </BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem>
+          <BreadcrumbLink render={<Link to={`/repos?group=${encodeURIComponent(codeGroupOf(name))}`} />}>
+            {codeGroupOf(name)}
+          </BreadcrumbLink>
+        </BreadcrumbItem>
+        <BreadcrumbSeparator />
+        <BreadcrumbItem>
+          {onRepoRoot ? (
+            <BreadcrumbPage>{name}</BreadcrumbPage>
+          ) : (
+            <BreadcrumbLink render={<Link to={base} />}>{name}</BreadcrumbLink>
+          )}
+        </BreadcrumbItem>
+        {sectionKey ? (
+          <>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              {rest.length ? (
+                <BreadcrumbLink render={<Link to={`${base}/${section}`} />}>{t(sectionKey)}</BreadcrumbLink>
+              ) : (
+                <BreadcrumbPage>{t(sectionKey)}</BreadcrumbPage>
+              )}
+            </BreadcrumbItem>
+          </>
+        ) : null}
+        {rest.map((part, i) => {
+          const last = i === rest.length - 1
+          const to = `${base}/${section}/${rest.slice(0, i + 1).join("/")}`
+          return (
+            <span key={to} className="contents">
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                {last ? (
+                  <BreadcrumbPage>{part.startsWith("#") ? part : `#${part}`}</BreadcrumbPage>
+                ) : (
+                  <BreadcrumbLink render={<Link to={to} />}>{part}</BreadcrumbLink>
+                )}
+              </BreadcrumbItem>
+            </span>
+          )
+        })}
+        {fileParts.map((part, i) => {
+          const last = i === fileParts.length - 1
+          const path = fileParts.slice(0, i + 1).join("/")
+          const q = new URLSearchParams(sp)
+          q.set("path", path)
+          return (
+            <span key={path} className="contents">
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                {last ? (
+                  <BreadcrumbPage>{part}</BreadcrumbPage>
+                ) : (
+                  <BreadcrumbLink render={<Link to={`${base}?${q.toString()}`} />}>{part}</BreadcrumbLink>
+                )}
+              </BreadcrumbItem>
+            </span>
+          )
+        })}
+      </BreadcrumbList>
+    </Breadcrumb>
+  )
+}
+
+export function RepoLayout() {
+  const { owner = "", name = "" } = useParams()
+  const { data, error, loading, reload } = useLoad(() => api.repo(owner, name), [owner, name])
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center justify-between gap-3 border-b px-4 py-3 lg:px-6">
+        <div className="min-w-0">
+          <RepoBreadcrumb owner={owner} name={name} />
         </div>
-        {error && !data ? <p className="px-4 py-3 text-sm text-destructive">{error}</p> : null}
+        {data ? <CloneMenu https={data.clone_https} ssh={data.clone_ssh} /> : null}
+      </div>
+      {error && !data ? <p className="px-4 py-3 text-sm text-destructive">{error}</p> : null}
+      <div className="flex min-h-0 flex-1 flex-col">
         <Outlet context={{ owner, name, data, error, loading, reload } satisfies RepoCtx} />
       </div>
     </div>

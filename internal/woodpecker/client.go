@@ -47,8 +47,12 @@ type Pipeline struct {
 	Branch    string     `json:"branch"`
 	Ref       string     `json:"ref"`
 	Title     string     `json:"title"`
+	Message   string     `json:"message"`
 	Author    string     `json:"author"`
+	Avatar    string     `json:"avatar"`
+	Commit    string     `json:"commit"`
 	Error     string     `json:"error"`
+	Created   int64      `json:"created"`
 	Started   int64      `json:"started"`
 	Finished  int64      `json:"finished"`
 	Workflows []Workflow `json:"workflows"`
