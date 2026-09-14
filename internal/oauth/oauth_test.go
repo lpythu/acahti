@@ -14,7 +14,7 @@ import (
 
 func TestPKCERoundTrip(t *testing.T) {
 	a := auth.New([]byte("secret"), "acahti")
-	s, err := Open(t.TempDir(), "http://island.example", a)
+	s, err := Open(t.TempDir(), "http://acahti.example", a)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestPKCERoundTrip(t *testing.T) {
 	}
 
 	rr = httptest.NewRecorder()
-	Challenge(rr, "http://island.example/.well-known/oauth-protected-resource")
+	Challenge(rr, "http://acahti.example/.well-known/oauth-protected-resource")
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("challenge %d", rr.Code)
 	}

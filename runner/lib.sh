@@ -1,4 +1,4 @@
-# Shared helpers for acahti/cicd_acahti. Source only.
+# Shared helpers for acahti/runner. Source only.
 set -euo pipefail
 
 REGISTRY="${REGISTRY:-harbor.saidc}"
@@ -67,7 +67,7 @@ acr_login() {
 
 find_saidc_ws() {
   local cand
-  if [[ -n "${SAIDC_WS:-}" && -f "${SAIDC_WS}/acahti/cicd_acahti/lib.sh" ]]; then
+  if [[ -n "${SAIDC_WS:-}" && -f "${SAIDC_WS}/acahti/runner/lib.sh" ]]; then
     return 0
   fi
   for cand in \
@@ -76,12 +76,12 @@ find_saidc_ws() {
     /home/saidc/saidc-ws \
     "${HOME}/saidc-ws" \
     "${HOME}/Projects/saidc-ws"; do
-    if [[ -f "${cand}/acahti/cicd_acahti/lib.sh" ]]; then
+    if [[ -f "${cand}/acahti/runner/lib.sh" ]]; then
       SAIDC_WS="$cand"
       return 0
     fi
   done
-  echo "error: set SAIDC_WS to the workspace that contains acahti/cicd_acahti" >&2
+  echo "error: set SAIDC_WS to the workspace that contains acahti/runner" >&2
   exit 1
 }
 
@@ -128,4 +128,28 @@ deploy_repo() {
   else
     echo "${ACR_VPC_REGISTRY}/${IMAGE}"
   fi
+}
+
+acahti_packages_url() {
+  echo "${ACAHTI_PACKAGES_URL:-${ACAHTI_ROOT_URL:-https://acahti.saidc.ai}/api/packages/${ACAHTI_ORG:-saidc}}"
+}
+
+acahti_publish_token() {
+  if [[ -n "${ACAHTI_PUBLISH_TOKEN:-}" ]]; then
+    printf '%s' "$ACAHTI_PUBLISH_TOKEN"
+    return 0
+  fi
+  local f
+  for f in /root/.harbor/acahti.env "${HOME}/.harbor/acahti.env"; do
+    if [[ -f "$f" ]]; then
+      # shellcheck disable=SC1090
+      set -a && source "$f" && set +a
+      if [[ -n "${ACAHTI_PUBLISH_TOKEN:-}" ]]; then
+        printf '%s' "$ACAHTI_PUBLISH_TOKEN"
+        return 0
+      fi
+    fi
+  done
+  echo "error: set ACAHTI_PUBLISH_TOKEN (or /root/.harbor/acahti.env)" >&2
+  exit 1
 }

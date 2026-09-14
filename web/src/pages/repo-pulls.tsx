@@ -1,24 +1,20 @@
 import { Link } from "react-router-dom"
 
-import { PageFrame } from "@/components/page-frame"
+import { PagedList } from "@/components/paged-list"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
+import { api } from "@/lib/api"
 import { useRepo } from "@/pages/repo-layout"
 
 export function RepoPullsPage() {
   const t = useT()
-  const { owner, name, data, error, loading } = useRepo()
-  const pulls = data?.pulls || []
+  const { owner, name } = useRepo()
+  const list = usePage((q) => api.pulls(owner, name, q), [owner, name])
 
   return (
-    <PageFrame
-      loading={loading && !data}
-      error={error}
-      empty={!!data && pulls.length === 0}
-      emptyText={t("noPulls")}
-      skeleton="table"
-    >
-      {pulls.length ? (
+    <PagedList list={list} emptyText={t("noPulls")} skeleton="table">
+      {(items) => (
         <Table>
           <TableHeader>
             <TableRow>
@@ -27,7 +23,7 @@ export function RepoPullsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {pulls.map((pr) => (
+            {items.map((pr) => (
               <TableRow key={pr.number}>
                 <TableCell>#{pr.number}</TableCell>
                 <TableCell>
@@ -39,7 +35,7 @@ export function RepoPullsPage() {
             ))}
           </TableBody>
         </Table>
-      ) : null}
-    </PageFrame>
+      )}
+    </PagedList>
   )
 }

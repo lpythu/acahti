@@ -1,10 +1,11 @@
 import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 
-import { PageFrame } from "@/components/page-frame"
+import { PagedList } from "@/components/paged-list"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api } from "@/lib/api"
 import { useRepo } from "@/pages/repo-layout"
@@ -12,30 +13,31 @@ import { useRepo } from "@/pages/repo-layout"
 export function RepoPipelinesPage() {
   const t = useT()
   const nav = useNavigate()
-  const { owner, name, data, error, loading, reload } = useRepo()
+  const { owner, name, data } = useRepo()
+  const list = usePage(
+    (q) => api.pipelines({ ...q, repo: `${owner}/${name}` }),
+    [owner, name],
+  )
   const [busy, setBusy] = useState(false)
   const [actionErr, setActionErr] = useState("")
-  const pipes = data?.pipes || []
 
   async function runPipe() {
     setBusy(true)
     setActionErr("")
     try {
-      const p = await api.trigger(owner, name, data?.ref || "dev")
+      const p = await api.trigger(owner, name, data?.repo.default_branch || "dev")
       nav(`/pipelines/${owner}/${name}/${p.number}`)
     } catch (err) {
       setActionErr(err instanceof Error ? err.message : t("loadError"))
       setBusy(false)
-      await reload()
+      await list.reload()
     }
   }
 
   return (
-    <PageFrame
-      loading={loading && !data}
-      error={error || actionErr}
-      empty={!!data && pipes.length === 0}
-      emptyText={t("noRuns")}
+    <PagedList
+      list={{ ...list, error: list.error || actionErr }}
+      emptyText={t("noPipelines")}
       skeleton="table"
       header={
         <Button className="w-fit" disabled={busy || !data} onClick={() => void runPipe()}>
@@ -43,7 +45,7 @@ export function RepoPipelinesPage() {
         </Button>
       }
     >
-      {pipes.length ? (
+      {(items) => (
         <Table>
           <TableHeader>
             <TableRow>
@@ -53,7 +55,7 @@ export function RepoPipelinesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {pipes.map((p) => (
+            {items.map((p) => (
               <TableRow key={p.number}>
                 <TableCell>
                   <Link className="hover:underline" to={`/pipelines/${owner}/${name}/${p.number}`}>
@@ -68,7 +70,7 @@ export function RepoPipelinesPage() {
             ))}
           </TableBody>
         </Table>
-      ) : null}
-    </PageFrame>
+      )}
+    </PagedList>
   )
 }

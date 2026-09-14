@@ -1,20 +1,19 @@
 import { type FormEvent, useState } from "react"
 
-import { PageFrame } from "@/components/page-frame"
+import { PagedList } from "@/components/paged-list"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useLoad } from "@/hooks/use-load"
+import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api } from "@/lib/api"
 
 export function KeysPage() {
   const t = useT()
-  const { data, error, loading, reload } = useLoad(async () => (await api.keys()).keys || [], [])
+  const list = usePage((q) => api.keys(q), [])
   const [formErr, setFormErr] = useState("")
-  const keys = data || []
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -23,16 +22,15 @@ export function KeysPage() {
     try {
       await api.addKey(String(fd.get("title") || ""), String(fd.get("key") || ""))
       e.currentTarget.reset()
-      await reload()
+      await list.reload()
     } catch (err) {
       setFormErr(err instanceof Error ? err.message : t("loadError"))
     }
   }
 
   return (
-    <PageFrame
-      loading={loading && !data}
-      error={error || formErr}
+    <PagedList
+      list={{ ...list, error: list.error || formErr }}
       header={
         <>
           <p className="text-sm text-muted-foreground">{t("keysDesc")}</p>
@@ -54,7 +52,7 @@ export function KeysPage() {
       className="gap-6"
       skeleton="table"
     >
-      {keys.length ? (
+      {(items) => (
         <Table>
           <TableHeader>
             <TableRow>
@@ -63,7 +61,7 @@ export function KeysPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {keys.map((k) => (
+            {items.map((k) => (
               <TableRow key={k.id}>
                 <TableCell>{k.title}</TableCell>
                 <TableCell className="max-w-md truncate font-mono text-xs">{k.key}</TableCell>
@@ -71,7 +69,7 @@ export function KeysPage() {
             ))}
           </TableBody>
         </Table>
-      ) : null}
-    </PageFrame>
+      )}
+    </PagedList>
   )
 }

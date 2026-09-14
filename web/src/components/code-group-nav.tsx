@@ -3,6 +3,7 @@ import { Link, useLocation, useSearchParams } from "react-router-dom"
 import { BookMarkedIcon, ChevronRightIcon, FolderIcon, WorkflowIcon } from "lucide-react"
 import { cn } from "cn"
 
+import { MoreButton } from "@/components/paged-list"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   SidebarGroup,
@@ -15,9 +16,9 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
-import { useLoad } from "@/hooks/use-load"
+import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
-import { api, codeGroupOf, groupRepos, splitRepo, type Repo } from "@/lib/api"
+import { api, splitRepo } from "@/lib/api"
 import { parsePipelinePath, repoBase } from "@/lib/nav"
 
 export type CodeGroupSection = "repos" | "pipelines"
@@ -37,7 +38,6 @@ function itemHref(section: CodeGroupSection, owner: string, name: string) {
 function GroupNode({
   section,
   group,
-  repos,
   pathname,
   filterGroup,
   filterRepo,
@@ -46,7 +46,6 @@ function GroupNode({
 }: {
   section: CodeGroupSection
   group: string
-  repos: Repo[]
   pathname: string
   filterGroup: string
   filterRepo: string
@@ -54,15 +53,19 @@ function GroupNode({
   itemIcon: ReactNode
 }) {
   const pipe = parsePipelinePath(pathname)
-  const inGroup = repos.some((r) => {
+  const groupActive = !filterRepo && !pipe && filterGroup === group && !repoBase(pathname)
+  const [open, setOpen] = useState(defaultOpen || groupActive)
+  const repos = usePage((q) => api.repos(q, group), [group], {
+    url: false,
+    enabled: open,
+  })
+  const inGroup = repos.items.some((r) => {
     const { owner, name } = splitRepo(r.full_name || r.name)
     if (filterRepo === `${owner}/${name}`) return true
     if (pipe?.owner === owner && pipe.name === name) return true
     const base = `/repos/${owner}/${name}`
     return pathname === base || pathname.startsWith(`${base}/`)
   })
-  const groupActive = !filterRepo && !pipe && filterGroup === group && !repoBase(pathname)
-  const [open, setOpen] = useState(defaultOpen || inGroup || groupActive)
 
   useEffect(() => {
     if (inGroup || groupActive) setOpen(true)
@@ -92,7 +95,7 @@ function GroupNode({
         </div>
         <CollapsibleContent>
           <SidebarMenuSub>
-            {repos.map((r) => {
+            {repos.items.map((r) => {
               const { owner, name } = splitRepo(r.full_name || r.name)
               const url = itemHref(section, owner, name)
               const active =
@@ -109,6 +112,7 @@ function GroupNode({
                 </SidebarMenuSubItem>
               )
             })}
+            <MoreButton page={repos.page} hasMore={repos.hasMore} onPage={repos.setPage} />
           </SidebarMenuSub>
         </CollapsibleContent>
       </Collapsible>
@@ -122,20 +126,10 @@ export function CodeGroupNav({ section }: { section: CodeGroupSection }) {
   const [sp] = useSearchParams()
   const filterGroup = sp.get("group") || ""
   const filterRepo = sp.get("repo") || ""
-  const { data } = useLoad(async () => (await api.repos()).repos || [], [])
-  const groups = groupRepos(data || [])
-  const pipe = parsePipelinePath(pathname)
-  const current = repoBase(pathname)
-  const currentGroup = pipe
-    ? codeGroupOf(pipe.name)
-    : current
-      ? codeGroupOf(current.split("/")[3] || "")
-      : filterRepo
-        ? codeGroupOf(splitRepo(filterRepo).name)
-        : ""
-  const openAll = groups.length <= 1 && !filterGroup && !currentGroup
+  const groups = usePage((q) => api.repoGroups(q), [], { url: false })
+  const openAll = groups.items.length <= 1 && !filterGroup
 
-  if (!groups.length) return null
+  if (!groups.items.length) return null
 
   const itemIcon = section === "pipelines" ? <WorkflowIcon /> : <BookMarkedIcon />
 
@@ -144,19 +138,19 @@ export function CodeGroupNav({ section }: { section: CodeGroupSection }) {
       <SidebarGroupLabel>{t("codeGroup")}</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
-          {groups.map((g) => (
+          {groups.items.map((g) => (
             <GroupNode
               key={g.group}
               section={section}
               group={g.group}
-              repos={g.repos}
               pathname={pathname}
               filterGroup={filterGroup}
               filterRepo={filterRepo}
-              defaultOpen={openAll || g.group === currentGroup}
+              defaultOpen={openAll || g.group === filterGroup}
               itemIcon={itemIcon}
             />
           ))}
+          <MoreButton page={groups.page} hasMore={groups.hasMore} onPage={groups.setPage} />
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>

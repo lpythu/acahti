@@ -14,6 +14,7 @@ import { PipelinePage } from "@/pages/pipeline"
 import { PipelinesPage } from "@/pages/pipelines"
 import { PullPage } from "@/pages/pull"
 import { RepoBranchesPage } from "@/pages/repo-branches"
+import { RepoCommitPage } from "@/pages/repo-commit"
 import { RepoCommitsPage } from "@/pages/repo-commits"
 import { RepoFilesPage } from "@/pages/repo-files"
 import { RepoLayout } from "@/pages/repo-layout"
@@ -50,6 +51,7 @@ export default function App() {
                 <Route path="/repos/:owner/:name" element={<RepoLayout />}>
                   <Route index element={<RepoFilesPage />} />
                   <Route path="commits" element={<RepoCommitsPage />} />
+                  <Route path="commits/:sha" element={<RepoCommitPage />} />
                   <Route path="branches" element={<RepoBranchesPage />} />
                   <Route path="pulls" element={<RepoPullsPage />} />
                   <Route path="pulls/:number" element={<PullPage />} />

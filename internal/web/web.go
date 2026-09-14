@@ -14,6 +14,7 @@ import (
 	"acahti/internal/identity"
 	"acahti/internal/invite"
 	"acahti/internal/oauth"
+	"acahti/internal/page"
 	"acahti/internal/woodpecker"
 	"acahti/skills"
 )
@@ -105,10 +106,34 @@ func (p *Pages) Logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Pages) Board(w http.ResponseWriter, r *http.Request) {
-	if _, _, ok := p.requireJSON(w, r); !ok {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, p.Cat.Inbox())
+	q := page.Parse(r)
+	switch r.URL.Query().Get("section") {
+	case "blocked":
+		out, err := p.Cat.BoardPipes(user, "blocked", q)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	case "failed":
+		out, err := p.Cat.BoardPipes(user, "failed", q)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	default:
+		out, err := p.Cat.BoardPRs(user, q)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
 }
 
 func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
@@ -151,11 +176,12 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"user": u})
 		return
 	}
-	users, _ := p.FJ.ListUsers()
-	if users == nil {
-		users = []forgejo.User{}
+	out, err := p.FJ.ListUsers(page.Parse(r))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"users": users})
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (p *Pages) Keys(w http.ResponseWriter, r *http.Request) {
@@ -179,11 +205,8 @@ func (p *Pages) Keys(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 		return
 	}
-	keys, _ := p.FJ.ListKeys(user)
-	if keys == nil {
-		keys = []forgejo.PublicKey{}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"keys": keys})
+	out, _ := p.FJ.ListKeys(user, page.Parse(r))
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (p *Pages) Skill(w http.ResponseWriter, _ *http.Request) {
@@ -305,7 +328,8 @@ func (p *Pages) Password(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Pages) Approve(w http.ResponseWriter, r *http.Request) {
-	if _, _, ok := p.requireJSON(w, r); !ok {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
 		return
 	}
 	var body struct {
@@ -314,6 +338,11 @@ func (p *Pages) Approve(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	owner, name, _ := strings.Cut(body.Repo, "/")
+	if _, err := p.Cat.RepoHeader(user, owner, name, ""); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
 	if err := p.WP.Approve(body.Repo, body.Number); err != nil {
@@ -332,21 +361,30 @@ func (p *Pages) Stack(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin only"})
 		return
 	}
-	agents := []woodpecker.Agent{}
-	if p.WP.Ready() {
-		if a, err := p.WP.Agents(); err == nil && a != nil {
-			agents = a
-		}
-	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"version":           p.Cfg.Version,
 		"forgejo":           p.Cfg.ForgejoVersion,
-		"woodpecker":        p.Cfg.WoodpeckerVersion,
-		"postgres":          p.Cfg.PostgresVersion,
-		"agents":            agents,
-		"upgrade_hint":      "Ask a coding agent to follow skills/acahti-install: replace the tree, bash scripts/up.sh, then ROLE=both agent.sh on buildof.",
-		"pinned_woodpecker": p.Cfg.WoodpeckerVersion,
+		"ci":           p.Cfg.WoodpeckerVersion,
+		"postgres":     p.Cfg.PostgresVersion,
+		"upgrade_hint": "Ask a coding agent to follow skills/acahti-install: replace the tree, bash scripts/up.sh, then ROLE=both agent.sh on buildof.",
 	})
+}
+
+func (p *Pages) Agents(w http.ResponseWriter, r *http.Request) {
+	_, admin, ok := p.requireJSON(w, r)
+	if !ok {
+		return
+	}
+	if !admin {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin only"})
+		return
+	}
+	out, err := p.Cat.ListAgents(page.Parse(r))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (p *Pages) Files() fs.FS {

@@ -1,19 +1,19 @@
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { PlayIcon } from "lucide-react"
 
-import { PageFrame } from "@/components/page-frame"
+import { PagedList } from "@/components/paged-list"
 import { PipelineStages } from "@/components/pipeline-stages"
 import { RunStatusIcon } from "@/components/run-status-icon"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useLoad } from "@/hooks/use-load"
+import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
-import { api, codeGroupOf, splitRepo, type Pipeline } from "@/lib/api"
+import { api, splitRepo, type Pipeline } from "@/lib/api"
 import { formatUnix } from "@/lib/format"
 import { pipelineHref } from "@/lib/nav"
-import { latestByRepo, stagesOf, triggerKey, triggerVars, withWorkflows } from "@/lib/pipeline"
+import { jobDotsOf, triggerKey, triggerVars, withJobs } from "@/lib/pipeline"
 
 function RunStatus({ pipe }: { pipe: Pipeline }) {
   return (
@@ -30,18 +30,12 @@ export function PipelinesPage() {
   const [sp] = useSearchParams()
   const group = sp.get("group") || ""
   const repo = sp.get("repo") || ""
-  const { data, error, loading } = useLoad(async () => withWorkflows(latestByRepo((await api.pipelines()).pipes || [])), [])
+  const list = usePage(async (q) => {
+    const page = await api.pipelines({ ...q, repo, group })
+    return { ...page, items: await withJobs(page.items) }
+  }, [repo, group])
   const [busy, setBusy] = useState("")
   const [actionErr, setActionErr] = useState("")
-
-  const rows = useMemo(() => {
-    return (data || []).filter((p) => {
-      const { owner, name } = splitRepo(p.repo)
-      if (repo) return p.repo === repo
-      if (group) return codeGroupOf(name) === group
-      return Boolean(owner && name)
-    })
-  }, [data, group, repo])
 
   async function runPipe(p: Pipeline) {
     const { owner, name } = splitRepo(p.repo)
@@ -57,32 +51,30 @@ export function PipelinesPage() {
   }
 
   return (
-    <PageFrame
-      loading={loading && !data}
-      error={error || actionErr}
-      empty={!!data && rows.length === 0}
-      emptyText={t("noRuns")}
+    <PagedList
+      list={{ ...list, error: list.error || actionErr }}
+      emptyText={t("noPipelines")}
       header={<p className="text-sm text-muted-foreground">{group || repo || t("pipelinesDesc")}</p>}
       skeleton="table"
     >
-      {rows.length ? (
+      {(items) => (
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>{t("pipelineName")}</TableHead>
-              <TableHead>{t("latestRunStatus")}</TableHead>
-              <TableHead>{t("latestRunStages")}</TableHead>
+              <TableHead>{t("latestPipelineStatus")}</TableHead>
+              <TableHead>{t("jobs")}</TableHead>
               <TableHead>{t("triggerInfo")}</TableHead>
-              <TableHead>{t("latestRunStarted")}</TableHead>
+              <TableHead>{t("latestPipelineStarted")}</TableHead>
               <TableHead className="w-10" />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((p) => {
+            {items.map((p) => {
               const { owner, name } = splitRepo(p.repo)
               const href = pipelineHref(owner, name, p.number)
               return (
-                <TableRow key={p.repo}>
+                <TableRow key={`${p.repo}-${p.number}`}>
                   <TableCell>
                     <Link className="hover:underline" to={href}>
                       {name}
@@ -94,7 +86,7 @@ export function PipelinesPage() {
                     </Link>
                   </TableCell>
                   <TableCell>
-                    <PipelineStages stages={stagesOf(p)} />
+                    <PipelineStages stages={jobDotsOf(p)} />
                   </TableCell>
                   <TableCell>
                     <div className="flex min-w-0 items-center gap-2">
@@ -125,7 +117,7 @@ export function PipelinesPage() {
             })}
           </TableBody>
         </Table>
-      ) : null}
-    </PageFrame>
+      )}
+    </PagedList>
   )
 }

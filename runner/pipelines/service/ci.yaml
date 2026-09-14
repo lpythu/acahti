@@ -8,4 +8,4 @@ steps:
   ci:
     image: bash
     commands:
-      - bash cicd_acahti/run.sh ci
+      - bash "$ACAHTI_RUNNER/run.sh" ci

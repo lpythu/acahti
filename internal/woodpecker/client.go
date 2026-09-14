@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"acahti/internal/page"
 )
 
 type Client struct {
@@ -40,26 +42,26 @@ type Repo struct {
 }
 
 type Pipeline struct {
-	ID        int64      `json:"id"`
-	Number    int64      `json:"number"`
-	Status    string     `json:"status"`
-	Event     string     `json:"event"`
-	Branch    string     `json:"branch"`
-	Ref       string     `json:"ref"`
-	Title     string     `json:"title"`
-	Message   string     `json:"message"`
-	Author    string     `json:"author"`
-	Avatar    string     `json:"avatar"`
-	Commit    string     `json:"commit"`
-	Error     string     `json:"error"`
-	Created   int64      `json:"created"`
-	Started   int64      `json:"started"`
-	Finished  int64      `json:"finished"`
-	Workflows []Workflow `json:"workflows"`
-	Repo      string     `json:"repo,omitempty"`
+	ID       int64  `json:"id"`
+	Number   int64  `json:"number"`
+	Status   string `json:"status"`
+	Event    string `json:"event"`
+	Branch   string `json:"branch"`
+	Ref      string `json:"ref"`
+	Title    string `json:"title"`
+	Message  string `json:"message"`
+	Author   string `json:"author"`
+	Avatar   string `json:"avatar"`
+	Commit   string `json:"commit"`
+	Error    string `json:"error"`
+	Created  int64  `json:"created"`
+	Started  int64  `json:"started"`
+	Finished int64  `json:"finished"`
+	Jobs     []Job  `json:"jobs,omitempty"`
+	Repo     string `json:"repo,omitempty"`
 }
 
-type Workflow struct {
+type Job struct {
 	ID       int64  `json:"id"`
 	PID      int64  `json:"pid"`
 	Name     string `json:"name"`
@@ -77,14 +79,30 @@ type Step struct {
 	Type  string `json:"type"`
 }
 
+func (p *Pipeline) UnmarshalJSON(data []byte) error {
+	type alias Pipeline
+	aux := struct {
+		alias
+		Workflows []Job `json:"workflows"`
+	}{}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	*p = Pipeline(aux.alias)
+	if len(p.Jobs) == 0 {
+		p.Jobs = aux.Workflows
+	}
+	return nil
+}
+
 func (p Pipeline) Steps() []Step {
 	var out []Step
-	for _, wf := range p.Workflows {
-		if len(wf.Children) == 0 && wf.PID > 0 {
-			out = append(out, Step{PID: wf.PID, Name: wf.Name, State: wf.State})
+	for _, job := range p.Jobs {
+		if len(job.Children) == 0 && job.PID > 0 {
+			out = append(out, Step{PID: job.PID, Name: job.Name, State: job.State})
 			continue
 		}
-		out = append(out, wf.Children...)
+		out = append(out, job.Children...)
 	}
 	if len(out) == 0 {
 		out = []Step{{PID: 1, Name: p.Title, State: p.Status, Error: p.Error}}
@@ -194,13 +212,18 @@ func (c *Client) do(method, path string, body any) ([]byte, int, error) {
 	return b, resp.StatusCode, nil
 }
 
-func (c *Client) ListRepos() ([]Repo, error) {
-	b, _, err := c.do(http.MethodGet, "/api/user/repos?all=true", nil)
+func (c *Client) ListRepos(q page.Query) (page.Result[Repo], error) {
+	q = q.Norm()
+	path := fmt.Sprintf("/api/user/repos?all=true&page=%d&perPage=%d", q.Page, q.LimitPlus())
+	b, _, err := c.do(http.MethodGet, path, nil)
 	if err != nil {
-		return nil, err
+		return page.Result[Repo]{}, err
 	}
 	var out []Repo
-	return out, json.Unmarshal(b, &out)
+	if err := json.Unmarshal(b, &out); err != nil {
+		return page.Result[Repo]{}, err
+	}
+	return page.Clip(out, q), nil
 }
 
 func (c *Client) Activate(fullName string) error {
@@ -209,6 +232,18 @@ func (c *Client) Activate(fullName string) error {
 	if err != nil {
 		_, _, err = c.do(http.MethodPost, "/api/repos?forge_remote_id="+url.QueryEscape(fullName), nil)
 	}
+	if err != nil {
+		return err
+	}
+	return c.SetPipelinePath(fullName, ".acahti/pipelines")
+}
+
+func (c *Client) SetPipelinePath(fullName, path string) error {
+	key, err := c.repoKey(fullName)
+	if err != nil {
+		return err
+	}
+	_, _, err = c.do(http.MethodPatch, "/api/repos/"+key, map[string]string{"config": path})
 	return err
 }
 
@@ -219,38 +254,43 @@ func (c *Client) repoKey(fullName string) (string, error) {
 	if _, err := strconv.ParseInt(fullName, 10, 64); err == nil {
 		return fullName, nil
 	}
-	repos, err := c.ListRepos()
-	if err != nil {
-		return "", err
-	}
-	for _, r := range repos {
-		if r.FullName == fullName || r.Name == fullName {
-			return strconv.FormatInt(r.ID, 10), nil
+	q := page.Query{Page: 1, Size: page.MaxSize}
+	for q.Page <= page.MaxWalk {
+		repos, err := c.ListRepos(q)
+		if err != nil {
+			return "", err
 		}
+		for _, r := range repos.Items {
+			if r.FullName == fullName || r.Name == fullName {
+				return strconv.FormatInt(r.ID, 10), nil
+			}
+		}
+		if !repos.HasMore {
+			break
+		}
+		q.Page++
 	}
 	return "", fmt.Errorf("woodpecker repo %s not found", fullName)
 }
 
-func (c *Client) ListPipelines(fullName string, page int) ([]Pipeline, error) {
-	if page <= 0 {
-		page = 1
-	}
+func (c *Client) ListPipelines(fullName string, q page.Query) (page.Result[Pipeline], error) {
+	q = q.Norm()
 	key, err := c.repoKey(fullName)
 	if err != nil {
-		return nil, err
+		return page.Result[Pipeline]{}, err
 	}
-	b, _, err := c.do(http.MethodGet, fmt.Sprintf("/api/repos/%s/pipelines?page=%d", key, page), nil)
+	b, _, err := c.do(http.MethodGet, fmt.Sprintf("/api/repos/%s/pipelines?page=%d&perPage=%d", key, q.Page, q.LimitPlus()), nil)
 	if err != nil {
-		return nil, err
+		return page.Result[Pipeline]{}, err
 	}
 	var out []Pipeline
 	if err := json.Unmarshal(b, &out); err != nil {
-		return nil, err
+		return page.Result[Pipeline]{}, err
 	}
 	for i := range out {
 		out[i].Repo = fullName
 	}
-	return out, nil
+	return page.Clip(out, q), nil
 }
 
 func (c *Client) GetPipeline(fullName string, number int64) (Pipeline, error) {
@@ -350,33 +390,4 @@ func (c *Client) Agents() ([]Agent, error) {
 	}
 	var out []Agent
 	return out, json.Unmarshal(b, &out)
-}
-
-func (c *Client) RecentPipelines() ([]Pipeline, error) {
-	return c.ListRecentPipelines(3)
-}
-
-func (c *Client) ListRecentPipelines(perRepo int) ([]Pipeline, error) {
-	if perRepo <= 0 {
-		perRepo = 20
-	}
-	repos, err := c.ListRepos()
-	if err != nil {
-		return nil, err
-	}
-	var all []Pipeline
-	for _, r := range repos {
-		if !r.IsActive {
-			continue
-		}
-		ps, err := c.ListPipelines(r.FullName, 1)
-		if err != nil {
-			continue
-		}
-		if len(ps) > perRepo {
-			ps = ps[:perRepo]
-		}
-		all = append(all, ps...)
-	}
-	return all, nil
 }

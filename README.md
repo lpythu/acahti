@@ -37,11 +37,11 @@ Gateway is the only HTTP app this repo starts. Bind is `GATEWAY_BIND` (default `
 | Role | Runs |
 |---|---|
 | **acahti** | gateway, Forgejo, Woodpecker server, one Postgres. GitHub Actions self-hosted runner for **this** repo (tag → `up.sh`). No Woodpecker agent. |
-| **buildof** | one `woodpecker-agent` with `ROLE=both` (`build=true,deploy=true`) for island product repos |
+| **buildof** | one `woodpecker-agent` with `ROLE=both` (`build=true,deploy=true`) for acahti product repos |
 
-Product repos **on this island** still use Woodpecker + [cicd_acahti](cicd_acahti/) (`ci.sh` / `cd.sh`) on buildof. `ssh office` / `ssh thk` only appear inside `cicd_acahti/kube.sh`. Those product branches stay `dev` / `test`.
+Product repos **on this island** declare pipelines in `.acahti/pipelines/` and knobs in `.acahti/repo.env`. The host runner on buildof executes [runner/](runner/) (`run.sh` → `ci.sh` / `cd.sh` / `pkg.sh`). `ssh office` / `ssh thk` only appear inside `runner/kube.sh`. Product branches stay `dev` / `test`.
 
-**This repo** (the island itself): `main` only. Release: bump `ACAHTI_VERSION`, `git push origin main`, `bash scripts/tag-release.sh` → tag `v$ACAHTI_VERSION` → GitHub Actions on the **acahti** machine → `scripts/up.sh`.
+**This repo** (acahti itself): `main` only. Release: bump `ACAHTI_VERSION`, `git push origin main`, `bash scripts/tag-release.sh` → tag `v$ACAHTI_VERSION` → GitHub Actions on the **acahti** machine → `scripts/up.sh`.
 
 ## Install contract (for an agent)
 
@@ -59,7 +59,7 @@ Chicken and egg: the laptop agent SSHs to an empty host and follows this list. D
 
 gRPC is published as `WOODPECKER_GRPC_PUBLISH` (default `127.0.0.1:9000`). With `ACAHTI_BUILD`, install binds the LAN IP. Do not publish it to the internet (`lan` or `ssh-reverse`).
 
-Skills: [skills/acahti-install/SKILL.md](skills/acahti-install/SKILL.md) (stand up the island) and the live `GET /skill.md` (use after it is up).
+Skills: [skills/acahti-install/SKILL.md](skills/acahti-install/SKILL.md) (stand up acahti) and the live `GET /skill.md` (use after it is up).
 
 ## Web preview
 
@@ -67,7 +67,7 @@ Do not tag to look at UI. `scripts/web-dev.sh` proxies `/ui` to the host `:8080`
 
 ```bash
 bash scripts/web-dev.sh
-# http://127.0.0.1:5173  — log in with an island account
+# http://127.0.0.1:5173  — log in with an acahti account
 ```
 
 Override: `ACAHTI_DEV_ORIGIN=http://192.168.0.180:8080 bash scripts/web-dev.sh`. Confirm locally, then bump `ACAHTI_VERSION` and `bash scripts/tag-release.sh`.
@@ -79,15 +79,15 @@ Install https://acahti.example.com/skill.md
 Join    https://acahti.example.com/join     (invite from an admin)
 ```
 
-Give the first line to any coding agent. It pulls this island’s skill, connects `$ROOT_URL/mcp`, and completes OAuth. If the browser has no account, open the second line with an admin invite and pick a username and password; existing accounts use `/login`. Then `whoami` and set `--local` git identity only when the remote host is the island.
+Give the first line to any coding agent. It pulls this acahti’s skill, connects `$ROOT_URL/mcp`, and completes OAuth. If the browser has no account, open the second line with an admin invite and pick a username and password; existing accounts use `/login`. Then `whoami` and set `--local` git identity only when the remote host is acahti.
 
 - Git HTTPS: `https://acahti.example.com/acme/<repo>.git` — username `whoami.login`, password is the OAuth `access_token` the client already holds. SSH optional: `ssh://git@$DOMAIN:2222/acme/<repo>.git`
 - Packages: `https://acahti.example.com/api/packages/acme/pypi/simple/` and `…/npm/`
 - REST: `/acahti/v1/…` same verbs as MCP
 - Not public: Woodpecker `/ci`, Forgejo UI, Forgejo `/api/v1`
-- Island upgrade: tag `vX.Y.Z` on `lpythu/acahti` (not a push to `main`)
+- Acahti upgrade: tag `vX.Y.Z` on `lpythu/acahti` (not a push to `main`)
 
-Examples use `https://acahti.example.com`. Do not hard-code a live island hostname.
+Examples use `https://acahti.example.com`. Do not hard-code a live acahti hostname.
 
 ## Data
 
@@ -95,4 +95,4 @@ Bind-mount `${ACAHTI_DATA:-/var/lib/acahti}` only. After data exists, never `com
 
 ## Versions
 
-See [versions.env](versions.env). Tag the island as `v$ACAHTI_VERSION`. Woodpecker server and every host agent must share the same train (gRPC rejects a mix). Gateway is a Go static binary, memory cap 256M.
+See [versions.env](versions.env). Tag acahti as `v$ACAHTI_VERSION`. Woodpecker server and every host agent must share the same train (gRPC rejects a mix). Gateway is a Go static binary, memory cap 256M.

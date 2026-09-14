@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { useLocation } from "react-router-dom"
+import { useLocation, useSearchParams } from "react-router-dom"
 import {
   FileIcon,
   GitBranchIcon,
@@ -53,13 +53,15 @@ function SidebarCollapseToggle() {
 
 function secondaryItems(
   path: string,
+  ref: string,
   t: (k: "files" | "commits" | "branches" | "tabPulls" | "tabPipes" | "adminHome" | "users") => string,
 ): { title: string; url: string; icon?: ReactNode; end?: boolean }[] {
   const base = repoBase(path)
+  const q = ref ? `?ref=${encodeURIComponent(ref)}` : ""
   if (base) {
     return [
-      { title: t("files"), url: base, icon: <FileIcon />, end: true },
-      { title: t("commits"), url: `${base}/commits`, icon: <HistoryIcon /> },
+      { title: t("files"), url: `${base}${q}`, icon: <FileIcon />, end: true },
+      { title: t("commits"), url: `${base}/commits${q}`, icon: <HistoryIcon /> },
       { title: t("branches"), url: `${base}/branches`, icon: <GitBranchIcon /> },
       { title: t("tabPulls"), url: `${base}/pulls`, icon: <GitPullRequestIcon /> },
       { title: t("tabPipes"), url: `${base}/pipelines`, icon: <WorkflowIcon /> },
@@ -77,7 +79,8 @@ function secondaryItems(
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const t = useT()
   const { pathname } = useLocation()
-  const items = secondaryItems(pathname, t)
+  const [sp] = useSearchParams()
+  const items = secondaryItems(pathname, sp.get("ref") || "", t)
   const { isMobile } = useSidebar()
 
   return (

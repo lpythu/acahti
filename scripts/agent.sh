@@ -97,6 +97,24 @@ if [[ ! -x "${bindir}/plugin-git" ]]; then
   fi
 fi
 
+ACAHTI_RUNNER="${ACAHTI_RUNNER:-}"
+if [[ -z "$ACAHTI_RUNNER" || ! -f "${ACAHTI_RUNNER}/run.sh" ]]; then
+  for cand in \
+    /root/saidc-ws/acahti/runner \
+    /home/saidc/saidc-ws/acahti/runner \
+    "${run_home}/saidc-ws/acahti/runner" \
+    "${run_home}/Projects/saidc-ws/acahti/runner"; do
+    if [[ -f "${cand}/run.sh" ]]; then
+      ACAHTI_RUNNER="$cand"
+      break
+    fi
+  done
+fi
+if [[ -z "${ACAHTI_RUNNER:-}" || ! -f "${ACAHTI_RUNNER}/run.sh" ]]; then
+  echo "error: set ACAHTI_RUNNER to acahti/runner on this host" >&2
+  exit 1
+fi
+
 install -d -m 0755 /etc/woodpecker
 cat >/etc/woodpecker/agent.env <<EOF
 WOODPECKER_SERVER=${SERVER}
@@ -106,6 +124,7 @@ WOODPECKER_HOSTNAME=${AGENT_NAME}
 WOODPECKER_AGENT_LABELS=${LABELS}
 WOODPECKER_MAX_WORKFLOWS=4
 WOODPECKER_HEALTHCHECK=false
+ACAHTI_RUNNER=${ACAHTI_RUNNER}
 EOF
 chmod 600 /etc/woodpecker/agent.env
 chown root:root /etc/woodpecker/agent.env

@@ -2,10 +2,12 @@ import { useState } from "react"
 import { Link, useParams } from "react-router-dom"
 
 import { EmptyState } from "@/components/empty-state"
+import { Pager } from "@/components/paged-list"
 import { PageFrame } from "@/components/page-frame"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
 import { useLoad } from "@/hooks/use-load"
+import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api } from "@/lib/api"
 
@@ -14,6 +16,11 @@ export function PullPage() {
   const { owner = "", name = "", number = "" } = useParams()
   const n = Number(number)
   const { data, error, loading, reload } = useLoad(() => api.pull(owner, name, n), [owner, name, n])
+  const comments = usePage((q) => api.pullComments(owner, name, n, q), [
+    owner,
+    name,
+    n,
+  ])
   const [busy, setBusy] = useState(false)
   const [actionErr, setActionErr] = useState("")
 
@@ -78,11 +85,11 @@ export function PullPage() {
 
           <section className="flex flex-col gap-2">
             <h3 className="text-sm font-medium">{t("comments")}</h3>
-            {(data?.comments || []).length === 0 ? (
+            {comments.empty ? (
               <EmptyState>{t("noComments")}</EmptyState>
             ) : (
               <ul className="flex flex-col gap-3">
-                {data?.comments.map((c) => (
+                {comments.items.map((c) => (
                   <li key={c.id} className="rounded-md border p-3 text-sm">
                     <p className="text-muted-foreground">
                       {c.user?.login} · {c.created_at}
@@ -92,6 +99,7 @@ export function PullPage() {
                 ))}
               </ul>
             )}
+            <Pager page={comments.page} hasMore={comments.hasMore} onPage={comments.setPage} />
           </section>
         </>
       ) : null}

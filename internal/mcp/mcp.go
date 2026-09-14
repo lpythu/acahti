@@ -16,6 +16,7 @@ import (
 	"acahti/internal/httperr"
 	"acahti/internal/identity"
 	"acahti/internal/oauth"
+	"acahti/internal/page"
 	"acahti/internal/woodpecker"
 )
 
@@ -79,14 +80,15 @@ func tools() []toolSpec {
 	}
 	str := map[string]any{"type": "string"}
 	num := map[string]any{"type": "number"}
+	pg := map[string]any{"page": num, "page_size": num}
 	return []toolSpec{
-		{Name: "repo_list", Description: "List repositories the token can see", InputSchema: obj(nil)},
+		{Name: "repo_list", Description: "List repositories the token can see", InputSchema: obj(pg)},
 		{Name: "repo_get", Description: "Get one repository", InputSchema: obj(map[string]any{"owner": str, "name": str}, "owner", "name")},
-		{Name: "repo_create", Description: "Create a private org repo and protect dev and test", InputSchema: obj(map[string]any{"name": str, "org": str}, "name")},
-		{Name: "branch_list", Description: "List branches", InputSchema: obj(map[string]any{"owner": str, "name": str}, "owner", "name")},
+		{Name: "repo_create", Description: "Create a private org repo and protect dev and test", InputSchema: obj(map[string]any{"name": str, "org": str, "group": str}, "name")},
+		{Name: "branch_list", Description: "List branches", InputSchema: obj(map[string]any{"owner": str, "name": str, "page": num, "page_size": num}, "owner", "name")},
 		{Name: "ref_delete", Description: "Delete a git ref", InputSchema: obj(map[string]any{"owner": str, "name": str, "ref": str}, "owner", "name", "ref")},
 		{Name: "pr_create", Description: "Open a pull request", InputSchema: obj(map[string]any{"owner": str, "name": str, "title": str, "head": str, "base": str, "body": str}, "owner", "name", "title", "head")},
-		{Name: "pr_list", Description: "List pull requests", InputSchema: obj(map[string]any{"owner": str, "name": str, "state": str}, "owner", "name")},
+		{Name: "pr_list", Description: "List pull requests", InputSchema: obj(map[string]any{"owner": str, "name": str, "state": str, "page": num, "page_size": num}, "owner", "name")},
 		{Name: "pr_get", Description: "Get a pull request", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
 		{Name: "pr_comment", Description: "Comment on a pull request", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num, "body": str}, "owner", "name", "number", "body")},
 		{Name: "pr_merge", Description: "Merge a PR only when commit checks are green", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
@@ -94,9 +96,9 @@ func tools() []toolSpec {
 		{Name: "pipeline_log", Description: "Fetch pipeline logs", InputSchema: obj(map[string]any{"repo": str, "number": num, "step": num}, "repo", "number")},
 		{Name: "pipeline_rerun", Description: "Rerun a pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 		{Name: "pkg_publish", Description: "Publish a language package (pypi wheel URL or npm tarball URL)", InputSchema: obj(map[string]any{"kind": str, "url": str, "filename": str}, "kind", "url")},
-		{Name: "pkg_list", Description: "List language packages", InputSchema: obj(map[string]any{"owner": str, "kind": str})},
-		{Name: "whoami", Description: "Island git identity for this token: git_name, git_email, apply_when_remote_host, setup_local", InputSchema: obj(nil)},
-		{Name: "agent_status", Description: "Host agent last contact", InputSchema: obj(nil)},
+		{Name: "pkg_list", Description: "List language packages", InputSchema: obj(map[string]any{"owner": str, "kind": str, "page": num, "page_size": num})},
+		{Name: "whoami", Description: "Acahti git identity for this token: git_name, git_email, apply_when_remote_host, setup_local", InputSchema: obj(nil)},
+		{Name: "agent_status", Description: "Host agent last contact", InputSchema: obj(pg)},
 		{Name: "deploy_approve", Description: "Approve a gated deploy pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 	}
 }
@@ -200,6 +202,7 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		return 0
 	}
 	org := s.Cfg.Org
+	pq := page.FromInts(int(num("page")), int(num("page_size")))
 	switch name {
 	case "whoami":
 		u, err := s.FJ.UserSudo(token)
@@ -208,7 +211,7 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		}
 		return identity.View(u.Login, u.FullName, s.Cfg.RootURL, s.Cfg.Domain, org), nil
 	case "repo_list":
-		return s.FJ.ListRepos(token)
+		return s.FJ.ListRepos(token, pq)
 	case "repo_get":
 		return s.FJ.GetRepo(str("owner"), str("name"), token)
 	case "repo_create":
@@ -219,13 +222,19 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+		if g := str("group"); g != "" {
+			if t, err := s.FJ.FindOrgTeam(org, g); err == nil {
+				_ = s.FJ.AddTeamRepo(t.ID, org, repo.Name)
+				repo.Group = g
+			}
+		}
 		_ = s.FJ.ProtectTrains(org, repo.Name)
 		if s.WP.Ready() {
 			_ = s.WP.Activate(org + "/" + repo.Name)
 		}
 		return repo, nil
 	case "branch_list":
-		return s.FJ.ListBranches(str("owner"), str("name"))
+		return s.FJ.ListBranches(str("owner"), str("name"), pq)
 	case "ref_delete":
 		return map[string]any{"ok": true}, s.FJ.DeleteRef(str("owner"), str("name"), str("ref"))
 	case "pr_create":
@@ -235,13 +244,13 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		}
 		return s.FJ.CreatePR(str("owner"), str("name"), str("title"), str("head"), base, str("body"))
 	case "pr_list":
-		return s.FJ.ListPRs(str("owner"), str("name"), str("state"))
+		return s.FJ.ListPRs(str("owner"), str("name"), str("state"), pq)
 	case "pr_get":
 		return s.FJ.GetPR(str("owner"), str("name"), int(num("number")))
 	case "pr_comment":
 		return map[string]any{"ok": true}, s.FJ.CommentPR(str("owner"), str("name"), int(num("number")), str("body"))
 	case "pr_merge":
-		return s.Cat.MergePR(str("owner"), str("name"), int(num("number")))
+		return s.Cat.MergePR(token, str("owner"), str("name"), int(num("number")))
 	case "checks_wait":
 		owner, name, sha := str("owner"), str("name"), str("sha")
 		timeout := num("timeout_sec")
@@ -276,7 +285,7 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		}
 		return map[string]any{"ok": false, "timeout": true, "statuses": last}, nil
 	case "pipeline_log":
-		text, err := s.Cat.StepLog(str("repo"), num("number"), num("step"))
+		text, err := s.Cat.StepLog(token, str("repo"), num("number"), num("step"))
 		return map[string]any{"log": text}, err
 	case "pipeline_rerun":
 		return s.WP.Rerun(str("repo"), num("number"))
@@ -285,11 +294,11 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		if owner == "" {
 			owner = org
 		}
-		return s.FJ.ListPackages(owner, str("kind"))
+		return s.FJ.ListPackages(owner, str("kind"), pq)
 	case "pkg_publish":
 		return s.publish(token, str("kind"), str("url"), str("filename"))
 	case "agent_status":
-		return s.WP.Agents()
+		return s.Cat.ListAgents(pq)
 	case "deploy_approve":
 		return map[string]any{"ok": true}, s.WP.Approve(str("repo"), num("number"))
 	default:

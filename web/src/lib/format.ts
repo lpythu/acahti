@@ -20,6 +20,26 @@ export function formatUnix(sec?: number) {
   return formatDate(d)
 }
 
+export function formatRelative(value?: string) {
+  if (!value) return ""
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return value
+  const sec = Math.round((Date.now() - d.getTime()) / 1000)
+  const abs = Math.abs(sec)
+  if (abs < 60) return sec >= 0 ? `${abs}s` : `in ${abs}s`
+  if (abs < 3600) return sec >= 0 ? `${Math.floor(abs / 60)}m` : `in ${Math.floor(abs / 60)}m`
+  if (abs < 86400) return sec >= 0 ? `${Math.floor(abs / 3600)}h` : `in ${Math.floor(abs / 3600)}h`
+  if (abs < 86400 * 30) return sec >= 0 ? `${Math.floor(abs / 86400)}d` : `in ${Math.floor(abs / 86400)}d`
+  return formatStamp(value)
+}
+
+export function dayKey(value?: string) {
+  if (!value) return ""
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ""
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
 export function formatSize(bytes?: number) {
   if (!bytes) return "—"
   const kib = 1024

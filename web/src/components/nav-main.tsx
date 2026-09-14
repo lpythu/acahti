@@ -9,9 +9,14 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
+function pathOnly(url: string) {
+  return url.split("?")[0]
+}
+
 function navActive(path: string, url: string, end?: boolean) {
-  if (end || url === "/" || url === "/admin") return path === url
-  return path === url || path.startsWith(url + "/")
+  const dest = pathOnly(url)
+  if (end || dest === "/" || dest === "/admin") return path === dest
+  return path === dest || path.startsWith(dest + "/")
 }
 
 export function NavMain({

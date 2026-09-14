@@ -12,12 +12,13 @@ import {
 import { useLoad } from "@/hooks/use-load"
 import { useT } from "@/i18n/i18n"
 import type { MessageKey } from "@/i18n/messages"
-import { api, codeGroupOf, type RepoOverview } from "@/lib/api"
+import { api, type RepoHeader } from "@/lib/api"
+import { shortSha } from "@/lib/git"
 
 export type RepoCtx = {
   owner: string
   name: string
-  data: RepoOverview | null
+  data: RepoHeader | null
   error: string
   loading: boolean
   reload: () => void
@@ -34,7 +35,7 @@ const SECTION_KEY: Record<string, MessageKey> = {
   pipelines: "tabPipes",
 }
 
-function RepoBreadcrumb({ owner, name }: { owner: string; name: string }) {
+function RepoBreadcrumb({ owner, name, group }: { owner: string; name: string; group: string }) {
   const t = useT()
   const { pathname } = useLocation()
   const [sp] = useSearchParams()
@@ -53,12 +54,14 @@ function RepoBreadcrumb({ owner, name }: { owner: string; name: string }) {
           <BreadcrumbLink render={<Link to="/repos" />}>{t("repos")}</BreadcrumbLink>
         </BreadcrumbItem>
         <BreadcrumbSeparator />
-        <BreadcrumbItem>
-          <BreadcrumbLink render={<Link to={`/repos?group=${encodeURIComponent(codeGroupOf(name))}`} />}>
-            {codeGroupOf(name)}
-          </BreadcrumbLink>
-        </BreadcrumbItem>
-        <BreadcrumbSeparator />
+        {group ? (
+          <>
+            <BreadcrumbItem>
+              <BreadcrumbLink render={<Link to={`/repos?group=${encodeURIComponent(group)}`} />}>{group}</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+          </>
+        ) : null}
         <BreadcrumbItem>
           {onRepoRoot ? (
             <BreadcrumbPage>{name}</BreadcrumbPage>
@@ -86,7 +89,9 @@ function RepoBreadcrumb({ owner, name }: { owner: string; name: string }) {
               <BreadcrumbSeparator />
               <BreadcrumbItem>
                 {last ? (
-                  <BreadcrumbPage>{part.startsWith("#") ? part : `#${part}`}</BreadcrumbPage>
+                  <BreadcrumbPage>
+                    {section === "commits" ? shortSha(part) : part.startsWith("#") ? part : `#${part}`}
+                  </BreadcrumbPage>
                 ) : (
                   <BreadcrumbLink render={<Link to={to} />}>{part}</BreadcrumbLink>
                 )}
@@ -125,7 +130,7 @@ export function RepoLayout() {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between gap-3 border-b px-4 py-3 lg:px-6">
         <div className="min-w-0">
-          <RepoBreadcrumb owner={owner} name={name} />
+          <RepoBreadcrumb owner={owner} name={name} group={data?.repo.group || ""} />
         </div>
         {data ? <CloneMenu https={data.clone_https} ssh={data.clone_ssh} /> : null}
       </div>

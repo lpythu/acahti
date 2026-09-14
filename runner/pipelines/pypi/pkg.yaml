@@ -1,0 +1,11 @@
+when:
+  - event: [tag, manual]
+
+labels:
+  build: true
+
+steps:
+  pkg:
+    image: bash
+    commands:
+      - bash "$ACAHTI_RUNNER/run.sh" pkg

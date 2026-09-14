@@ -42,34 +42,41 @@ helm_upgrade() {
   local chart="$1"
   local release="$2"
   local ns="$3"
-  local repo_img="$4"
-  local tag="$5"
+  local repo_img="${4:-}"
+  local tag="${5:-}"
   local args=(
     upgrade --install "$release" "$chart"
     -n "$ns" --create-namespace
-    -f "${chart}/values.yaml"
-    -f "${chart}/values-${ENV}.yaml"
-    --set "image.repository=${repo_img}"
-    --set "image.tag=${tag}"
     --take-ownership
     --wait --timeout 5m
   )
+  if [[ -f "${chart}/values.yaml" ]]; then
+    args+=(-f "${chart}/values.yaml")
+  fi
+  if [[ -f "${chart}/values-${ENV}.yaml" ]]; then
+    args+=(-f "${chart}/values-${ENV}.yaml")
+  fi
+  if [[ -n "$repo_img" && -n "$tag" ]]; then
+    args+=(--set "image.repository=${repo_img}" --set "image.tag=${tag}")
+  fi
   kube_setup
   if [[ -z "${ACAHTI_HELM_HOST}" ]]; then
     helm "${args[@]}"
     return 0
   fi
-  local remote
+  local remote image_args=""
   remote="$(ssh -o BatchMode=yes "${ACAHTI_HELM_HOST}" mktemp -d)"
   tar -C "$(dirname "$chart")" -cf - "$(basename "$chart")" |
     ssh -o BatchMode=yes "${ACAHTI_HELM_HOST}" "tar -C '${remote}' -xf -"
+  if [[ -n "$repo_img" && -n "$tag" ]]; then
+    image_args="--set 'image.repository=${repo_img}' --set 'image.tag=${tag}'"
+  fi
   ssh -o BatchMode=yes "${ACAHTI_HELM_HOST}" \
     "helm upgrade --install '${release}' '${remote}/$(basename "$chart")' \
       -n '${ns}' --create-namespace \
       -f '${remote}/$(basename "$chart")/values.yaml' \
       -f '${remote}/$(basename "$chart")/values-${ENV}.yaml' \
-      --set 'image.repository=${repo_img}' \
-      --set 'image.tag=${tag}' \
+      ${image_args} \
       --take-ownership --wait --timeout 5m"
   ssh -o BatchMode=yes "${ACAHTI_HELM_HOST}" "rm -rf '${remote}'"
 }

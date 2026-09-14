@@ -88,7 +88,7 @@ func Instructions(rootURL, domain string) string {
 	hosts := Hosts(rootURL, domain)
 	list := strings.Join(hosts, ", ")
 	if list == "" {
-		list = "the island host"
+		list = "the acahti host"
 	}
-	return fmt.Sprintf("Git author: before any commit, run git remote -v and call whoami. If a remote URL host is in apply_when_remote_host (%s), run setup_local in that repository (git config --local only). Do not use git config --global. Remotes on github.com, codeup.aliyun.com, or any other host keep the laptop identity. This applies to business repos hosted on this island (for example api-gateway), not the acahti product repo on GitHub.", list)
+	return fmt.Sprintf("Git author: before any commit, run git remote -v and call whoami. If a remote URL host is in apply_when_remote_host (%s), run setup_local in that repository (git config --local only). Do not use git config --global. Remotes on github.com, codeup.aliyun.com, or any other host keep the laptop identity. This applies to business repos hosted on this acahti (for example api-gateway), not the acahti product repo on GitHub.", list)
 }

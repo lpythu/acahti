@@ -3,6 +3,7 @@ import { Link, useLocation, useSearchParams } from "react-router-dom"
 import { BoxIcon, ChevronRightIcon, FolderIcon } from "lucide-react"
 import { cn } from "cn"
 
+import { MoreButton } from "@/components/paged-list"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   SidebarGroup,
@@ -15,7 +16,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
-import { useLoad } from "@/hooks/use-load"
+import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api, type PackageRow } from "@/lib/api"
 import { packageHref, parsePackagePath } from "@/lib/nav"
@@ -102,8 +103,8 @@ export function PackagesNavPanel() {
   const { pathname } = useLocation()
   const [sp] = useSearchParams()
   const filterKind = sp.get("kind") || ""
-  const { data } = useLoad(async () => (await api.packages()).packages || [], [])
-  const groups = useMemo(() => groupByKind(data || []), [data])
+  const list = usePage((q) => api.packages(q), [], { url: false })
+  const groups = useMemo(() => groupByKind(list.items), [list.items])
   const current = parsePackagePath(pathname)
   const openAll = groups.length <= 3 && !filterKind && !current
 
@@ -124,6 +125,7 @@ export function PackagesNavPanel() {
               defaultOpen={openAll || g.kind === current?.kind}
             />
           ))}
+          <MoreButton page={list.page} hasMore={list.hasMore} onPage={list.setPage} />
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>

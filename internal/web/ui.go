@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"acahti/internal/page"
 )
 
 func writeErr(w http.ResponseWriter, code int, msg string) {
@@ -23,23 +25,123 @@ func (p *Pages) Events(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Pages) Repos(w http.ResponseWriter, r *http.Request) {
-	if _, _, ok := p.requireJSON(w, r); !ok {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
 		return
 	}
-	repos, err := p.Cat.ListRepos()
+	q := page.Parse(r)
+	if r.URL.Query().Get("groups") == "1" {
+		out, err := p.Cat.ListRepoGroups(user, q)
+		if err != nil {
+			writeErr(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
+	out, err := p.Cat.ListRepos(user, r.URL.Query().Get("group"), q)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"repos": repos})
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (p *Pages) Repo(w http.ResponseWriter, r *http.Request) {
-	if _, _, ok := p.requireJSON(w, r); !ok {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
+		return
+	}
+	out, err := p.Cat.RepoHeader(user, r.PathValue("owner"), r.PathValue("name"), r.URL.Query().Get("ref"))
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (p *Pages) RepoContents(w http.ResponseWriter, r *http.Request) {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
 		return
 	}
 	q := r.URL.Query()
-	out, err := p.Cat.RepoOverview(r.PathValue("owner"), r.PathValue("name"), q.Get("ref"), q.Get("path"))
+	out, err := p.Cat.RepoContents(user, r.PathValue("owner"), r.PathValue("name"), q.Get("ref"), q.Get("path"), page.Parse(r))
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (p *Pages) RepoCommits(w http.ResponseWriter, r *http.Request) {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
+		return
+	}
+	out, err := p.Cat.ListCommits(user, r.PathValue("owner"), r.PathValue("name"), r.URL.Query().Get("ref"), page.Parse(r))
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (p *Pages) RepoBranches(w http.ResponseWriter, r *http.Request) {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
+		return
+	}
+	out, err := p.Cat.ListBranches(user, r.PathValue("owner"), r.PathValue("name"), page.Parse(r))
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (p *Pages) RepoPulls(w http.ResponseWriter, r *http.Request) {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
+		return
+	}
+	out, err := p.Cat.ListPulls(user, r.PathValue("owner"), r.PathValue("name"), r.URL.Query().Get("state"), page.Parse(r))
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (p *Pages) PullComments(w http.ResponseWriter, r *http.Request) {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
+		return
+	}
+	n, err := strconv.Atoi(r.PathValue("n"))
+	if err != nil || n <= 0 {
+		writeErr(w, http.StatusBadRequest, "invalid pull number")
+		return
+	}
+	out, err := p.Cat.ListComments(user, r.PathValue("owner"), r.PathValue("name"), n, page.Parse(r))
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (p *Pages) Commit(w http.ResponseWriter, r *http.Request) {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
+		return
+	}
+	sha := r.PathValue("sha")
+	if sha == "" {
+		writeErr(w, http.StatusBadRequest, "missing commit")
+		return
+	}
+	out, err := p.Cat.CommitDetail(user, r.PathValue("owner"), r.PathValue("name"), sha, page.Parse(r))
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
@@ -48,7 +150,8 @@ func (p *Pages) Repo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Pages) Pull(w http.ResponseWriter, r *http.Request) {
-	if _, _, ok := p.requireJSON(w, r); !ok {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
 		return
 	}
 	n, err := strconv.Atoi(r.PathValue("n"))
@@ -57,7 +160,7 @@ func (p *Pages) Pull(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/merge") {
-		out, err := p.Cat.MergePR(r.PathValue("owner"), r.PathValue("name"), n)
+		out, err := p.Cat.MergePR(user, r.PathValue("owner"), r.PathValue("name"), n)
 		if err != nil {
 			writeErr(w, http.StatusUnprocessableEntity, err.Error())
 			return
@@ -65,7 +168,7 @@ func (p *Pages) Pull(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
-	out, err := p.Cat.PRDetail(r.PathValue("owner"), r.PathValue("name"), n)
+	out, err := p.Cat.PRDetail(user, r.PathValue("owner"), r.PathValue("name"), n)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
@@ -74,19 +177,26 @@ func (p *Pages) Pull(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Pages) Pipelines(w http.ResponseWriter, r *http.Request) {
-	if _, _, ok := p.requireJSON(w, r); !ok {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
 		return
 	}
-	pipes, err := p.Cat.ListPipelines(r.URL.Query().Get("repo"))
+	q := r.URL.Query()
+	out, err := p.Cat.ListPipelines(user, q.Get("repo"), q.Get("group"), page.Parse(r))
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"pipes": pipes})
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (p *Pages) TriggerPipeline(w http.ResponseWriter, r *http.Request) {
-	if _, _, ok := p.requireJSON(w, r); !ok {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
+		return
+	}
+	if _, err := p.Cat.RepoHeader(user, r.PathValue("owner"), r.PathValue("name"), ""); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
 	repo := r.PathValue("owner") + "/" + r.PathValue("name")
@@ -110,7 +220,8 @@ func (p *Pages) TriggerPipeline(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Pages) Pipeline(w http.ResponseWriter, r *http.Request) {
-	if _, _, ok := p.requireJSON(w, r); !ok {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
 		return
 	}
 	owner, name := r.PathValue("owner"), r.PathValue("name")
@@ -123,13 +234,17 @@ func (p *Pages) Pipeline(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/log"):
 		step, _ := strconv.ParseInt(r.URL.Query().Get("step"), 10, 64)
-		text, err := p.Cat.StepLog(repo, n, step)
+		text, err := p.Cat.StepLog(user, repo, n, step)
 		if err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"log": text})
 	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/rerun"):
+		if _, err := p.Cat.RepoHeader(user, owner, name, ""); err != nil {
+			writeErr(w, http.StatusBadGateway, err.Error())
+			return
+		}
 		pipe, err := p.WP.Rerun(repo, n)
 		if err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())
@@ -137,13 +252,17 @@ func (p *Pages) Pipeline(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, pipe)
 	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/approve"):
+		if _, err := p.Cat.RepoHeader(user, owner, name, ""); err != nil {
+			writeErr(w, http.StatusBadGateway, err.Error())
+			return
+		}
 		if err := p.WP.Approve(repo, n); err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	default:
-		out, err := p.Cat.PipelineDetail(repo, n)
+		out, err := p.Cat.PipelineDetail(user, repo, n)
 		if err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())
 			return
@@ -157,20 +276,20 @@ func (p *Pages) Packages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	kind, name := r.PathValue("kind"), r.PathValue("name")
+	q := page.Parse(r)
 	if kind != "" && name != "" {
-		g, err := p.Cat.PackageGroup(kind, name)
+		out, err := p.Cat.ListPackageVersions(kind, name, q)
 		if err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, g)
+		writeJSON(w, http.StatusOK, out)
 		return
 	}
-	pkgs, err := p.Cat.ListPackageRows(r.URL.Query().Get("kind"))
+	out, err := p.Cat.ListPackageRows(r.URL.Query().Get("kind"), q)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"packages": pkgs})
+	writeJSON(w, http.StatusOK, out)
 }
-

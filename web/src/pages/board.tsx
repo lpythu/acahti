@@ -1,25 +1,35 @@
+import { useCallback } from "react"
 import { Link } from "react-router-dom"
 
+import { Pager } from "@/components/paged-list"
 import { PageFrame } from "@/components/page-frame"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useEvents } from "@/hooks/use-events"
-import { useLoad } from "@/hooks/use-load"
+import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api, splitRepo } from "@/lib/api"
 
 export function BoardPage() {
   const t = useT()
-  const { data, error, loading, reload } = useLoad(() => api.board(), [])
+  const blocked = usePage((q) => api.boardBlocked(q), [], { param: "blocked" })
+  const failed = usePage((q) => api.boardFailed(q), [], { param: "failed" })
+  const prs = usePage((q) => api.boardPRs(q), [], { param: "prs" })
+  const reload = useCallback(() => {
+    void blocked.reload()
+    void failed.reload()
+    void prs.reload()
+  }, [blocked.reload, failed.reload, prs.reload])
   useEvents(reload)
 
-  const box = data
-  const empty = !!box && box.prs.length === 0 && box.blocked.length === 0 && box.failed.length === 0
+  const loading = (blocked.loading && !blocked.data) || (failed.loading && !failed.data) || (prs.loading && !prs.data)
+  const empty = blocked.empty && failed.empty && prs.empty
+  const error = blocked.error || failed.error || prs.error
 
   return (
     <PageFrame
-      loading={loading && !data}
+      loading={loading}
       error={error}
       empty={empty}
       emptyText={t("inboxEmpty")}
@@ -27,7 +37,7 @@ export function BoardPage() {
       className="gap-6"
       skeleton="table"
     >
-      {box?.blocked.length ? (
+      {blocked.items.length ? (
         <section className="flex flex-col gap-2">
           <h2 className="text-sm font-medium">{t("blocked")}</h2>
           <Table>
@@ -40,7 +50,7 @@ export function BoardPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {box.blocked.map((p) => {
+              {blocked.items.map((p) => {
                 const { owner, name } = splitRepo(p.repo)
                 return (
                   <TableRow key={`${p.repo}-${p.number}`}>
@@ -58,7 +68,7 @@ export function BoardPage() {
                         size="sm"
                         onClick={async () => {
                           await api.approve(owner, name, p.number)
-                          await reload()
+                          await blocked.reload()
                         }}
                       >
                         {t("approve")}
@@ -69,10 +79,11 @@ export function BoardPage() {
               })}
             </TableBody>
           </Table>
+          <Pager page={blocked.page} hasMore={blocked.hasMore} onPage={blocked.setPage} />
         </section>
       ) : null}
 
-      {box?.failed.length ? (
+      {failed.items.length ? (
         <section className="flex flex-col gap-2">
           <h2 className="text-sm font-medium">{t("failed")}</h2>
           <Table>
@@ -84,7 +95,7 @@ export function BoardPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {box.failed.map((p) => {
+              {failed.items.map((p) => {
                 const { owner, name } = splitRepo(p.repo)
                 return (
                   <TableRow key={`${p.repo}-${p.number}`}>
@@ -102,10 +113,11 @@ export function BoardPage() {
               })}
             </TableBody>
           </Table>
+          <Pager page={failed.page} hasMore={failed.hasMore} onPage={failed.setPage} />
         </section>
       ) : null}
 
-      {box?.prs.length ? (
+      {prs.items.length ? (
         <section className="flex flex-col gap-2">
           <h2 className="text-sm font-medium">{t("prs")}</h2>
           <Table>
@@ -117,7 +129,7 @@ export function BoardPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {box.prs.map((pr) => {
+              {prs.items.map((pr) => {
                 const { owner, name } = splitRepo(pr.repo)
                 return (
                   <TableRow key={`${pr.repo}-${pr.number}`}>
@@ -133,6 +145,7 @@ export function BoardPage() {
               })}
             </TableBody>
           </Table>
+          <Pager page={prs.page} hasMore={prs.hasMore} onPage={prs.setPage} />
         </section>
       ) : null}
     </PageFrame>

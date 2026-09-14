@@ -1,11 +1,11 @@
 ---
 name: acahti
-description: Use an Acahti island. Install this file from $ROOT_URL/skill.md. Connect MCP at $ROOT_URL/mcp (OAuth). Before git commit, whoami and set local identity when the remote host is the island.
+description: Use Acahti. Install this file from $ROOT_URL/skill.md. Connect MCP at $ROOT_URL/mcp (OAuth). Before git commit, whoami and set local identity when the remote host is acahti.
 ---
 
 # Use Acahti
 
-This file is served by the island. Do not copy it from GitHub.
+This file is served by acahti. Do not copy it from GitHub.
 
 ```text
 Install $ROOT_URL/skill.md
@@ -20,7 +20,7 @@ If the browser has no account, open `$ROOT_URL/join` with the admin invite, pick
 
 ## Git
 
-- HTTPS: `https://$ROOT_URL/$ACAHTI_ORG/<repo>.git`
+- HTTPS: `$ROOT_URL/$ACAHTI_ORG/<repo>.git`
 - Username: `whoami.login`
 - Password: the OAuth access_token the MCP client already holds
 - SSH optional: `ssh://git@$DOMAIN:2222/$ACAHTI_ORG/<repo>.git`

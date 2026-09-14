@@ -1,3 +1,7 @@
+import { pageQS, type Page, type PageQuery } from "@/lib/page"
+
+export type { Page, PageQuery }
+
 export type Me = {
   user: string
   admin: boolean
@@ -31,7 +35,7 @@ export type Step = {
   type?: string
 }
 
-export type PipelineWorkflow = {
+export type PipelineJob = {
   name: string
   state: string
   pid?: number
@@ -54,7 +58,7 @@ export type Pipeline = {
   created?: number
   started?: number
   finished?: number
-  workflows?: PipelineWorkflow[]
+  jobs?: PipelineJob[]
   steps?: Step[]
 }
 
@@ -69,9 +73,8 @@ export type Agent = {
 export type Stack = {
   version: string
   forgejo: string
-  woodpecker: string
+  ci: string
   postgres: string
-  agents: Agent[]
   upgrade_hint: string
 }
 
@@ -87,6 +90,7 @@ export type Repo = {
   private: boolean
   default_branch: string
   clone_url?: string
+  group?: string
 }
 
 export type Package = { id: number; name: string; version: string; type: string; created_at?: string }
@@ -96,9 +100,6 @@ export type PackageRow = {
   name: string
   latest: string
   updated_at: string
-  size: number
-  versions: number
-  downloads: number
 }
 
 export type Status = {
@@ -115,11 +116,7 @@ export type Comment = {
   created_at: string
 }
 
-export type Inbox = {
-  prs: PR[]
-  blocked: Pipeline[]
-  failed: Pipeline[]
-}
+export type RepoGroup = { group: string; count: number }
 
 export type BranchInfo = {
   name: string
@@ -128,9 +125,35 @@ export type BranchInfo = {
   protected: boolean
 }
 
+export type CommitPerson = { name: string; email?: string; date: string }
+
+export type CommitUser = { login: string; avatar_url?: string }
+
+export type CommitFile = {
+  filename: string
+  status: string
+  additions: number
+  deletions: number
+  changes?: number
+  previous_filename?: string
+  patch?: string
+}
+
+export type CommitStats = { total: number; additions: number; deletions: number }
+
 export type Commit = {
   sha: string
-  commit?: { message: string; author?: { name: string; date: string } }
+  html_url?: string
+  commit?: {
+    message: string
+    author?: CommitPerson
+    committer?: CommitPerson
+  }
+  author?: CommitUser
+  committer?: CommitUser
+  parents?: { sha: string }[]
+  files?: CommitFile[]
+  stats?: CommitStats
 }
 
 export type ContentEntry = {
@@ -146,34 +169,29 @@ export type FileBlob = {
   content: string
 }
 
-export type RepoOverview = {
+export type RepoHeader = {
   repo: Repo
   clone_https: string
   clone_ssh: string
   ref: string
-  path: string
-  branches: BranchInfo[]
-  protections: string[]
-  commits: Commit[]
-  entries: ContentEntry[]
-  file?: FileBlob
-  readme: string
-  pulls: PR[]
-  pipes: Pipeline[]
 }
 
-export type PackageGroup = {
-  type: string
-  name: string
-  latest: string
-  versions: Package[]
+export type RepoContents = Page<ContentEntry> & {
+  ref: string
+  path: string
+  file?: FileBlob
+  readme: string
+}
+
+export type CommitDetail = Page<CommitFile> & {
+  commit: Commit
+  stats: CommitStats
 }
 
 export type PRDetail = {
   pr: PR
   checks: Status[]
   green: boolean
-  comments: Comment[]
 }
 
 export type PipelineDetail = {
@@ -224,36 +242,49 @@ export const api = {
   createInvite: () => req<{ code: string; url: string }>("/ui/invites", { method: "POST" }),
   deleteInvite: (code: string) => req<{ ok: boolean }>(`/ui/invites/${code}`, { method: "DELETE" }),
   logout: () => req<{ ok: boolean }>("/ui/logout", { method: "POST" }),
-  board: () => req<Inbox>("/ui/board"),
-  users: () => req<{ users: User[] }>("/ui/users"),
+  boardPRs: (q?: PageQuery) => req<Page<PR>>(`/ui/board${pageQS(q, { section: "prs" })}`),
+  boardBlocked: (q?: PageQuery) => req<Page<Pipeline>>(`/ui/board${pageQS(q, { section: "blocked" })}`),
+  boardFailed: (q?: PageQuery) => req<Page<Pipeline>>(`/ui/board${pageQS(q, { section: "failed" })}`),
+  users: (q?: PageQuery) => req<Page<User>>(`/ui/users${pageQS(q)}`),
   createUser: (username: string, password: string, admin: boolean) =>
     req<{ user: User }>("/ui/users", {
       method: "POST",
       body: JSON.stringify({ username, password, admin }),
     }),
   stack: () => req<Stack>("/ui/stack"),
+  agents: (q?: PageQuery) => req<Page<Agent>>(`/ui/agents${pageQS(q)}`),
   setPassword: (username: string, password: string) =>
     req<{ ok: boolean }>("/ui/password", {
       method: "POST",
       body: JSON.stringify({ username, password }),
     }),
-  keys: () => req<{ keys: PublicKey[] }>("/ui/keys"),
+  keys: (q?: PageQuery) => req<Page<PublicKey>>(`/ui/keys${pageQS(q)}`),
   addKey: (title: string, key: string) =>
     req<{ ok: boolean }>("/ui/keys", { method: "POST", body: JSON.stringify({ title, key }) }),
-  repos: () => req<{ repos: Repo[] }>("/ui/repos"),
-  repo: (owner: string, name: string, ref?: string, path?: string) => {
-    const q = new URLSearchParams()
-    if (ref) q.set("ref", ref)
-    if (path) q.set("path", path)
-    const qs = q.toString()
-    return req<RepoOverview>(`/ui/repos/${owner}/${name}${qs ? `?${qs}` : ""}`)
-  },
+  repoGroups: (q?: PageQuery) => req<Page<RepoGroup>>(`/ui/repos${pageQS(q, { groups: "1" })}`),
+  repos: (q?: PageQuery, group?: string) => req<Page<Repo>>(`/ui/repos${pageQS(q, { group })}`),
+  repo: (owner: string, name: string, ref?: string) =>
+    req<RepoHeader>(`/ui/repos/${owner}/${name}${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`),
+  contents: (owner: string, name: string, opts?: PageQuery & { ref?: string; path?: string }) =>
+    req<RepoContents>(
+      `/ui/repos/${owner}/${name}/contents${pageQS(opts, { ref: opts?.ref, path: opts?.path })}`,
+    ),
+  commits: (owner: string, name: string, opts?: PageQuery & { ref?: string }) =>
+    req<Page<Commit>>(`/ui/repos/${owner}/${name}/commits${pageQS(opts, { ref: opts?.ref })}`),
+  branches: (owner: string, name: string, q?: PageQuery) =>
+    req<Page<BranchInfo>>(`/ui/repos/${owner}/${name}/branches${pageQS(q)}`),
+  pulls: (owner: string, name: string, q?: PageQuery) =>
+    req<Page<PR>>(`/ui/repos/${owner}/${name}/pulls${pageQS(q)}`),
+  commit: (owner: string, name: string, sha: string, q?: PageQuery) =>
+    req<CommitDetail>(`/ui/repos/${owner}/${name}/commits/${encodeURIComponent(sha)}${pageQS(q)}`),
   pull: (owner: string, name: string, n: number) =>
     req<PRDetail>(`/ui/repos/${owner}/${name}/pulls/${n}`),
+  pullComments: (owner: string, name: string, n: number, q?: PageQuery) =>
+    req<Page<Comment>>(`/ui/repos/${owner}/${name}/pulls/${n}/comments${pageQS(q)}`),
   mergePull: (owner: string, name: string, n: number) =>
     req<{ merged: boolean }>(`/ui/repos/${owner}/${name}/pulls/${n}/merge`, { method: "POST" }),
-  pipelines: (repo?: string) =>
-    req<{ pipes: Pipeline[] }>(repo ? `/ui/pipelines?repo=${encodeURIComponent(repo)}` : "/ui/pipelines"),
+  pipelines: (q?: PageQuery & { repo?: string; group?: string }) =>
+    req<Page<Pipeline>>(`/ui/pipelines${pageQS(q, { repo: q?.repo, group: q?.group })}`),
   pipeline: (owner: string, name: string, n: number) =>
     req<PipelineDetail>(`/ui/pipelines/${owner}/${name}/${n}`),
   pipelineLog: (owner: string, name: string, n: number, step: number) =>
@@ -262,10 +293,10 @@ export const api = {
     req<Pipeline>(`/ui/pipelines/${owner}/${name}/${n}/rerun`, { method: "POST" }),
   approve: (owner: string, name: string, n: number) =>
     req<{ ok: boolean }>(`/ui/pipelines/${owner}/${name}/${n}/approve`, { method: "POST" }),
-  packages: (kind?: string) =>
-    req<{ packages: PackageRow[] }>(kind ? `/ui/packages?kind=${encodeURIComponent(kind)}` : "/ui/packages"),
-  packageGroup: (kind: string, name: string) =>
-    req<PackageGroup>(`/ui/packages/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`),
+  packages: (q?: PageQuery, kind?: string) =>
+    req<Page<PackageRow>>(`/ui/packages${pageQS(q, { kind })}`),
+  packageVersions: (kind: string, name: string, q?: PageQuery) =>
+    req<Page<Package>>(`/ui/packages/${encodeURIComponent(kind)}/${encodeURIComponent(name)}${pageQS(q)}`),
   trigger: (owner: string, name: string, ref?: string) =>
     req<Pipeline>(`/ui/pipelines/${owner}/${name}/trigger`, {
       method: "POST",
@@ -278,24 +309,3 @@ export function splitRepo(full: string): { owner: string; name: string } {
   return { owner: owner || "", name: name || full }
 }
 
-export function codeGroupOf(name: string): string {
-  const i = name.indexOf("-")
-  return i > 0 ? name.slice(0, i) : name
-}
-
-export function groupRepos(repos: Repo[]): { group: string; repos: Repo[] }[] {
-  const map = new Map<string, Repo[]>()
-  for (const r of repos) {
-    const { name } = splitRepo(r.full_name || r.name)
-    const group = codeGroupOf(name)
-    const list = map.get(group) || []
-    list.push(r)
-    map.set(group, list)
-  }
-  return [...map.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([group, items]) => ({
-      group,
-      repos: items.slice().sort((a, b) => (a.name || a.full_name).localeCompare(b.name || b.full_name)),
-    }))
-}

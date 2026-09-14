@@ -18,20 +18,28 @@ export function RepoFilesPage() {
   const ref = sp.get("ref") || ""
   const path = sp.get("path") || ""
   const root = repo.data
+  const currentRef = ref || root?.ref || "dev"
+  const branches = useLoad(() => api.branches(repo.owner, repo.name, { page: 1, page_size: 50 }), [repo.owner, repo.name])
   const preview = useLoad(
-    () => api.repo(repo.owner, repo.name, ref || undefined, path || undefined),
-    [repo.owner, repo.name, ref, path],
+    () => api.contents(repo.owner, repo.name, { page: 1, page_size: 1, ref: currentRef, path: path || undefined }),
+    [repo.owner, repo.name, currentRef, path],
     Boolean(path),
   )
-  const currentRef = root?.ref || ref || "dev"
-  const branches = root?.branches.length ? root.branches : [{ name: currentRef }]
-  const entries = root?.entries || []
   const file = path ? preview.data?.file : undefined
-  const readme = path ? preview.data?.readme : root?.readme
-  const readmeName = path ? `${path.replace(/\/$/, "")}/README.md` : "README.md"
+  const readme = path ? preview.data?.readme : undefined
+  const rootContents = useLoad(
+    () => api.contents(repo.owner, repo.name, { page: 1, page_size: 1, ref: currentRef }),
+    [repo.owner, repo.name, currentRef],
+    !path,
+  )
+  const rootReadme = !path ? rootContents.data?.readme : undefined
   const loading = repo.loading && !root
-  const error = repo.error || (path ? preview.error : "")
+  const error = repo.error || (path ? preview.error : rootContents.error)
   const previewLoading = Boolean(path) && preview.loading && !preview.data
+  const title = file?.name || ((path ? readme : rootReadme) ? (path ? `${path.replace(/\/$/, "")}/README.md` : "README.md").split("/").pop() : "")
+  const shownReadme = path ? readme : rootReadme
+  const md = file ? isMarkdownPath(file.name) : Boolean(shownReadme)
+  const branchItems = branches.data?.items.length ? branches.data.items : [{ name: currentRef, sha: "", default: true, protected: false }]
 
   function setQuery(next: { ref?: string; path?: string }) {
     const q = new URLSearchParams(sp)
@@ -46,24 +54,18 @@ export function RepoFilesPage() {
     setSp(q, { replace: true })
   }
 
-  const title = file?.name || (readme ? readmeName.split("/").pop() : "")
-  const md = file ? isMarkdownPath(file.name) : Boolean(readme)
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {error && !root ? <p className="px-4 py-3 text-sm text-destructive">{error}</p> : null}
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
         <ResizablePanel defaultSize={22} minSize={14} className="flex min-h-0 flex-col">
           <div className="border-b p-2">
-            <Select
-              value={currentRef}
-              onValueChange={(v) => setQuery({ ref: String(v ?? ""), path: "" })}
-            >
+            <Select value={currentRef} onValueChange={(v) => setQuery({ ref: String(v ?? ""), path: "" })}>
               <SelectTrigger size="sm" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {branches.map((b) => (
+                {branchItems.map((b) => (
                   <SelectItem key={b.name} value={b.name}>
                     {b.name}
                   </SelectItem>
@@ -83,8 +85,8 @@ export function RepoFilesPage() {
                 owner={repo.owner}
                 name={repo.name}
                 gitRef={currentRef === (root?.repo.default_branch || "dev") ? "" : currentRef}
-                entries={entries}
-                selected={path || (root?.readme ? "README.md" : "")}
+                path=""
+                selected={path || (shownReadme ? "README.md" : "")}
                 onPick={(next) => setQuery({ path: next })}
               />
             )}
@@ -108,10 +110,10 @@ export function RepoFilesPage() {
                   <Markdown>{file.content}</Markdown>
                 </div>
               </AutoHideScroll>
-            ) : readme ? (
+            ) : shownReadme ? (
               <AutoHideScroll className="size-full">
                 <div className="p-6">
-                  <Markdown>{readme}</Markdown>
+                  <Markdown>{shownReadme}</Markdown>
                 </div>
               </AutoHideScroll>
             ) : null}

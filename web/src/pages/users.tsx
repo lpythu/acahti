@@ -1,7 +1,7 @@
 import { type FormEvent, useState } from "react"
 
 import { CopyField } from "@/components/copy-field"
-import { PageFrame } from "@/components/page-frame"
+import { PagedList } from "@/components/paged-list"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useLoad } from "@/hooks/use-load"
+import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api, type Invite } from "@/lib/api"
 
@@ -102,7 +103,7 @@ function CreateUserMenu({
 
 export function UsersPage() {
   const t = useT()
-  const usersLoad = useLoad(async () => (await api.users()).users || [], [])
+  const usersLoad = usePage((q) => api.users(q), [])
   const invitesLoad = useLoad(async () => {
     const r = await api.invites()
     return { invites: r.invites || [], join: r.join }
@@ -111,7 +112,7 @@ export function UsersPage() {
   const [formErr, setFormErr] = useState("")
   const [admin, setAdmin] = useState(false)
   const [resets, setResets] = useState<Record<string, string>>({})
-  const users = usersLoad.data || []
+  const users = usersLoad.items
   const invites = invitesLoad.data?.invites || []
   const joinBase = invitesLoad.data?.join || "/join"
 
@@ -146,9 +147,8 @@ export function UsersPage() {
   }
 
   return (
-    <PageFrame
-      loading={usersLoad.loading && !usersLoad.data}
-      error={usersLoad.error || formErr}
+    <PagedList
+      list={{ ...usersLoad, error: usersLoad.error || formErr }}
       className="gap-6"
       skeleton="table"
       header={
@@ -178,42 +178,46 @@ export function UsersPage() {
         </div>
       }
     >
-      {notice ? (
-        <Alert>
-          <AlertTitle>{notice}</AlertTitle>
-          <AlertDescription>{t("loginWithPassword")}</AlertDescription>
-        </Alert>
-      ) : null}
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t("username")}</TableHead>
-            <TableHead>{t("admin")}</TableHead>
-            <TableHead>{t("password")}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {users.map((u) => (
-            <TableRow key={u.login}>
-              <TableCell>{u.login}</TableCell>
-              <TableCell>{u.is_admin ? t("admin") : ""}</TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="password"
-                    autoComplete="new-password"
-                    value={resets[u.login] || ""}
-                    onChange={(e) => setResets((m) => ({ ...m, [u.login]: e.target.value }))}
-                  />
-                  <Button type="button" size="sm" variant="outline" onClick={() => void resetRow(u.login)}>
-                    {t("resetPassword")}
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </PageFrame>
+      {() => (
+        <>
+          {notice ? (
+            <Alert>
+              <AlertTitle>{notice}</AlertTitle>
+              <AlertDescription>{t("loginWithPassword")}</AlertDescription>
+            </Alert>
+          ) : null}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t("username")}</TableHead>
+                <TableHead>{t("admin")}</TableHead>
+                <TableHead>{t("password")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users.map((u) => (
+                <TableRow key={u.login}>
+                  <TableCell>{u.login}</TableCell>
+                  <TableCell>{u.is_admin ? t("admin") : ""}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="password"
+                        autoComplete="new-password"
+                        value={resets[u.login] || ""}
+                        onChange={(e) => setResets((m) => ({ ...m, [u.login]: e.target.value }))}
+                      />
+                      <Button type="button" size="sm" variant="outline" onClick={() => void resetRow(u.login)}>
+                        {t("resetPassword")}
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </>
+      )}
+    </PagedList>
   )
 }

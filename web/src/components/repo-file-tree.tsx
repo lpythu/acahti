@@ -2,7 +2,8 @@ import { useState } from "react"
 import { ChevronRightIcon, FileIcon, FolderIcon } from "lucide-react"
 import { cn } from "cn"
 
-import { useLoad } from "@/hooks/use-load"
+import { MoreButton } from "@/components/paged-list"
+import { usePage } from "@/hooks/use-page"
 import { api, type ContentEntry } from "@/lib/api"
 
 function sortEntries(entries: ContentEntry[]) {
@@ -29,8 +30,12 @@ function TreeDir({
   depth: number
   onPick: (path: string, dir: boolean) => void
 }) {
-  const { data } = useLoad(() => api.repo(owner, name, gitRef || undefined, path), [owner, name, gitRef, path])
-  const entries = sortEntries(data?.entries || [])
+  const list = usePage(
+    (q) => api.contents(owner, name, { ...q, ref: gitRef || undefined, path }),
+    [owner, name, gitRef, path],
+    { url: false },
+  )
+  const entries = sortEntries(list.items)
   return (
     <ul>
       {entries.map((e) => (
@@ -45,6 +50,7 @@ function TreeDir({
           onPick={onPick}
         />
       ))}
+      <MoreButton page={list.page} hasMore={list.hasMore} onPage={list.setPage} />
     </ul>
   )
 }
@@ -125,31 +131,26 @@ export function RepoFileTree({
   owner,
   name,
   gitRef,
-  entries,
+  path,
   selected,
   onPick,
 }: {
   owner: string
   name: string
   gitRef: string
-  entries: ContentEntry[]
+  path: string
   selected: string
   onPick: (path: string, dir: boolean) => void
 }) {
   return (
-    <ul className="p-1">
-      {sortEntries(entries).map((e) => (
-        <TreeNode
-          key={e.path}
-          owner={owner}
-          name={name}
-          gitRef={gitRef}
-          entry={e}
-          selected={selected}
-          depth={0}
-          onPick={onPick}
-        />
-      ))}
-    </ul>
+    <TreeDir
+      owner={owner}
+      name={name}
+      gitRef={gitRef}
+      path={path}
+      selected={selected}
+      depth={0}
+      onPick={onPick}
+    />
   )
 }
