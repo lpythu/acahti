@@ -31,13 +31,16 @@ fj() {
 }
 
 echo "==> admin ${ACAHTI_ADMIN_USER}"
-if ! fj admin user list 2>/dev/null | grep -q "${ACAHTI_ADMIN_USER}"; then
-  fj admin user create \
-    --admin \
-    --username "${ACAHTI_ADMIN_USER}" \
-    --password "${ACAHTI_ADMIN_PASSWORD}" \
-    --email "${ACAHTI_ADMIN_USER}@noreply.${DOMAIN}" \
-    --must-change-password=false
+if ! create_out="$(fj admin user create \
+  --admin \
+  --username "${ACAHTI_ADMIN_USER}" \
+  --password "${ACAHTI_ADMIN_PASSWORD}" \
+  --email "${ACAHTI_ADMIN_USER}@noreply.${DOMAIN}" \
+  --must-change-password=false 2>&1)"; then
+  if ! printf '%s\n' "${create_out}" | grep -qi "already exists"; then
+    printf '%s\n' "${create_out}" >&2
+    exit 1
+  fi
 fi
 
 token_file="${ACAHTI_DATA}/admin.token"
