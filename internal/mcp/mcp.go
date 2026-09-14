@@ -33,11 +33,12 @@ type ConfigView struct {
 	Org     string
 	RootURL string
 	Domain  string
+	Version string
 }
 
 func New(cfg config.Config, a *auth.Service, fj *forgejo.Client, wp *woodpecker.Client, cat *catalog.Catalog) *Server {
 	return &Server{
-		Cfg:  ConfigView{Org: cfg.Org, RootURL: cfg.RootURL, Domain: cfg.Domain},
+		Cfg:  ConfigView{Org: cfg.Org, RootURL: cfg.RootURL, Domain: cfg.Domain, Version: cfg.Version},
 		Auth: a,
 		FJ:   fj,
 		WP:   wp,
@@ -108,10 +109,17 @@ func tools() []toolSpec {
 		{Name: "inbox", Description: "Island inbox: open PRs, blocked deploys, or failed pipelines", InputSchema: obj(map[string]any{"section": str, "page": num, "page_size": num})},
 		{Name: "pkg_publish", Description: "Publish a language package (pypi wheel URL or npm tarball URL)", InputSchema: obj(map[string]any{"kind": str, "url": str, "filename": str}, "kind", "url")},
 		{Name: "pkg_list", Description: "List language packages", InputSchema: obj(map[string]any{"owner": str, "kind": str, "page": num, "page_size": num})},
-		{Name: "whoami", Description: "Acahti git identity: git_name, git_email, clone_url_template, skill_url, skill_sha, apply_when_remote_host, setup_local", InputSchema: obj(nil)},
+		{Name: "whoami", Description: "Acahti git identity: git_name, git_email, clone_url_template, skill_url, skill_sha, apply_when_remote_host, setup_local", InputSchema: obj(map[string]any{})},
 		{Name: "agent_status", Description: "Host agent last contact", InputSchema: obj(pg)},
 		{Name: "deploy_approve", Description: "Approve a gated deploy pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 	}
+}
+
+func (s *Server) version() string {
+	if s != nil && strings.TrimSpace(s.Cfg.Version) != "" {
+		return s.Cfg.Version
+	}
+	return "dev"
 }
 
 func ToolNames() []string {
@@ -161,7 +169,7 @@ func (s *Server) dispatch(token string, req rpcReq) (any, *rpcErr) {
 			"serverInfo": map[string]any{
 				"name":       "acahti",
 				"title":      "Acahti",
-				"version":    "1",
+				"version":    s.version(),
 				"websiteUrl": brand.Root(s.Cfg.RootURL),
 				"icons":      brand.Icons(s.Cfg.RootURL),
 			},
@@ -215,9 +223,9 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 	case "whoami":
 		u, err := s.FJ.UserSudo(token)
 		if err != nil {
-			return identity.View(token, token, s.Cfg.RootURL, s.Cfg.Domain, org), nil
+			return identity.View(token, s.Cfg.RootURL, s.Cfg.Domain, org), nil
 		}
-		return identity.View(u.Login, u.FullName, s.Cfg.RootURL, s.Cfg.Domain, org), nil
+		return identity.View(u.Login, s.Cfg.RootURL, s.Cfg.Domain, org), nil
 	case "repo_list":
 		return s.Cat.ListRepos(token, "", pq)
 	case "repo_get":
@@ -251,13 +259,13 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		if base == "" {
 			base = "dev"
 		}
-		return s.FJ.CreatePR(str("owner"), str("name"), str("title"), str("head"), base, str("body"))
+		return s.FJ.CreatePR(str("owner"), str("name"), str("title"), str("head"), base, str("body"), token)
 	case "pr_list":
 		return s.FJ.ListPRs(str("owner"), str("name"), str("state"), pq)
 	case "pr_get":
 		return s.Cat.PRDetail(token, str("owner"), str("name"), int(num("number")))
 	case "pr_comment":
-		return map[string]any{"ok": true}, s.FJ.CommentPR(str("owner"), str("name"), int(num("number")), str("body"))
+		return map[string]any{"ok": true}, s.FJ.CommentPR(str("owner"), str("name"), int(num("number")), str("body"), token)
 	case "pr_comments":
 		return s.Cat.ListComments(token, str("owner"), str("name"), int(num("number")), pq)
 	case "pr_merge":

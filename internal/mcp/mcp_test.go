@@ -185,7 +185,7 @@ func TestWaitChecksSnapshot(t *testing.T) {
 }
 
 func TestInitializeInstructions(t *testing.T) {
-	s := &Server{Cfg: ConfigView{RootURL: "https://acahti.saidc.ai", Domain: "acahti.saidc.ai", Org: "acme"}}
+	s := &Server{Cfg: ConfigView{RootURL: "https://acahti.saidc.ai", Domain: "acahti.saidc.ai", Org: "acme", Version: "0.2.36"}}
 	res, err := s.dispatch("", rpcReq{Method: "initialize"})
 	if err != nil {
 		t.Fatal(err)
@@ -196,7 +196,7 @@ func TestInitializeInstructions(t *testing.T) {
 		t.Fatalf("instructions=%s", inst)
 	}
 	info, _ := m["serverInfo"].(map[string]any)
-	if info["name"] != "acahti" || info["title"] != "Acahti" {
+	if info["name"] != "acahti" || info["title"] != "Acahti" || info["version"] != "0.2.36" {
 		t.Fatalf("serverInfo=%v", info)
 	}
 	icons, _ := info["icons"].([]map[string]any)
@@ -204,7 +204,7 @@ func TestInitializeInstructions(t *testing.T) {
 		t.Fatalf("icons=%v", info["icons"])
 	}
 	src, _ := icons[0]["src"].(string)
-	if !strings.HasPrefix(src, "https://acahti.saidc.ai/") || !strings.Contains(src, "acahti.") {
+	if !strings.HasPrefix(src, "data:image/png;base64,") {
 		t.Fatalf("icon src=%s", src)
 	}
 }

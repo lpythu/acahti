@@ -1,6 +1,7 @@
 package brand
 
 import (
+	"encoding/base64"
 	_ "embed"
 	"net/http"
 	"strings"
@@ -26,6 +27,7 @@ func PNGURL(rootURL string) string {
 
 func Icons(rootURL string) []map[string]any {
 	return []map[string]any{
+		{"src": "data:image/png;base64," + base64.StdEncoding.EncodeToString(PNG), "mimeType": "image/png"},
 		{"src": SVGURL(rootURL), "mimeType": "image/svg+xml"},
 		{"src": PNGURL(rootURL), "mimeType": "image/png"},
 	}
