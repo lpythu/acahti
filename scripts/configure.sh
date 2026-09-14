@@ -105,15 +105,20 @@ if [[ "${ok}" -ne 1 ]]; then
 fi
 
 echo "==> Woodpecker forge session"
-wp_token="$(ACAHTI_ADMIN_USER="${ACAHTI_ADMIN_USER}" ACAHTI_ADMIN_PASSWORD="${ACAHTI_ADMIN_PASSWORD}" \
+wp_token=""
+if wp_token="$(ACAHTI_ADMIN_USER="${ACAHTI_ADMIN_USER}" ACAHTI_ADMIN_PASSWORD="${ACAHTI_ADMIN_PASSWORD}" \
   ROOT_URL="${ROOT_URL}" DOMAIN="${DOMAIN}" \
-  python3 "${root}/scripts/woodpecker-oauth.py")"
-_upsert_env WOODPECKER_TOKEN "${wp_token}"
-WOODPECKER_TOKEN="${wp_token}"
-printf '%s\n' "${wp_token}" | sudo tee "${ACAHTI_DATA}/woodpecker.token" >/dev/null
-sudo chmod 600 "${ACAHTI_DATA}/woodpecker.token"
+  python3 "${root}/scripts/woodpecker-oauth.py")"; then
+  _upsert_env WOODPECKER_TOKEN "${wp_token}"
+  WOODPECKER_TOKEN="${wp_token}"
+  printf '%s\n' "${wp_token}" | sudo tee "${ACAHTI_DATA}/woodpecker.token" >/dev/null
+  sudo chmod 600 "${ACAHTI_DATA}/woodpecker.token"
+else
+  wp_token="${WOODPECKER_TOKEN:-}"
+  echo "Woodpecker OAuth cookie not issued; probing existing token"
+fi
 
-if ! curl -fsS \
+if [[ -z "${wp_token}" ]] || ! curl -fsS \
   -H "Authorization: Bearer ${wp_token}" \
   -H "Cookie: user_sess=${wp_token}" \
   "http://127.0.0.1:8000/ci/api/user/repos?page=1&perPage=1" >/dev/null; then

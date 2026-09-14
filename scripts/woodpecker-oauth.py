@@ -63,20 +63,22 @@ def opener() -> urllib.request.OpenerDirector:
 def rewrite(url: str) -> str:
     if not url:
         return url
-    u = url
-    u = u.replace("http://forgejo:3000", FJ)
-    u = u.replace("http://woodpecker:8000", WP)
-    u = u.replace("http://127.0.0.1:8000", WP)
-    u = u.replace(ROOT, "http://127.0.0.1:8080")
-    # DOMAIN=localhost is also WOODPECKER_HOST; do not rewrite it to the gateway.
-    if DOMAIN not in ("", "localhost", "127.0.0.1"):
-        u = u.replace(f"https://{DOMAIN}", "http://127.0.0.1:8080")
-        u = u.replace(f"http://{DOMAIN}", "http://127.0.0.1:8080")
-    if "/ci" in u or "/authorize" in u:
-        u = u.replace("http://127.0.0.1:8080/ci", f"{WP}/ci")
-        u = u.replace("http://127.0.0.1:8080/authorize", f"{WP}/ci/authorize")
-    if "/login/oauth" in u or "/user/login" in u:
-        u = u.replace("http://127.0.0.1:8080", FJ)
+    u = url.replace("http://forgejo:3000", FJ).replace("http://woodpecker:8000", WP)
+    host = (urllib.parse.urlparse(u).hostname or "").lower()
+    if host in {"127.0.0.1", "localhost"}:
+        return u
+    parsed = urllib.parse.urlparse(u)
+    path = parsed.path or ""
+    if path.startswith("/ci") or path.startswith("/authorize"):
+        suffix = path if path.startswith("/ci") else "/ci" + path
+        if parsed.query:
+            suffix += "?" + parsed.query
+        return WP + suffix
+    if path.startswith("/login/oauth") or path.startswith("/user/login"):
+        suffix = path
+        if parsed.query:
+            suffix += "?" + parsed.query
+        return FJ + suffix
     return u
 
 
@@ -160,7 +162,8 @@ def selftest() -> None:
     cases = {
         "http://forgejo:3000/login/oauth/authorize": f"{FJ}/login/oauth/authorize",
         "http://woodpecker:8000/ci/authorize": f"{WP}/ci/authorize",
-        "http://127.0.0.1:8000/ci/authorize": f"{WP}/ci/authorize",
+        "http://127.0.0.1:8000/ci/authorize": "http://127.0.0.1:8000/ci/authorize",
+        "http://localhost:8000/ci/authorize": "http://localhost:8000/ci/authorize",
         f"{ROOT}/login/oauth/authorize": f"{FJ}/login/oauth/authorize",
         f"{ROOT}/ci/authorize": f"{WP}/ci/authorize",
     }
