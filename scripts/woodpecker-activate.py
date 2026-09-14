@@ -14,6 +14,30 @@ WP = os.environ.get("WOODPECKER_LOOPBACK", "http://127.0.0.1:8000").rstrip("/")
 FJ_TOKEN = os.environ.get("ACAHTI_ADMIN_TOKEN", "").strip()
 WP_TOKEN = os.environ.get("WOODPECKER_TOKEN", "").strip()
 CONFIG = ".acahti/pipelines"
+CSRF_MARK = 'WOODPECKER_CSRF = "'
+
+
+def parse_csrf(raw: str) -> str:
+    i = raw.find(CSRF_MARK)
+    if i < 0:
+        return ""
+    s = raw[i + len(CSRF_MARK) :]
+    j = s.find('"')
+    if j < 0:
+        return ""
+    return s[:j]
+
+
+def csrf() -> str:
+    req = urllib.request.Request(
+        WP + "/ci/web-config.js",
+        headers={"Cookie": "user_sess=" + WP_TOKEN},
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return parse_csrf(resp.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError:
+        return ""
 
 
 def fj(path: str) -> object:
@@ -27,14 +51,19 @@ def fj(path: str) -> object:
 
 def wp(method: str, path: str, data: dict | None = None) -> tuple[int, object]:
     body = None if data is None else json.dumps(data).encode()
+    headers = {
+        "Authorization": "Bearer " + WP_TOKEN,
+        "Cookie": "user_sess=" + WP_TOKEN,
+        "Content-Type": "application/json",
+    }
+    if method not in ("GET", "HEAD"):
+        token = csrf()
+        if token:
+            headers["X-CSRF-TOKEN"] = token
     req = urllib.request.Request(
         WP + "/ci" + path,
         data=body,
-        headers={
-            "Authorization": "Bearer " + WP_TOKEN,
-            "Cookie": "user_sess=" + WP_TOKEN,
-            "Content-Type": "application/json",
-        },
+        headers=headers,
         method=method,
     )
     try:
@@ -102,5 +131,18 @@ def main() -> None:
     print(f"activated {ok}/{len(names)}", file=sys.stderr)
 
 
+def selftest() -> None:
+    raw = 'window.WOODPECKER_CSRF = "abc-123";\n'
+    got = parse_csrf(raw)
+    if got != "abc-123":
+        raise SystemExit(f"parse_csrf -> {got!r} want 'abc-123'")
+    if parse_csrf("no csrf here") != "":
+        raise SystemExit("parse_csrf empty miss")
+    print("ok", file=sys.stderr)
+
+
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:] == ["--selftest"]:
+        selftest()
+    else:
+        main()
