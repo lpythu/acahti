@@ -160,4 +160,16 @@ func TestInitializeInstructions(t *testing.T) {
 	if !strings.Contains(inst, "apply_when_remote_host") || !strings.Contains(inst, "acahti.saidc.ai") {
 		t.Fatalf("instructions=%s", inst)
 	}
+	info, _ := m["serverInfo"].(map[string]any)
+	if info["name"] != "acahti" || info["title"] != "Acahti" {
+		t.Fatalf("serverInfo=%v", info)
+	}
+	icons, _ := info["icons"].([]map[string]any)
+	if len(icons) == 0 {
+		t.Fatalf("icons=%v", info["icons"])
+	}
+	src, _ := icons[0]["src"].(string)
+	if !strings.HasPrefix(src, "https://acahti.saidc.ai/") || !strings.Contains(src, "acahti.") {
+		t.Fatalf("icon src=%s", src)
+	}
 }

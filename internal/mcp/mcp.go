@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"acahti/internal/auth"
+	"acahti/internal/brand"
 	"acahti/internal/catalog"
 	"acahti/internal/config"
 	"acahti/internal/forgejo"
@@ -121,6 +122,7 @@ func ToolNames() []string {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Link", brand.Link(s.Cfg.RootURL))
 	login, ok := s.Auth.Parse(auth.Bearer(r))
 	if !ok {
 		oauth.Challenge(w, s.Cfg.RootURL+"/.well-known/oauth-protected-resource")
@@ -155,7 +157,13 @@ func (s *Server) dispatch(token string, req rpcReq) (any, *rpcErr) {
 		return map[string]any{
 			"protocolVersion": "2025-03-26",
 			"capabilities":    map[string]any{"tools": map[string]any{}},
-			"serverInfo":      map[string]any{"name": "acahti", "version": "1"},
+			"serverInfo": map[string]any{
+				"name":       "acahti",
+				"title":      "Acahti",
+				"version":    "1",
+				"websiteUrl": brand.Root(s.Cfg.RootURL),
+				"icons":      brand.Icons(s.Cfg.RootURL),
+			},
 			"instructions":    identity.Instructions(s.Cfg.RootURL, s.Cfg.Domain),
 		}, nil
 	case "notifications/initialized", "ping":

@@ -147,4 +147,23 @@ func TestSkillAndOAuth(t *testing.T) {
 	if !strings.Contains(rr.Header().Get("WWW-Authenticate"), "resource_metadata") {
 		t.Fatalf("challenge %s", rr.Header().Get("WWW-Authenticate"))
 	}
+	if !strings.Contains(rr.Header().Get("Link"), "/acahti.svg") {
+		t.Fatalf("mcp link %s", rr.Header().Get("Link"))
+	}
+
+	for _, path := range []string{"/favicon.ico", "/acahti.png", "/apple-touch-icon.png"} {
+		rr = httptest.NewRecorder()
+		h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, path, nil))
+		if rr.Code != http.StatusOK || rr.Header().Get("Content-Type") != "image/png" {
+			t.Fatalf("%s %d %s", path, rr.Code, rr.Header().Get("Content-Type"))
+		}
+		if strings.Contains(rr.Body.String(), "<html") {
+			t.Fatalf("%s returned HTML", path)
+		}
+	}
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/acahti.svg", nil))
+	if rr.Code != http.StatusOK || !strings.HasPrefix(rr.Header().Get("Content-Type"), "image/svg+xml") {
+		t.Fatalf("acahti.svg %d %s", rr.Code, rr.Header().Get("Content-Type"))
+	}
 }

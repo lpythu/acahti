@@ -80,6 +80,17 @@ func TestPKCERoundTrip(t *testing.T) {
 	}
 
 	rr = httptest.NewRecorder()
+	s.Metadata(rr, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server", nil))
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"logo_uri":"http://acahti.example/acahti.svg"`) {
+		t.Fatalf("as metadata %d %s", rr.Code, rr.Body.String())
+	}
+	rr = httptest.NewRecorder()
+	s.Resource(rr, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource", nil))
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"logo_uri":"http://acahti.example/acahti.svg"`) {
+		t.Fatalf("resource metadata %d %s", rr.Code, rr.Body.String())
+	}
+
+	rr = httptest.NewRecorder()
 	Challenge(rr, "http://acahti.example/.well-known/oauth-protected-resource")
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("challenge %d", rr.Code)

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"acahti/internal/auth"
+	"acahti/internal/brand"
 )
 
 type client struct {
@@ -132,6 +133,7 @@ func (s *Server) Metadata(w http.ResponseWriter, _ *http.Request) {
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
 		"token_endpoint_auth_methods_supported": []string{"none"},
 		"scopes_supported":                      []string{"mcp"},
+		"logo_uri":                              brand.SVGURL(s.RootURL),
 	})
 }
 
@@ -140,6 +142,8 @@ func (s *Server) Resource(w http.ResponseWriter, _ *http.Request) {
 		"resource":                 s.RootURL + "/mcp",
 		"authorization_servers":    []string{s.RootURL},
 		"bearer_methods_supported": []string{"header"},
+		"resource_name":            "Acahti",
+		"logo_uri":                 brand.SVGURL(s.RootURL),
 	})
 }
 

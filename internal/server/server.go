@@ -10,6 +10,7 @@ import (
 
 	"acahti/internal/api"
 	"acahti/internal/auth"
+	"acahti/internal/brand"
 	"acahti/internal/config"
 	"acahti/internal/events"
 	"acahti/internal/forgejo"
@@ -95,7 +96,11 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 	mux.HandleFunc("POST /ui/password", pages.Password)
 	mux.HandleFunc("GET /logout", pages.Logout)
 	mux.Handle("GET /assets/", http.FileServer(http.FS(pages.Files())))
-	mux.HandleFunc("GET /acahti.svg", pages.PublicFile)
+	mux.HandleFunc("GET /acahti.svg", brand.ServeSVG)
+	mux.HandleFunc("GET /acahti.png", brand.ServePNG)
+	mux.HandleFunc("GET /favicon.ico", brand.ServePNG)
+	mux.HandleFunc("GET /apple-touch-icon.png", brand.ServePNG)
+	mux.HandleFunc("GET /apple-touch-icon-precomposed.png", brand.ServePNG)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.NotFound(w, r)
