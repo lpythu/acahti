@@ -365,8 +365,8 @@ func (p *Pages) Stack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"version":           p.Cfg.Version,
-		"forgejo":           p.Cfg.ForgejoVersion,
+		"version":      p.Cfg.Version,
+		"forgejo":      p.Cfg.ForgejoVersion,
 		"ci":           p.Cfg.WoodpeckerVersion,
 		"postgres":     p.Cfg.PostgresVersion,
 		"upgrade_hint": "Ask a coding agent to follow skills/acahti-install: replace the tree, bash scripts/up.sh, then ROLE=both agent.sh on buildof.",
