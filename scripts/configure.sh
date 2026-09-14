@@ -127,6 +127,10 @@ if [[ -z "${wp_token}" ]] || ! curl -fsS \
   exit 1
 fi
 
+echo "==> Woodpecker pipeline path .acahti/pipelines"
+ACAHTI_ORG="${ACAHTI_ORG}" ACAHTI_ADMIN_TOKEN="${token}" WOODPECKER_TOKEN="${wp_token}" \
+  python3 "${root}/scripts/woodpecker-activate.py"
+
 printf '%s\n' "${WOODPECKER_AGENT_SECRET}" | sudo tee "${ACAHTI_DATA}/agent.secret" >/dev/null
 sudo chmod 600 "${ACAHTI_DATA}/agent.secret"
 
