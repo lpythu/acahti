@@ -65,6 +65,7 @@ func (c *Client) Ready() bool {
 
 type Repo struct {
 	ID              int64  `json:"id"`
+	ForgeRemoteID   string `json:"forge_remote_id"`
 	FullName        string `json:"full_name"`
 	Name            string `json:"name"`
 	IsActive        bool   `json:"active"`
@@ -272,26 +273,52 @@ func (c *Client) ListRepos(q page.Query) (page.Result[Repo], error) {
 	return page.Clip(out, q), nil
 }
 
-func (c *Client) Activate(fullName string) error {
-	enc := url.PathEscape(fullName)
-	_, _, err := c.do(http.MethodPost, "/api/repos/"+enc, nil)
-	if err != nil {
-		_, _, err = c.do(http.MethodPost, "/api/repos?forge_remote_id="+url.QueryEscape(fullName), nil)
+func (c *Client) Activate(fullName, forgeRemoteID string) error {
+	if forgeRemoteID == "" {
+		return fmt.Errorf("empty forge_remote_id")
 	}
-	if err != nil {
+	b, status, err := c.do(http.MethodPost, "/api/repos?forge_remote_id="+url.QueryEscape(forgeRemoteID), nil)
+	id := int64(0)
+	if err == nil {
+		var repo Repo
+		if json.Unmarshal(b, &repo) == nil {
+			id = repo.ID
+		}
+	} else if status != http.StatusConflict {
 		return err
 	}
 	c.forgetIDs()
-	return c.setPipelinePath(fullName, ".acahti/pipelines")
+	if id == 0 {
+		looked, lerr := c.lookup(fullName)
+		if lerr != nil {
+			return lerr
+		}
+		id = looked.ID
+	}
+	if id == 0 {
+		return fmt.Errorf("woodpecker repo %s has no id", fullName)
+	}
+	_, _, err = c.do(http.MethodPatch, "/api/repos/"+strconv.FormatInt(id, 10), map[string]any{
+		"config": ".acahti/pipelines",
+		"active": true,
+	})
+	return err
 }
 
-func (c *Client) setPipelinePath(fullName, path string) error {
-	key, err := c.repoKey(fullName)
-	if err != nil {
-		return err
+func (c *Client) lookup(fullName string) (Repo, error) {
+	owner, name, ok := strings.Cut(fullName, "/")
+	if !ok || owner == "" || name == "" {
+		return Repo{}, fmt.Errorf("repo %s", fullName)
 	}
-	_, _, err = c.do(http.MethodPatch, "/api/repos/"+key, map[string]string{"config": path})
-	return err
+	b, _, err := c.do(http.MethodGet, "/api/repos/lookup/"+url.PathEscape(owner)+"/"+url.PathEscape(name), nil)
+	if err != nil {
+		return Repo{}, err
+	}
+	var repo Repo
+	if err := json.Unmarshal(b, &repo); err != nil {
+		return Repo{}, err
+	}
+	return repo, nil
 }
 
 func (c *Client) forgetIDs() {

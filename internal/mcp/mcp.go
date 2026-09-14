@@ -238,7 +238,7 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		}
 		_ = s.FJ.ProtectTrains(org, repo.Name)
 		if s.WP.Ready() {
-			_ = s.WP.Activate(org + "/" + repo.Name)
+			_ = s.WP.Activate(org+"/"+repo.Name, strconv.FormatInt(repo.ID, 10))
 		}
 		return s.Cat.PublicRepo(repo), nil
 	case "branch_list":
