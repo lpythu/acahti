@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Ensure the Forgejo OAuth app Woodpecker uses (loopback redirect only).
 
-Always deletes acahti-ci and creates it again so the secret in
-.env matches Forgejo. Prints JSON {client_id, client_secret}.
+Reuse the existing acahti-ci client when .env still matches Forgejo.
+Only rotate when the app is missing or the stored client id is stale.
+Prints JSON {client_id, client_secret}.
 """
 
 import json
@@ -36,14 +37,25 @@ def req(method: str, path: str, data: dict | None = None) -> object:
 def main() -> None:
     if not TOKEN:
         raise SystemExit("ACAHTI_ADMIN_TOKEN is empty")
-    payload = {"name": NAME, "confidential_client": True, "redirect_uris": [REDIRECT]}
+    have_id = os.environ.get("WOODPECKER_FORGEJO_CLIENT", "").strip()
+    have_secret = os.environ.get("WOODPECKER_FORGEJO_SECRET", "").strip()
     apps = req("GET", "/api/v1/user/applications/oauth2") or []
     if not isinstance(apps, list):
         raise SystemExit("oauth app list is not an array")
-    for app in apps:
-        if isinstance(app, dict) and app.get("name") == NAME:
-            req("DELETE", f"/api/v1/user/applications/oauth2/{app['id']}")
-    created = req("POST", "/api/v1/user/applications/oauth2", payload)
+    live = [a for a in apps if isinstance(a, dict) and a.get("name") == NAME]
+    if have_id and have_secret:
+        for app in live:
+            if app.get("client_id") == have_id:
+                json.dump({"client_id": have_id, "client_secret": have_secret}, sys.stdout)
+                sys.stdout.write("\n")
+                return
+    for app in live:
+        req("DELETE", f"/api/v1/user/applications/oauth2/{app['id']}")
+    created = req("POST", "/api/v1/user/applications/oauth2", {
+        "name": NAME,
+        "confidential_client": True,
+        "redirect_uris": [REDIRECT],
+    })
     if not isinstance(created, dict) or not created.get("client_id") or not created.get("client_secret"):
         raise SystemExit("create oauth app returned no client")
     json.dump({"client_id": created["client_id"], "client_secret": created["client_secret"]}, sys.stdout)

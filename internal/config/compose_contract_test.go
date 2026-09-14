@@ -27,4 +27,10 @@ func TestWoodpeckerForgeOAuthIsInternal(t *testing.T) {
 	if !strings.Contains(text, "WOODPECKER_FORGEJO_URL: http://forgejo:3000") {
 		t.Fatal("missing compose-net Forgejo URL")
 	}
+	if !strings.Contains(text, "WOODPECKER_GRPC_SECRET:") {
+		t.Fatal("WOODPECKER_GRPC_SECRET must be persisted; a random one drops every agent on recreate")
+	}
+	if !strings.Contains(text, `WOODPECKER_DEFAULT_PIPELINE_CONFIGS: ".acahti/pipelines/"`) {
+		t.Fatal("server default pipeline path must be the .acahti/pipelines/ directory")
+	}
 }

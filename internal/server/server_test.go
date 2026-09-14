@@ -85,6 +85,31 @@ func TestPublicAllowlist(t *testing.T) {
 	}
 
 	hit = ""
+	forge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/user" && r.Header.Get("Authorization") == "token forge-oauth" {
+			_ = json.NewEncoder(w).Encode(map[string]string{"login": "acahti"})
+			return
+		}
+		hit = r.URL.Path
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	t.Cleanup(forge.Close)
+	hForge := New(config.Config{
+		SessionSecret: "test",
+		RootURL:       "http://127.0.0.1",
+		Org:           "acme",
+		ForgejoURL:    forge.URL,
+		DataDir:       t.TempDir(),
+	}, forgejo.New(forge.URL, ""), woodpecker.New("http://127.0.0.1:9", ""), events.New())
+	gitForge := httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs", nil)
+	gitForge.SetBasicAuth("acahti", "forge-oauth")
+	rr = httptest.NewRecorder()
+	hForge.ServeHTTP(rr, gitForge)
+	if hit != "/acme/demo.git/info/refs" || rr.Code != http.StatusTeapot {
+		t.Fatalf("git forge token hit=%q code=%d", hit, rr.Code)
+	}
+
+	hit = ""
 	rr = httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/packages/acme/pypi/simple/", nil))
 	if hit != "/api/packages/acme/pypi/simple/" || rr.Code != http.StatusTeapot {

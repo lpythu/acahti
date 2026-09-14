@@ -221,6 +221,13 @@ func (c *Client) UserSudo(login string) (User, error) {
 	return c.user(login, "")
 }
 
+func (c *Client) UserByToken(token string) (User, error) {
+	if token == "" {
+		return User{}, fmt.Errorf("empty token")
+	}
+	return c.user("", token)
+}
+
 func (c *Client) user(sudo, token string) (User, error) {
 	b, _, err := c.do(http.MethodGet, "/api/v1/user", token, sudo, nil)
 	if err != nil {

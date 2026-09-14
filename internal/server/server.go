@@ -127,25 +127,15 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 		case strings.HasPrefix(p, "/api/packages/"):
 			fjProxy.ServeHTTP(w, r)
 		case gitHTTP(p):
-			gitAs(a, cfg.AdminToken, fjProxy, w, r)
+			gitAs(a, fj, cfg.AdminToken, fjProxy, w, r)
 		default:
 			mux.ServeHTTP(w, r)
 		}
 	})
 }
 
-func gitAs(a *auth.Service, admin string, p *httputil.ReverseProxy, w http.ResponseWriter, r *http.Request) {
-	login := ""
-	if u, pass, ok := r.BasicAuth(); ok {
-		if user, valid := a.Parse(pass); valid && (u == user || u == "git") {
-			login = user
-		}
-	}
-	if login == "" {
-		if user, ok := a.Parse(auth.Bearer(r)); ok {
-			login = user
-		}
-	}
+func gitAs(a *auth.Service, fj *forgejo.Client, admin string, p *httputil.ReverseProxy, w http.ResponseWriter, r *http.Request) {
+	login := gitLogin(a, fj, r)
 	if login == "" {
 		w.Header().Set("WWW-Authenticate", `Basic realm="acahti"`)
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -155,6 +145,23 @@ func gitAs(a *auth.Service, admin string, p *httputil.ReverseProxy, w http.Respo
 	r.Header.Set("Sudo", login)
 	r.Header.Set("X-WebAuth-User", login)
 	p.ServeHTTP(w, r)
+}
+
+func gitLogin(a *auth.Service, fj *forgejo.Client, r *http.Request) string {
+	if u, pass, ok := r.BasicAuth(); ok {
+		if user, valid := a.Parse(pass); valid && (u == user || u == "git") {
+			return user
+		}
+		if fj != nil {
+			if fu, err := fj.UserByToken(pass); err == nil && fu.Login != "" && (u == fu.Login || u == "git" || u == "oauth2") {
+				return fu.Login
+			}
+		}
+	}
+	if user, ok := a.Parse(auth.Bearer(r)); ok {
+		return user
+	}
+	return ""
 }
 
 func closedKernel(p string) bool {
