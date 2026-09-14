@@ -250,11 +250,12 @@ func (p *Pages) Join(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	login := strings.TrimSpace(body.Username)
-	if login == "" || body.Password == "" || strings.TrimSpace(body.Code) == "" {
+	code := strings.TrimSpace(body.Code)
+	if login == "" || body.Password == "" || code == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username, password, and invite required"})
 		return
 	}
-	if p.InviteStore == nil || !p.InviteStore.Valid(strings.TrimSpace(body.Code)) {
+	if p.InviteStore == nil || !p.InviteStore.Valid(code) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "invalid invite"})
 		return
 	}
@@ -264,6 +265,7 @@ func (p *Pages) Join(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
+	_ = p.InviteStore.Delete(code)
 	_ = p.FJ.AddOrgMember(p.Cfg.Org, u.Login)
 	p.SetSession(w, u.Login)
 	writeJSON(w, http.StatusOK, identity.Session(u.Login, false, p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))

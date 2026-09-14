@@ -30,6 +30,11 @@ func Open(dir string) (*Store, error) {
 	b, err := os.ReadFile(s.path)
 	if err == nil {
 		_ = json.Unmarshal(b, &s.all)
+	} else if !os.IsNotExist(err) {
+		return nil, err
+	}
+	if err := s.persist(); err != nil {
+		return nil, err
 	}
 	return s, nil
 }
@@ -39,7 +44,11 @@ func (s *Store) persist() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.path, b, 0o600)
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, s.path)
 }
 
 func (s *Store) List() []Code {

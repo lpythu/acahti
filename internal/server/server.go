@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -21,7 +22,10 @@ import (
 
 func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *events.Hub) http.Handler {
 	a := auth.New([]byte(cfg.SessionSecret), cfg.AdminUser)
-	inv, _ := invite.Open(cfg.DataDir)
+	inv, err := invite.Open(cfg.DataDir)
+	if err != nil {
+		log.Fatalf("invite store: %v", err)
+	}
 	oa, _ := oauth.Open(cfg.DataDir, cfg.RootURL, a)
 	pages := web.New(cfg, fj, wp, a, inv, oa, hub)
 	mc := mcp.New(cfg, a, fj, wp)

@@ -19,8 +19,9 @@ RUN CGO_ENABLED=0 go build -trimpath \
   -o /acahti-gateway ./cmd/acahti-gateway
 
 FROM alpine:3.21
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata su-exec
 COPY --from=build /acahti-gateway /usr/local/bin/acahti-gateway
-USER 65532:65532
+COPY scripts/gateway-entrypoint.sh /usr/local/bin/gateway-entrypoint
+RUN chmod 755 /usr/local/bin/gateway-entrypoint
 EXPOSE 8080
-ENTRYPOINT ["/usr/local/bin/acahti-gateway"]
+ENTRYPOINT ["/usr/local/bin/gateway-entrypoint"]
