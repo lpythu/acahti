@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Complete Woodpecker → Forgejo OAuth on the acahti host (no browser).
 
-Talks to loopback ports published by compose. Rewrites public ROOT_URL
-redirects to 127.0.0.1 so this works before DNS/edge is up.
-Prints a Woodpecker personal token on stdout.
+Talks to loopback ports published by compose. Rewrites compose DNS
+(forgejo / woodpecker) and public ROOT_URL to 127.0.0.1. Prints a
+Woodpecker personal token on stdout.
 """
 
 import http.cookiejar
@@ -52,6 +52,8 @@ def rewrite(url: str) -> str:
     if not url:
         return url
     u = url
+    u = u.replace("http://forgejo:3000", FJ)
+    u = u.replace("http://woodpecker:8000", WP)
     u = u.replace(ROOT, "http://127.0.0.1:8080")
     u = u.replace(f"https://{DOMAIN}", "http://127.0.0.1:8080")
     u = u.replace(f"http://{DOMAIN}", "http://127.0.0.1:8080")
@@ -117,6 +119,7 @@ def main() -> None:
             grant_url = mact.group(1)
             if grant_url.startswith("/"):
                 grant_url = FJ + grant_url
+            grant_url = rewrite(grant_url)
         final, body = read(
             op,
             grant_url,
@@ -137,5 +140,22 @@ def main() -> None:
     raise SystemExit("woodpecker user_sess cookie missing after OAuth")
 
 
+def selftest() -> None:
+    cases = {
+        "http://forgejo:3000/login/oauth/authorize": f"{FJ}/login/oauth/authorize",
+        "http://woodpecker:8000/ci/authorize": f"{WP}/ci/authorize",
+        f"{ROOT}/login/oauth/authorize": f"{FJ}/login/oauth/authorize",
+        f"{ROOT}/ci/authorize": f"{WP}/ci/authorize",
+    }
+    for raw, want in cases.items():
+        got = rewrite(raw)
+        if got != want:
+            raise SystemExit(f"rewrite {raw!r} -> {got!r} want {want!r}")
+    print("ok", file=sys.stderr)
+
+
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:] == ["--selftest"]:
+        selftest()
+    else:
+        main()
