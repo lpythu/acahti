@@ -30,7 +30,7 @@ flowchart LR
   agents -->|"git HTTPS"| gw
 ```
 
-Gateway is the only HTTP app this repo starts. Bind is `GATEWAY_BIND` (default `127.0.0.1:8080`). TLS and the public hostname are **out of tree**: point your reverse proxy or tunnel at that bind and set `ROOT_URL` / `DOMAIN` to the public URL. Public identity is **Acahti**: SPA, MCP, `/acahti/v1`, git HTTPS, and `/api/packages`. Forgejo and Woodpecker stay on the compose network (plus loopback for setup). `/ci` and Forgejo HTML (`/login/oauth`, `/user/login`, `/api/v1`) are not public. Woodpecker authorize and token refresh use `http://forgejo:3000` only — never `ROOT_URL`. `WOODPECKER_HOST` is `http://127.0.0.1:8000/ci`. Every `up.sh` re-binds that session.
+Gateway is the only HTTP app this repo starts. Bind is `GATEWAY_BIND` (default `127.0.0.1:8080`). TLS and the public hostname are **out of tree**: point your reverse proxy or tunnel at that bind and set `ROOT_URL` / `DOMAIN` to the public URL. Public identity is **Acahti**: SPA, MCP, `/acahti/v1`, git HTTPS, and `/api/packages`. Forgejo and Woodpecker stay on the compose network (plus loopback for setup). `/ci` and Forgejo HTML (`/login/oauth`, `/user/login`, `/api/v1`) are not public. Woodpecker authorize and token refresh use `http://forgejo:3000` only — never `ROOT_URL`. `WOODPECKER_HOST` is `http://localhost:8000/ci`. Every `up.sh` re-binds that session.
 
 ## Host roles
 

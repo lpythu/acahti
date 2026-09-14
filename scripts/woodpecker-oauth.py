@@ -24,14 +24,26 @@ DOMAIN = env("DOMAIN", "localhost")
 USER = env("ACAHTI_ADMIN_USER", "acahti")
 PASSWORD = env("ACAHTI_ADMIN_PASSWORD", "")
 FJ = env("FORGEJO_LOOPBACK", "http://127.0.0.1:3000").rstrip("/")
-WP = env("WOODPECKER_LOOPBACK", "http://127.0.0.1:8000").rstrip("/")
+WP = env("WOODPECKER_LOOPBACK", "http://localhost:8000").rstrip("/")
 
 
-class InsecurePolicy(http.cookiejar.DefaultCookiePolicy):
+class LoopbackPolicy(http.cookiejar.DefaultCookiePolicy):
     def return_ok_secure(self, cookie, request):
         return True
 
     def set_ok_secure(self, cookie, request):
+        return True
+
+    def return_ok_domain(self, cookie, request):
+        return True
+
+    def set_ok_domain(self, cookie, request):
+        return True
+
+    def return_ok_port(self, cookie, request):
+        return True
+
+    def set_ok_port(self, cookie, request):
         return True
 
 
@@ -41,7 +53,7 @@ class RewriteRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def opener() -> urllib.request.OpenerDirector:
-    cj = http.cookiejar.CookieJar(policy=InsecurePolicy())
+    cj = http.cookiejar.CookieJar(policy=LoopbackPolicy())
     return urllib.request.build_opener(
         urllib.request.HTTPCookieProcessor(cj),
         RewriteRedirect(),
@@ -54,9 +66,12 @@ def rewrite(url: str) -> str:
     u = url
     u = u.replace("http://forgejo:3000", FJ)
     u = u.replace("http://woodpecker:8000", WP)
+    u = u.replace("http://127.0.0.1:8000", WP)
     u = u.replace(ROOT, "http://127.0.0.1:8080")
-    u = u.replace(f"https://{DOMAIN}", "http://127.0.0.1:8080")
-    u = u.replace(f"http://{DOMAIN}", "http://127.0.0.1:8080")
+    # DOMAIN=localhost is also WOODPECKER_HOST; do not rewrite it to the gateway.
+    if DOMAIN not in ("", "localhost", "127.0.0.1"):
+        u = u.replace(f"https://{DOMAIN}", "http://127.0.0.1:8080")
+        u = u.replace(f"http://{DOMAIN}", "http://127.0.0.1:8080")
     if "/ci" in u or "/authorize" in u:
         u = u.replace("http://127.0.0.1:8080/ci", f"{WP}/ci")
         u = u.replace("http://127.0.0.1:8080/authorize", f"{WP}/ci/authorize")
@@ -127,23 +142,25 @@ def main() -> None:
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
 
-    # Woodpecker 3.18 has no user-token create API; the session cookie is the
-    # long-lived credential we persist for the gateway.
+    read(op, f"{WP}/ci/")
+    names: list[str] = []
     for handler in op.handlers:
         jar = getattr(handler, "cookiejar", None)
         if not jar:
             continue
         for cookie in jar:
+            names.append(f"{cookie.name}@{cookie.domain}")
             if cookie.name == "user_sess" and cookie.value:
                 sys.stdout.write(cookie.value.strip() + "\n")
                 return
-    raise SystemExit("woodpecker user_sess cookie missing after OAuth")
+    raise SystemExit(f"woodpecker user_sess cookie missing after OAuth; cookies={names}")
 
 
 def selftest() -> None:
     cases = {
         "http://forgejo:3000/login/oauth/authorize": f"{FJ}/login/oauth/authorize",
         "http://woodpecker:8000/ci/authorize": f"{WP}/ci/authorize",
+        "http://127.0.0.1:8000/ci/authorize": f"{WP}/ci/authorize",
         f"{ROOT}/login/oauth/authorize": f"{FJ}/login/oauth/authorize",
         f"{ROOT}/ci/authorize": f"{WP}/ci/authorize",
     }

@@ -21,8 +21,8 @@ func TestWoodpeckerForgeOAuthIsInternal(t *testing.T) {
 	if strings.Contains(text, "WOODPECKER_EXPERT_FORGE_OAUTH_HOST") {
 		t.Fatal("forge token refresh must use WOODPECKER_FORGEJO_URL; public gateway closes /login/oauth")
 	}
-	if !strings.Contains(text, "WOODPECKER_HOST: http://127.0.0.1:8000/ci") {
-		t.Fatal("WOODPECKER_HOST must be the published loopback /ci")
+	if !strings.Contains(text, "WOODPECKER_HOST: http://localhost:8000/ci") {
+		t.Fatal("WOODPECKER_HOST must be the published loopback /ci (localhost, not a raw IP)")
 	}
 	if !strings.Contains(text, "WOODPECKER_FORGEJO_URL: http://forgejo:3000") {
 		t.Fatal("missing compose-net Forgejo URL")

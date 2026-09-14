@@ -12,7 +12,7 @@ import urllib.error
 import urllib.request
 
 NAME = "acahti-ci"
-REDIRECT = "http://127.0.0.1:8000/ci/authorize"
+REDIRECT = "http://localhost:8000/ci/authorize"
 FJ = os.environ.get("FORGEJO_LOOPBACK", "http://127.0.0.1:3000").rstrip("/")
 TOKEN = os.environ.get("ACAHTI_ADMIN_TOKEN", "").strip()
 

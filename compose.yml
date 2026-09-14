@@ -123,7 +123,7 @@ services:
     environment:
       # Loopback only. Public gateway closes /ci and /login/oauth; forge
       # authorize + token refresh stay on WOODPECKER_FORGEJO_URL.
-      WOODPECKER_HOST: http://127.0.0.1:8000/ci
+      WOODPECKER_HOST: http://localhost:8000/ci
       WOODPECKER_EXPERT_WEBHOOK_HOST: http://woodpecker:8000/ci
       WOODPECKER_OPEN: "false"
       WOODPECKER_ADMIN: ${ACAHTI_ADMIN_USER:-acahti}
