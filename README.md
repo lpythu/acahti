@@ -8,6 +8,8 @@ Pinned versions live in [versions.env](versions.env) (`ACAHTI_VERSION` is this r
 
 ## Architecture
 
+See [architecture.md](architecture.md) for the current stack, pipeline read/write split, and page contracts.
+
 ```mermaid
 flowchart LR
   people[people]
@@ -26,6 +28,7 @@ flowchart LR
   gw --> wp
   fj --> pg
   wp --> pg
+  gw --> pg
   wp --> buildof
   agents -->|"git HTTPS"| gw
 ```
@@ -79,7 +82,7 @@ Install https://acahti.example.com/skill.md
 Join    https://acahti.example.com/join     (invite from an admin)
 ```
 
-Give the first line to any coding agent. It pulls this acahti’s skill, connects `$ROOT_URL/mcp`, and completes OAuth. If the browser has no account, open the second line with an admin invite and pick a username and password; existing accounts use `/login`. Then `whoami` and set `--local` git identity only when the remote host is acahti.
+Give the first line to any coding agent. It GET `$ROOT_URL/skill.md` this turn, connects `$ROOT_URL/mcp`, and completes OAuth. If the browser has no account, open the second line with an admin invite and pick a username and password; existing accounts use `/login`. Then `whoami` and set `--local` git identity when any remote host is acahti.
 
 - Git: `https://acahti.example.com/acme/<repo>.git` — username `whoami.login`, password is the OAuth `access_token` the client already holds
 - Packages: `https://acahti.example.com/api/packages/acme/pypi/simple/` and `…/npm/`

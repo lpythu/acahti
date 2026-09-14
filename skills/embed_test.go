@@ -18,12 +18,18 @@ func TestAcahtiFillsIslandURLs(t *testing.T) {
 		"team (Platform, ModelCamp",
 		"pipeline_list",
 		"checks_wait",
+		"git fetch --all",
+		"`dev` and `test` are protected",
+		"GET `https://acahti.example.com/skill.md` now",
 	} {
 		if !strings.Contains(s, need) {
 			t.Fatalf("missing %q in\n%s", need, s)
 		}
 	}
-	if strings.Contains(s, "ssh://") || strings.Contains(s, "SSH optional") {
-		t.Fatalf("git-over-ssh must not appear:\n%s", s)
+	if strings.Contains(s, "SSH optional") || strings.Contains(s, "ssh://git@") {
+		t.Fatalf("must not offer git-over-ssh:\n%s", s)
+	}
+	if len(SHA("https://acahti.example.com", "acme", "acahti.example.com")) != 12 {
+		t.Fatal("sha")
 	}
 }

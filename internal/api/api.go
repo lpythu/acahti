@@ -127,6 +127,9 @@ func route(path, method string, args map[string]any) (string, map[string]any) {
 			if len(rest) == 3 && rest[2] == "merge" {
 				return "pr_merge", extra
 			}
+			if len(rest) == 2 && method == http.MethodDelete {
+				return "pr_close", extra
+			}
 		}
 		if len(rest) == 2 && rest[0] == "checks" {
 			extra["sha"] = rest[1]

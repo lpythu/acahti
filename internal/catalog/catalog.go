@@ -449,6 +449,16 @@ func (c *Catalog) MergePR(user, owner, name string, number int) (map[string]any,
 	return map[string]any{"merged": true, "statuses": st}, nil
 }
 
+func (c *Catalog) ClosePR(user, owner, name string, number int) (map[string]any, error) {
+	if _, err := c.seeRepo(user, owner, name); err != nil {
+		return nil, err
+	}
+	if err := c.FJ.ClosePR(owner, name, number); err != nil {
+		return nil, err
+	}
+	return map[string]any{"ok": true, "state": "closed"}, nil
+}
+
 func (c *Catalog) rewriteChecks(st []forgejo.Status) {
 	for i := range st {
 		st[i].TargetURL = c.acahtiCheckURL(st[i].TargetURL)
@@ -947,12 +957,38 @@ func (c *Catalog) PipelineLogs(user, repo string, number, step, tail int64) (map
 	return map[string]any{"log": b.String(), "steps": failed}, nil
 }
 
+func (c *Catalog) fillPRHeads(items []forgejo.PR) {
+	for i := range items {
+		p := &items[i]
+		if p.Head.Ref != "" {
+			continue
+		}
+		owner, name, ok := strings.Cut(p.Repo, "/")
+		if !ok || p.Number == 0 {
+			continue
+		}
+		full, err := c.FJ.GetPR(owner, name, p.Number)
+		if err != nil {
+			continue
+		}
+		p.Head = full.Head
+		p.Base = full.Base
+		if p.HTMLURL == "" {
+			p.HTMLURL = full.HTMLURL
+		}
+	}
+}
+
 func (c *Catalog) BoardPRs(user string, q page.Query) (page.Result[forgejo.PR], error) {
 	if !c.FJ.Ready() {
 		return page.Of([]forgejo.PR{}, q, false), nil
 	}
 	if c.IsOrgAdmin(user) {
-		return c.FJ.SearchPRs(c.Cfg.Org, "open", q)
+		res, err := c.FJ.SearchPRs(c.Cfg.Org, "open", q)
+		if err == nil {
+			c.fillPRHeads(res.Items)
+		}
+		return res, err
 	}
 	visible, err := c.userRepos(user)
 	if err != nil {
@@ -977,6 +1013,7 @@ func (c *Catalog) BoardPRs(user string, q page.Query) (page.Result[forgejo.PR], 
 		}
 		pq.Page++
 	}
+	c.fillPRHeads(matched)
 	return page.Take(matched, q), nil
 }
 

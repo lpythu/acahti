@@ -109,10 +109,11 @@ type PR struct {
 }
 
 type Status struct {
-	Status      string `json:"status"`
-	Context     string `json:"context"`
-	Description string `json:"description"`
-	TargetURL   string `json:"target_url"`
+	Status      string    `json:"status"`
+	Context     string    `json:"context"`
+	Description string    `json:"description"`
+	TargetURL   string    `json:"target_url"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type Package struct {
@@ -709,8 +710,23 @@ func (c *Client) ListBranches(owner, name string, q page.Query) (page.Result[Bra
 	return listPage[Branch](c, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/branches", q, nil, "")
 }
 
+func NormalizeRef(ref string) (string, error) {
+	ref = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(ref), "refs/"))
+	if ref == "" {
+		return "", fmt.Errorf("ref required: %s, heads/%s, or refs/heads/%s", "dev", "dev", "dev")
+	}
+	if !strings.Contains(ref, "/") {
+		ref = "heads/" + ref
+	}
+	return ref, nil
+}
+
 func (c *Client) DeleteRef(owner, name, ref string) error {
-	_, _, err := c.do(http.MethodDelete, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/git/refs/"+strings.TrimPrefix(ref, "refs/"), "", "", nil)
+	norm, err := NormalizeRef(ref)
+	if err != nil {
+		return err
+	}
+	_, _, err = c.do(http.MethodDelete, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/git/refs/"+norm, "", "", nil)
 	return err
 }
 
@@ -828,6 +844,13 @@ func (c *Client) MergePR(owner, name string, number int) error {
 	return err
 }
 
+func (c *Client) ClosePR(owner, name string, number int) error {
+	_, _, err := c.do(http.MethodPatch, fmt.Sprintf("/api/v1/repos/%s/%s/pulls/%d", url.PathEscape(owner), url.PathEscape(name), number), "", "", map[string]any{
+		"state": "closed",
+	})
+	return err
+}
+
 func (c *Client) CommitStatuses(owner, name, sha string) ([]Status, error) {
 	b, _, err := c.do(http.MethodGet, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/commits/"+url.PathEscape(sha)+"/statuses", "", "", nil)
 	if err != nil {
@@ -837,21 +860,49 @@ func (c *Client) CommitStatuses(owner, name, sha string) ([]Status, error) {
 	return out, json.Unmarshal(b, &out)
 }
 
+func LatestStatuses(st []Status) []Status {
+	type pick struct {
+		s   Status
+		idx int
+	}
+	best := map[string]pick{}
+	order := []string{}
+	for i, s := range st {
+		ctx := s.Context
+		if ctx == "" {
+			ctx = "_"
+		}
+		cur, ok := best[ctx]
+		if !ok {
+			best[ctx] = pick{s, i}
+			order = append(order, ctx)
+			continue
+		}
+		newer := s.CreatedAt.After(cur.s.CreatedAt)
+		sameUnknown := s.CreatedAt.IsZero() && cur.s.CreatedAt.IsZero() && i < cur.idx
+		if newer || sameUnknown {
+			best[ctx] = pick{s, i}
+		}
+	}
+	out := make([]Status, 0, len(order))
+	for _, ctx := range order {
+		out = append(out, best[ctx].s)
+	}
+	return out
+}
+
 func (c *Client) ChecksGreen(owner, name, sha string) (bool, []Status, error) {
 	st, err := c.CommitStatuses(owner, name, sha)
 	if err != nil {
 		return false, nil, err
 	}
+	st = LatestStatuses(st)
 	if len(st) == 0 {
 		return false, st, nil
 	}
 	ok := true
 	for _, s := range st {
-		switch strings.ToLower(s.Status) {
-		case "success":
-		case "pending", "warning":
-			ok = false
-		default:
+		if strings.ToLower(s.Status) != "success" {
 			ok = false
 		}
 	}

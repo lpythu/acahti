@@ -90,15 +90,16 @@ func tools() []toolSpec {
 		{Name: "repo_get", Description: "Get one repository", InputSchema: obj(map[string]any{"owner": str, "name": str}, "owner", "name")},
 		{Name: "repo_create", Description: "Create a private org repo and protect dev and test. Optional team attaches access", InputSchema: obj(map[string]any{"name": str, "team": str}, "name")},
 		{Name: "branch_list", Description: "List branches", InputSchema: obj(map[string]any{"owner": str, "name": str, "page": num, "page_size": num}, "owner", "name")},
-		{Name: "ref_delete", Description: "Delete a git ref", InputSchema: obj(map[string]any{"owner": str, "name": str, "ref": str}, "owner", "name", "ref")},
-		{Name: "pr_create", Description: "Open a pull request", InputSchema: obj(map[string]any{"owner": str, "name": str, "title": str, "head": str, "base": str, "body": str}, "owner", "name", "title", "head")},
+		{Name: "ref_delete", Description: "Delete a git ref. ref is dev, heads/dev, or refs/heads/dev", InputSchema: obj(map[string]any{"owner": str, "name": str, "ref": str}, "owner", "name", "ref")},
+		{Name: "pr_create", Description: "Open a pull request. base defaults to dev", InputSchema: obj(map[string]any{"owner": str, "name": str, "title": str, "head": str, "base": str, "body": str}, "owner", "name", "title", "head")},
 		{Name: "pr_list", Description: "List pull requests", InputSchema: obj(map[string]any{"owner": str, "name": str, "state": str, "page": num, "page_size": num}, "owner", "name")},
-		{Name: "pr_get", Description: "Get a pull request with commit checks", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
+		{Name: "pr_get", Description: "Get a pull request with latest commit checks per context", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
 		{Name: "pr_comment", Description: "Comment on a pull request", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num, "body": str}, "owner", "name", "number", "body")},
 		{Name: "pr_comments", Description: "List pull request comments", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num, "page": num, "page_size": num}, "owner", "name", "number")},
-		{Name: "pr_merge", Description: "Merge a PR only when commit checks are green", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
+		{Name: "pr_merge", Description: "Merge a PR only when the latest status per check context is success", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
+		{Name: "pr_close", Description: "Close a pull request", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
 		{Name: "checks_wait", Description: "Wait until commit checks finish or timeout. timeout_sec=0 is a snapshot", InputSchema: obj(map[string]any{"owner": str, "name": str, "sha": str, "timeout_sec": num}, "owner", "name", "sha")},
-		{Name: "pipeline_list", Description: "List pipelines for a repo", InputSchema: obj(map[string]any{"repo": str, "sha": str, "branch": str, "status": str, "page": num, "page_size": num}, "repo")},
+		{Name: "pipeline_list", Description: "List pipelines for a repo. sha is a commit prefix", InputSchema: obj(map[string]any{"repo": str, "sha": str, "branch": str, "status": str, "page": num, "page_size": num}, "repo")},
 		{Name: "pipeline_get", Description: "Get one pipeline and its steps", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 		{Name: "pipeline_log", Description: "Fetch pipeline logs. Omit step for failed steps only", InputSchema: obj(map[string]any{"repo": str, "number": num, "step": num, "tail_lines": num}, "repo", "number")},
 		{Name: "pipeline_rerun", Description: "Rerun a pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
@@ -107,7 +108,7 @@ func tools() []toolSpec {
 		{Name: "inbox", Description: "Island inbox: open PRs, blocked deploys, or failed pipelines", InputSchema: obj(map[string]any{"section": str, "page": num, "page_size": num})},
 		{Name: "pkg_publish", Description: "Publish a language package (pypi wheel URL or npm tarball URL)", InputSchema: obj(map[string]any{"kind": str, "url": str, "filename": str}, "kind", "url")},
 		{Name: "pkg_list", Description: "List language packages", InputSchema: obj(map[string]any{"owner": str, "kind": str, "page": num, "page_size": num})},
-		{Name: "whoami", Description: "Acahti git identity for this token: git_name, git_email, apply_when_remote_host, setup_local", InputSchema: obj(nil)},
+		{Name: "whoami", Description: "Acahti git identity: git_name, git_email, clone_url_template, skill_url, skill_sha, apply_when_remote_host, setup_local", InputSchema: obj(nil)},
 		{Name: "agent_status", Description: "Host agent last contact", InputSchema: obj(pg)},
 		{Name: "deploy_approve", Description: "Approve a gated deploy pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 	}
@@ -164,7 +165,7 @@ func (s *Server) dispatch(token string, req rpcReq) (any, *rpcErr) {
 				"websiteUrl": brand.Root(s.Cfg.RootURL),
 				"icons":      brand.Icons(s.Cfg.RootURL),
 			},
-			"instructions":    identity.Instructions(s.Cfg.RootURL, s.Cfg.Domain),
+			"instructions": identity.Instructions(s.Cfg.RootURL, s.Cfg.Domain),
 		}, nil
 	case "notifications/initialized", "ping":
 		return map[string]any{}, nil
@@ -261,6 +262,8 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		return s.Cat.ListComments(token, str("owner"), str("name"), int(num("number")), pq)
 	case "pr_merge":
 		return s.Cat.MergePR(token, str("owner"), str("name"), int(num("number")))
+	case "pr_close":
+		return s.Cat.ClosePR(token, str("owner"), str("name"), int(num("number")))
 	case "checks_wait":
 		return s.waitChecks(str("owner"), str("name"), str("sha"), checkTimeout(a))
 	case "pipeline_list":

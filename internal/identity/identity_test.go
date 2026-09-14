@@ -30,6 +30,16 @@ func TestView(t *testing.T) {
 	if v["git_name"] != "alice" {
 		t.Fatalf("git_name=%v", v["git_name"])
 	}
+	if v["clone_url_template"] != "https://acahti.saidc.ai/acme/<repo>.git" {
+		t.Fatalf("clone=%v", v["clone_url_template"])
+	}
+	if v["skill_url"] != "https://acahti.saidc.ai/skill.md" {
+		t.Fatalf("skill_url=%v", v["skill_url"])
+	}
+	sha, _ := v["skill_sha"].(string)
+	if len(sha) != 12 {
+		t.Fatalf("skill_sha=%v", sha)
+	}
 	cmds, _ := v["setup_local"].([]string)
 	if len(cmds) != 2 || !strings.Contains(cmds[0], "user.name") || !strings.Contains(cmds[1], "user.email") {
 		t.Fatalf("setup_local=%v", cmds)
@@ -38,7 +48,7 @@ func TestView(t *testing.T) {
 
 func TestInstructions(t *testing.T) {
 	s := Instructions("https://acahti.saidc.ai", "acahti.saidc.ai")
-	for _, need := range []string{"whoami", "apply_when_remote_host", "acahti.saidc.ai", "--local", "--global", "github.com", "api-gateway"} {
+	for _, need := range []string{"whoami", "apply_when_remote_host", "acahti.saidc.ai", "--local", "--global", "github.com", "api-gateway", "/skill.md", "ANY remote"} {
 		if !strings.Contains(s, need) {
 			t.Fatalf("missing %q in %s", need, s)
 		}

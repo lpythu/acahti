@@ -18,7 +18,7 @@ func TestToolSet(t *testing.T) {
 		"whoami",
 		"repo_list", "repo_get", "repo_create",
 		"branch_list", "ref_delete",
-		"pr_create", "pr_list", "pr_get", "pr_comment", "pr_comments", "pr_merge",
+		"pr_create", "pr_list", "pr_get", "pr_comment", "pr_comments", "pr_merge", "pr_close",
 		"checks_wait", "pipeline_list", "pipeline_get", "pipeline_log",
 		"pipeline_rerun", "pipeline_trigger", "pipeline_cancel", "inbox",
 		"pkg_publish", "pkg_list", "agent_status", "deploy_approve",
@@ -121,6 +121,25 @@ func TestFilterPipes(t *testing.T) {
 	}
 }
 
+func TestWaitChecksLatestPerContext(t *testing.T) {
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`[
+			{"status":"success","context":"ci","created_at":"2026-01-01T02:00:00Z"},
+			{"status":"pending","context":"ci","created_at":"2026-01-01T01:00:00Z"}
+		]`))
+	}))
+	t.Cleanup(hs.Close)
+	s := &Server{FJ: forgejo.New(hs.URL, "t")}
+	out, err := s.waitChecks("acme", "demo", "abc", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, _ := out.(map[string]any)
+	if m["ok"] != true {
+		t.Fatalf("%v", out)
+	}
+}
+
 func TestWaitChecksSnapshot(t *testing.T) {
 	var hits int
 	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -157,7 +176,7 @@ func TestInitializeInstructions(t *testing.T) {
 	}
 	m, _ := res.(map[string]any)
 	inst, _ := m["instructions"].(string)
-	if !strings.Contains(inst, "apply_when_remote_host") || !strings.Contains(inst, "acahti.saidc.ai") {
+	if !strings.Contains(inst, "apply_when_remote_host") || !strings.Contains(inst, "acahti.saidc.ai") || !strings.Contains(inst, "/skill.md") {
 		t.Fatalf("instructions=%s", inst)
 	}
 	info, _ := m["serverInfo"].(map[string]any)

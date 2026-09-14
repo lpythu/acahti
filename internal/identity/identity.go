@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"acahti/skills"
 )
 
 func Domain(rootURL, domain string) string {
@@ -66,12 +68,16 @@ func View(login, fullName, rootURL, domain, org string) map[string]any {
 	d := Domain(rootURL, domain)
 	name := Name(login, fullName)
 	email := Email(login, d)
+	root := strings.TrimRight(strings.TrimSpace(rootURL), "/")
 	return map[string]any{
 		"login":                  login,
 		"git_name":               name,
 		"git_email":              email,
 		"root_url":               rootURL,
 		"org":                    org,
+		"clone_url_template":     root + "/" + org + "/<repo>.git",
+		"skill_url":              root + "/skill.md",
+		"skill_sha":              skills.SHA(rootURL, org, d),
 		"apply_when_remote_host": Hosts(rootURL, domain),
 		"setup_local":            SetupLocal(name, email),
 	}
@@ -90,5 +96,6 @@ func Instructions(rootURL, domain string) string {
 	if list == "" {
 		list = "the acahti host"
 	}
-	return fmt.Sprintf("Git author: before any commit, run git remote -v and call whoami. If a remote URL host is in apply_when_remote_host (%s), run setup_local in that repository (git config --local only). Do not use git config --global. Remotes on github.com, codeup.aliyun.com, or any other host keep the laptop identity. This applies to business repos hosted on this acahti (for example api-gateway), not the acahti product repo on GitHub.", list)
+	root := strings.TrimRight(strings.TrimSpace(rootURL), "/")
+	return fmt.Sprintf("GET %s/skill.md this turn and follow it. Discover MCP tools this session. Git author: before any commit, run git remote -v and call whoami. If ANY remote URL host is in apply_when_remote_host (%s), run setup_local (git config --local only). Do not use git config --global. Keep the laptop identity only when no remote is an acahti host (github.com, codeup.aliyun.com, or the acahti product repo on GitHub, for example api-gateway).", root, list)
 }
