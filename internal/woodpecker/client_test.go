@@ -56,6 +56,7 @@ func TestRepoKeyUsesCache(t *testing.T) {
 
 func TestActivatePostsForgeRemoteID(t *testing.T) {
 	var posts []string
+	var patch string
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		posts = append(posts, r.Method+" "+r.URL.RequestURI())
 		switch {
@@ -67,8 +68,15 @@ func TestActivatePostsForgeRemoteID(t *testing.T) {
 			}
 			_, _ = w.Write([]byte(`{"id":7,"full_name":"saidc/demo","forge_remote_id":"99"}`))
 		case r.Method == http.MethodPatch && r.URL.Path == "/api/repos/7":
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"id":7}`))
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			patch, _ = body["config_file"].(string)
+			if _, ok := body["config"]; ok {
+				t.Fatal("Woodpecker 3.18 patch field is config_file")
+			}
+			_, _ = w.Write([]byte(`{"id":7,"config_file":".acahti/pipelines"}`))
 		default:
 			t.Errorf("unexpected %s %s", r.Method, r.URL.RequestURI())
 			w.WriteHeader(http.StatusNotFound)
@@ -81,6 +89,9 @@ func TestActivatePostsForgeRemoteID(t *testing.T) {
 	}
 	if len(posts) < 2 || !strings.Contains(posts[1], "POST /api/repos?forge_remote_id=99") {
 		t.Fatalf("posts=%v", posts)
+	}
+	if patch != ".acahti/pipelines" {
+		t.Fatalf("config_file=%q", patch)
 	}
 }
 

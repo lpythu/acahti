@@ -132,6 +132,10 @@ def repo_id(body: object) -> str:
 
 
 def woodpecker_id(full: str, remote_id: str) -> str:
+    code, looked = wp("GET", lookup_path(full))
+    got = repo_id(looked)
+    if got:
+        return got
     code, body = wp("POST", activate_query(remote_id))
     got = repo_id(body)
     if got:
@@ -146,7 +150,7 @@ def woodpecker_id(full: str, remote_id: str) -> str:
 
 
 def pin(wid: str) -> None:
-    code, err = wp("PATCH", "/api/repos/" + wid, {"config": CONFIG, "active": True})
+    code, err = wp("PATCH", "/api/repos/" + wid, {"config_file": CONFIG})
     if code >= 400:
         raise RuntimeError(f"config {wid}: {code} {err}")
 
@@ -191,6 +195,8 @@ def selftest() -> None:
         raise SystemExit("decode plain")
     if not isinstance(decode(b"{not-json"), str):
         raise SystemExit("decode broken json")
+    if CONFIG != ".acahti/pipelines":
+        raise SystemExit("CONFIG")
     print("ok", file=sys.stderr)
 
 

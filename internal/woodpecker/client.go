@@ -68,6 +68,7 @@ type Repo struct {
 	ForgeRemoteID   string `json:"forge_remote_id"`
 	FullName        string `json:"full_name"`
 	Name            string `json:"name"`
+	ConfigFile      string `json:"config_file"`
 	IsActive        bool   `json:"active"`
 	RequireApproval string `json:"require_approval"`
 }
@@ -299,8 +300,7 @@ func (c *Client) Activate(fullName, forgeRemoteID string) error {
 		return fmt.Errorf("woodpecker repo %s has no id", fullName)
 	}
 	_, _, err = c.do(http.MethodPatch, "/api/repos/"+strconv.FormatInt(id, 10), map[string]any{
-		"config": ".acahti/pipelines",
-		"active": true,
+		"config_file": ".acahti/pipelines",
 	})
 	return err
 }
