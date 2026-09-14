@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+func TestInFlight(t *testing.T) {
+	if !InFlight("running") || !InFlight("pending") || !InFlight("blocked") {
+		t.Fatal("in flight")
+	}
+	if InFlight("success") || InFlight("failure") || InFlight("killed") {
+		t.Fatal("settled")
+	}
+}
+
 func TestJobNameFromFileEmptyIsNotDot(t *testing.T) {
 	if got := jobNameFromFile(""); got != "" {
 		t.Fatalf("%q", got)

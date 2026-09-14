@@ -797,15 +797,15 @@ func (c *Catalog) PipelineDetail(user, repo string, number int64) (PipelineDetai
 			p = got
 		}
 	}
-	if p.Number == 0 {
-		if c.WP == nil || !c.WP.Ready() {
-			return PipelineDetail{}, fmt.Errorf("pipeline not found")
-		}
-		fresh, err := c.WP.GetPipeline(repo, number)
+	if p.Number == 0 || woodpecker.InFlight(p.Status) {
+		fresh, err := c.Refresh(repo, number)
 		if err != nil {
-			return PipelineDetail{}, err
+			if p.Number == 0 {
+				return PipelineDetail{}, err
+			}
+		} else {
+			p = fresh
 		}
-		p = fresh
 	}
 	p.Repo = repo
 	p = c.Remember(p)

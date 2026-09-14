@@ -161,12 +161,13 @@ flowchart LR
 2. Gateway `Remember`s the pipeline: merge declared jobs from YAML, upsert `acahti.pipelines`, publish `pipeline.updated`.
 3. Woodpecker progress also arrives as Forgejo `status` webhooks or `POST /hooks/woodpecker`. Same `Remember`.
 4. Startup backfill lists Woodpecker runs per active repo and `Remember`s them.
+5. `WatchPipelines` refreshes indexed `running` rows from Woodpecker. A running step whose log has not grown for 15m is `Cancel`ed (Woodpecker does not close a step when the process dies without a Done RPC).
 
 **Read (query)**
 
 1. `GET /ui/pipelines` — time-ordered runs (`created DESC`). Visibility from the org catalog. Rows use stored `jobs` (no YAML fetch).
 2. Board blocked / failed — same table, `status` filter.
-3. Detail — index row; miss → one Woodpecker `GetPipeline` and write-back. `files[]` loads YAML on `(repo, commit)` cache miss.
+3. Detail — index row. Miss or in-flight (`running` / `pending` / `blocked`) → Woodpecker `GetPipeline` and write-back. `files[]` loads YAML on `(repo, commit)` cache miss.
 4. Step log still hits Woodpecker (`GET …/log`).
 
 ## Page contracts

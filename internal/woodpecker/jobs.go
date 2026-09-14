@@ -39,7 +39,7 @@ func failedStatus(state string) bool {
 	return false
 }
 
-func pendingStatus(state string) bool {
+func InFlight(state string) bool {
 	switch strings.ToLower(state) {
 	case "running", "pending", "blocked":
 		return true
@@ -130,7 +130,7 @@ func MergeDeclaredJobs(p Pipeline, declared []string) Pipeline {
 		}
 	}
 	skip := "skipped"
-	if pendingStatus(p.Status) {
+	if InFlight(p.Status) {
 		skip = "pending"
 	}
 	failName := ""

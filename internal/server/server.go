@@ -40,6 +40,7 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 	go func() {
 		cat.BackfillOrg()
 		cat.Backfill()
+		cat.WatchPipelines()
 	}()
 	pages := web.New(cfg, cat, fj, wp, a, inv, oa, hub)
 	mc := mcp.New(cfg, a, fj, wp, cat)
