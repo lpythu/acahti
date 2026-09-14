@@ -2,6 +2,7 @@ package woodpecker
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -19,7 +20,7 @@ import (
 const (
 	reposTTL  = 60 * time.Second
 	latestTTL = 20 * time.Second
-	fanout    = 8
+	fanout    = 16
 )
 
 type latestEnt struct {
@@ -34,12 +35,12 @@ type latestCall struct {
 }
 
 type Client struct {
-	base    string
-	token   string
-	http    *http.Client
-	mu      sync.Mutex
-	loadMu  sync.Mutex
-	ids     map[string]int64
+	base      string
+	token     string
+	http      *http.Client
+	mu        sync.Mutex
+	loadMu    sync.Mutex
+	ids       map[string]int64
 	repos     []Repo
 	reposAt   time.Time
 	latest    map[string]latestEnt
@@ -217,6 +218,13 @@ func (c *Client) do(method, path string, body any) ([]byte, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
+	timeout := 8 * time.Second
+	if strings.Contains(path, "/logs/") {
+		timeout = 45 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	req = req.WithContext(ctx)
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 		req.Header.Set("Cookie", "user_sess="+c.token)
@@ -446,31 +454,6 @@ func (c *Client) latestPipe(fullName string, jobs bool) (Pipeline, error) {
 
 func (c *Client) LatestPipeline(fullName string) (Pipeline, error) {
 	return c.latestPipe(fullName, true)
-}
-
-func (c *Client) EnrichJobs(fullName string, pipes []Pipeline) []Pipeline {
-	out := append([]Pipeline(nil), pipes...)
-	sem := make(chan struct{}, fanout)
-	var wg sync.WaitGroup
-	for i := range out {
-		if len(out[i].Jobs) > 0 || out[i].Number == 0 {
-			continue
-		}
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(i int) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			d, err := c.GetPipeline(fullName, out[i].Number)
-			if err != nil {
-				return
-			}
-			d.Repo = fullName
-			out[i] = d
-		}(i)
-	}
-	wg.Wait()
-	return out
 }
 
 func (c *Client) LatestPipelines(names []string, jobs bool) []Pipeline {

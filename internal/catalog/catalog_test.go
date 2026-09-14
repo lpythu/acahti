@@ -59,6 +59,13 @@ func TestMarkGroupVisible(t *testing.T) {
 	}
 }
 
+func TestWriteID(t *testing.T) {
+	g := groupTeams{teams: map[string]forgejo.Team{permRead: {ID: 1}, permWrite: {ID: 2}}}
+	if g.writeID() != 2 {
+		t.Fatal(g.writeID())
+	}
+}
+
 func TestFlattenGroups(t *testing.T) {
 	grouped := map[string][]forgejo.Repo{
 		"Express":  {{FullName: "saidc/ejp", Group: "Express"}},

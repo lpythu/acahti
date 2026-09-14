@@ -294,7 +294,7 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		if owner == "" {
 			owner = org
 		}
-		return s.FJ.ListPackages(owner, str("kind"), pq)
+		return s.FJ.ListPackages(owner, str("kind"), str("q"), pq)
 	case "pkg_publish":
 		return s.publish(token, str("kind"), str("url"), str("filename"))
 	case "agent_status":

@@ -164,9 +164,28 @@ func (c *Catalog) IsOrgAdmin(user string) bool {
 }
 
 func (c *Catalog) orgTeams() ([]forgejo.Team, error) {
-	return page.Walk(func(q page.Query) (page.Result[forgejo.Team], error) {
+	if c.mem != nil {
+		if teams, ok := c.mem.teamsOf(); ok {
+			return teams, nil
+		}
+	}
+	teams, err := page.Walk(func(q page.Query) (page.Result[forgejo.Team], error) {
 		return c.FJ.ListOrgTeams(c.Cfg.Org, q)
 	})
+	if err != nil {
+		return nil, err
+	}
+	if c.mem != nil {
+		c.mem.setTeams(teams)
+	}
+	return teams, nil
+}
+
+func (c *Catalog) seeOK(user, owner, name string) error {
+	if _, err := c.FJ.GetRepo(owner, name, user); err != nil {
+		return fmt.Errorf("%w: %s", ErrNotFound, err)
+	}
+	return nil
 }
 
 func (c *Catalog) userRepos(user string) ([]forgejo.Repo, error) {
@@ -233,6 +252,16 @@ func (g groupTeams) ids() []int64 {
 		out = append(out, t.ID)
 	}
 	return out
+}
+
+func (g groupTeams) writeID() int64 {
+	if t, ok := g.teams[permWrite]; ok {
+		return t.ID
+	}
+	for _, t := range g.teams {
+		return t.ID
+	}
+	return 0
 }
 
 func (c *Catalog) clusterGroups() (map[string]groupTeams, error) {

@@ -2,6 +2,7 @@ package forgejo
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -157,6 +158,11 @@ func (c *Client) do(method, path, token, sudo string, body any) ([]byte, int, er
 	req, err := http.NewRequest(method, c.base+path, rdr)
 	if err != nil {
 		return nil, 0, err
+	}
+	if method == http.MethodGet || method == http.MethodHead {
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+		req = req.WithContext(ctx)
 	}
 	if token == "" {
 		token = c.admin
@@ -465,6 +471,31 @@ func (c *Client) ListOrgTeams(org string, q page.Query) (page.Result[Team], erro
 
 func (c *Client) ListTeamRepos(teamID int64, q page.Query) (page.Result[Repo], error) {
 	return listPage[Repo](c, fmt.Sprintf("/api/v1/teams/%d/repos", teamID), q, nil, "")
+}
+
+func (c *Client) TeamRepoCount(teamID int64) (int, error) {
+	path := fmt.Sprintf("/api/v1/teams/%d/repos?limit=1&page=1", teamID)
+	req, err := http.NewRequest(http.MethodGet, c.base+path, nil)
+	if err != nil {
+		return 0, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	req = req.WithContext(ctx)
+	if c.admin != "" {
+		req.Header.Set("Authorization", "token "+c.admin)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode >= 400 {
+		return 0, fmt.Errorf("team repos %d", resp.StatusCode)
+	}
+	n, _ := strconv.Atoi(resp.Header.Get("X-Total-Count"))
+	return n, nil
 }
 
 func (c *Client) ListTeamMembers(teamID int64, q page.Query) (page.Result[User], error) {
@@ -846,10 +877,13 @@ func (c *Client) ListPackageFiles(owner, typ, name, version string) ([]PackageFi
 	return out, json.Unmarshal(b, &out)
 }
 
-func (c *Client) ListPackages(owner, typ string, q page.Query) (page.Result[Package], error) {
+func (c *Client) ListPackages(owner, typ, query string, q page.Query) (page.Result[Package], error) {
 	extra := url.Values{}
 	if typ != "" {
 		extra.Set("type", typ)
+	}
+	if query != "" {
+		extra.Set("q", query)
 	}
 	return listPage[Package](c, "/api/v1/packages/"+url.PathEscape(owner), q, extra, "")
 }

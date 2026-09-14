@@ -23,7 +23,7 @@ export function BoardPage() {
   }, [blocked.reload, failed.reload, prs.reload])
   useEvents(reload)
 
-  const loading = (blocked.loading && !blocked.data) || (failed.loading && !failed.data) || (prs.loading && !prs.data)
+  const loading = [blocked, failed, prs].every((x) => x.loading && !x.data)
   const empty = blocked.empty && failed.empty && prs.empty
   const error = blocked.error || failed.error || prs.error
 

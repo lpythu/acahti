@@ -41,7 +41,7 @@ export function AdminHomePage() {
   const agents = usePage((q) => api.agents(q), [])
   const stack = stackLoad.data
   const error = stackLoad.error || agents.error
-  const loading = (stackLoad.loading && !stackLoad.data) || (agents.loading && !agents.data)
+  const loading = (stackLoad.loading && !stackLoad.data) && (agents.loading && !agents.data)
 
   return (
     <PageFrame

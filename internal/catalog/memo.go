@@ -19,6 +19,7 @@ type memo struct {
 	admin  map[string]stamp[bool]
 	repos  map[string]stamp[[]forgejo.Repo]
 	groups map[string]stamp[map[string][]forgejo.Repo]
+	teams  stamp[[]forgejo.Team]
 }
 
 func newMemo() *memo {
@@ -82,11 +83,27 @@ func (m *memo) setGroups(user string, g map[string][]forgejo.Repo) {
 	m.mu.Unlock()
 }
 
+func (m *memo) teamsOf() ([]forgejo.Team, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.teams.at.IsZero() || time.Since(m.teams.at) > memoTTL {
+		return nil, false
+	}
+	return append([]forgejo.Team{}, m.teams.v...), true
+}
+
+func (m *memo) setTeams(teams []forgejo.Team) {
+	m.mu.Lock()
+	m.teams = stamp[[]forgejo.Team]{at: time.Now(), v: append([]forgejo.Team{}, teams...)}
+	m.mu.Unlock()
+}
+
 func (m *memo) drop() {
 	m.mu.Lock()
 	m.admin = map[string]stamp[bool]{}
 	m.repos = map[string]stamp[[]forgejo.Repo]{}
 	m.groups = map[string]stamp[map[string][]forgejo.Repo]{}
+	m.teams = stamp[[]forgejo.Team]{}
 	m.mu.Unlock()
 }
 

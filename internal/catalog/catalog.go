@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 
 	"acahti/internal/config"
 	"acahti/internal/forgejo"
@@ -113,19 +114,81 @@ func decodeContent(e forgejo.ContentEntry) string {
 }
 
 func (c *Catalog) ListRepoGroups(user string, q page.Query) (page.Result[RepoGroup], error) {
-	grouped, err := c.grouped(user)
+	clusters, err := c.clusterGroups()
 	if err != nil {
 		return page.Result[RepoGroup]{}, err
 	}
-	return page.Take(groupCounts(grouped), q), nil
+	admin := c.IsOrgAdmin(user)
+	type item struct {
+		name string
+		g    groupTeams
+	}
+	items := make([]item, 0, len(clusters))
+	for name, g := range clusters {
+		items = append(items, item{name: name, g: g})
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].name < items[j].name })
+	type row struct {
+		g    RepoGroup
+		skip bool
+	}
+	rows := make([]row, len(items))
+	var wg sync.WaitGroup
+	for i, it := range items {
+		wg.Add(1)
+		go func(i int, it item) {
+			defer wg.Done()
+			if !admin && !c.inGroup(user, it.g) {
+				rows[i].skip = true
+				return
+			}
+			n := 0
+			if id := it.g.writeID(); id > 0 {
+				n, _ = c.FJ.TeamRepoCount(id)
+			}
+			rows[i].g = RepoGroup{Group: it.name, Count: n}
+		}(i, it)
+	}
+	wg.Wait()
+	out := make([]RepoGroup, 0, len(rows))
+	for _, r := range rows {
+		if r.skip {
+			continue
+		}
+		out = append(out, r.g)
+	}
+	return page.Take(out, q), nil
 }
 
 func (c *Catalog) ListRepos(user, group string, q page.Query) (page.Result[forgejo.Repo], error) {
-	grouped, err := c.grouped(user)
+	if !c.FJ.Ready() {
+		return page.Of([]forgejo.Repo{}, q, false), nil
+	}
+	if group == "" {
+		if c.IsOrgAdmin(user) {
+			return c.FJ.ListOrgRepos(c.Cfg.Org, q)
+		}
+		return c.FJ.ListRepos(user, q)
+	}
+	g, err := c.findGroup(group)
 	if err != nil {
 		return page.Result[forgejo.Repo]{}, err
 	}
-	return page.Take(flattenGroups(grouped, group), q), nil
+	if !c.IsOrgAdmin(user) && !c.inGroup(user, g) {
+		return page.Of([]forgejo.Repo{}, q, false), nil
+	}
+	id := g.writeID()
+	if id == 0 {
+		return page.Of([]forgejo.Repo{}, q, false), nil
+	}
+	res, err := c.FJ.ListTeamRepos(id, q)
+	if err != nil {
+		return page.Result[forgejo.Repo]{}, err
+	}
+	for i := range res.Items {
+		res.Items[i].Group = group
+	}
+	return res, nil
 }
 
 func (c *Catalog) RepoHeader(user, owner, name, ref string) (RepoHeader, error) {
@@ -157,8 +220,28 @@ func (c *Catalog) RepoContents(user, owner, name, ref, path string, q page.Query
 		path = ""
 	}
 	out := RepoContents{Ref: ref, Path: path, Result: page.Of([]forgejo.ContentEntry{}, q, false)}
-	ents, err := c.FJ.ListContents(owner, name, ref, path)
-	if err != nil || ents == nil {
+	readmePath := "README.md"
+	if path != "" {
+		readmePath = strings.TrimSuffix(path, "/") + "/README.md"
+	}
+	var (
+		ents   []forgejo.ContentEntry
+		readme string
+		wg     sync.WaitGroup
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		ents, _ = c.FJ.ListContents(owner, name, ref, path)
+	}()
+	go func() {
+		defer wg.Done()
+		if file, err := c.FJ.GetFile(owner, name, ref, readmePath); err == nil && file.Type == "file" {
+			readme = decodeContent(file)
+		}
+	}()
+	wg.Wait()
+	if ents == nil {
 		return out, nil
 	}
 	if len(ents) == 1 && ents[0].Type == "file" && path != "" {
@@ -170,39 +253,45 @@ func (c *Catalog) RepoContents(user, owner, name, ref, path string, q page.Query
 		ents[i].Content = ""
 	}
 	out.Result = page.Take(ents, q)
-	readmePath := "README.md"
-	if path != "" {
-		readmePath = strings.TrimSuffix(path, "/") + "/README.md"
-	}
-	if file, err := c.FJ.GetFile(owner, name, ref, readmePath); err == nil && file.Type == "file" {
-		out.Readme = decodeContent(file)
-	}
+	out.Readme = readme
 	return out, nil
 }
 
 func (c *Catalog) ListBranches(user, owner, name string, q page.Query) (page.Result[BranchInfo], error) {
-	head, err := c.RepoHeader(user, owner, name, "")
+	repo, err := c.FJ.GetRepo(owner, name, user)
+	if err != nil {
+		return page.Result[BranchInfo]{}, fmt.Errorf("%w: %s", ErrNotFound, err)
+	}
+	var (
+		prot []forgejo.BranchProtection
+		res  page.Result[forgejo.Branch]
+		wg   sync.WaitGroup
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		prot, _ = c.FJ.ListBranchProtections(owner, name)
+	}()
+	go func() {
+		defer wg.Done()
+		res, err = c.FJ.ListBranches(owner, name, q)
+	}()
+	wg.Wait()
 	if err != nil {
 		return page.Result[BranchInfo]{}, err
 	}
 	protSet := map[string]bool{}
-	if prot, err := c.FJ.ListBranchProtections(owner, name); err == nil {
-		for _, p := range prot {
-			if p.RuleName != "" {
-				protSet[p.RuleName] = true
-			}
+	for _, p := range prot {
+		if p.RuleName != "" {
+			protSet[p.RuleName] = true
 		}
-	}
-	res, err := c.FJ.ListBranches(owner, name, q)
-	if err != nil {
-		return page.Result[BranchInfo]{}, err
 	}
 	out := make([]BranchInfo, 0, len(res.Items))
 	for _, b := range res.Items {
 		out = append(out, BranchInfo{
 			Name:      b.Name,
 			SHA:       b.Commit.ID,
-			Default:   b.Name == head.Repo.DefaultBranch,
+			Default:   b.Name == repo.DefaultBranch,
 			Protected: protSet[b.Name],
 		})
 	}
@@ -211,19 +300,22 @@ func (c *Catalog) ListBranches(user, owner, name string, q page.Query) (page.Res
 
 func (c *Catalog) ListCommits(user, owner, name, ref string, q page.Query) (page.Result[forgejo.Commit], error) {
 	if ref == "" {
-		head, err := c.RepoHeader(user, owner, name, "")
+		repo, err := c.FJ.GetRepo(owner, name, user)
 		if err != nil {
-			return page.Result[forgejo.Commit]{}, err
+			return page.Result[forgejo.Commit]{}, fmt.Errorf("%w: %s", ErrNotFound, err)
 		}
-		ref = head.Ref
-	} else if _, err := c.seeRepo(user, owner, name); err != nil {
+		ref = repo.DefaultBranch
+		if ref == "" {
+			ref = "dev"
+		}
+	} else if err := c.seeOK(user, owner, name); err != nil {
 		return page.Result[forgejo.Commit]{}, err
 	}
 	return c.FJ.ListCommits(owner, name, ref, q)
 }
 
 func (c *Catalog) ListPulls(user, owner, name, state string, q page.Query) (page.Result[forgejo.PR], error) {
-	if _, err := c.seeRepo(user, owner, name); err != nil {
+	if err := c.seeOK(user, owner, name); err != nil {
 		return page.Result[forgejo.PR]{}, err
 	}
 	res, err := c.FJ.ListPRs(owner, name, state, q)
@@ -238,7 +330,7 @@ func (c *Catalog) ListPulls(user, owner, name, state string, q page.Query) (page
 }
 
 func (c *Catalog) ListComments(user, owner, name string, number int, q page.Query) (page.Result[forgejo.Comment], error) {
-	if _, err := c.seeRepo(user, owner, name); err != nil {
+	if err := c.seeOK(user, owner, name); err != nil {
 		return page.Result[forgejo.Comment]{}, err
 	}
 	return c.FJ.ListComments(owner, name, number, q)
@@ -248,32 +340,24 @@ func (c *Catalog) ListPackageVersions(kind, name string, q page.Query) (page.Res
 	if !c.FJ.Ready() {
 		return page.Of([]forgejo.Package{}, q, false), nil
 	}
-	var matched []forgejo.Package
-	need := q.Norm().Page*q.Norm().Size + 1
-	pq := page.Query{Page: 1, Size: page.MaxSize}
-	for len(matched) < need && pq.Page <= page.MaxWalk {
-		res, err := c.FJ.ListPackages(c.Cfg.Org, kind, pq)
-		if err != nil {
-			return page.Result[forgejo.Package]{}, err
-		}
-		for _, p := range res.Items {
-			if p.Name == name {
-				matched = append(matched, p)
-			}
-		}
-		if !res.HasMore {
-			break
-		}
-		pq.Page++
+	res, err := c.FJ.ListPackages(c.Cfg.Org, kind, name, q)
+	if err != nil {
+		return page.Result[forgejo.Package]{}, err
 	}
-	return page.Take(matched, q), nil
+	items := res.Items[:0]
+	for _, p := range res.Items {
+		if p.Name == name {
+			items = append(items, p)
+		}
+	}
+	return page.Of(items, q, res.HasMore), nil
 }
 
 func (c *Catalog) ListPackageRows(kind string, q page.Query) (page.Result[PackageRow], error) {
 	if !c.FJ.Ready() {
 		return page.Of([]PackageRow{}, q, false), nil
 	}
-	res, err := c.FJ.ListPackages(c.Cfg.Org, kind, q)
+	res, err := c.FJ.ListPackages(c.Cfg.Org, kind, "", q)
 	if err != nil {
 		return page.Result[PackageRow]{}, err
 	}
@@ -382,26 +466,37 @@ func (c *Catalog) acahtiCheckURL(raw string) string {
 }
 
 func (c *Catalog) pipelineNames(user, group string) ([]string, error) {
-	visible, err := c.userRepos(user)
-	if err != nil {
-		return nil, err
-	}
-	allow := visibleSet(visible)
-	var want map[string]bool
-	if group != "" {
-		grouped, err := c.grouped(user)
-		if err != nil {
-			return nil, err
-		}
-		want = visibleSet(grouped[group])
-	}
 	repos, err := c.WP.CachedRepos()
 	if err != nil {
 		return nil, err
 	}
+	var want map[string]bool
+	if group != "" {
+		g, err := c.findGroup(group)
+		if err != nil {
+			return nil, err
+		}
+		id := g.writeID()
+		if id == 0 {
+			return []string{}, nil
+		}
+		team, err := page.Walk(func(pq page.Query) (page.Result[forgejo.Repo], error) {
+			return c.FJ.ListTeamRepos(id, pq)
+		})
+		if err != nil {
+			return nil, err
+		}
+		want = visibleSet(team)
+	} else if !c.IsOrgAdmin(user) {
+		visible, err := c.userRepos(user)
+		if err != nil {
+			return nil, err
+		}
+		want = visibleSet(visible)
+	}
 	var names []string
 	for _, r := range repos {
-		if !r.IsActive || !allow[r.FullName] {
+		if !r.IsActive {
 			continue
 		}
 		if want != nil && !want[r.FullName] {
@@ -419,22 +514,36 @@ func (c *Catalog) ListPipelines(user, repo, group string, q page.Query) (page.Re
 	}
 	if repo != "" {
 		owner, name, _ := strings.Cut(repo, "/")
-		if _, err := c.seeRepo(user, owner, name); err != nil {
+		if err := c.seeOK(user, owner, name); err != nil {
 			return page.Result[woodpecker.Pipeline]{}, err
 		}
-		res, err := c.WP.ListPipelines(repo, q)
+		return c.WP.ListPipelines(repo, q)
+	}
+	if group != "" {
+		g, err := c.findGroup(group)
 		if err != nil {
 			return page.Result[woodpecker.Pipeline]{}, err
 		}
-		res.Items = c.WP.EnrichJobs(repo, res.Items)
-		return res, nil
+		id := g.writeID()
+		if id == 0 {
+			return page.Of([]woodpecker.Pipeline{}, q, false), nil
+		}
+		res, err := c.FJ.ListTeamRepos(id, q)
+		if err != nil {
+			return page.Result[woodpecker.Pipeline]{}, err
+		}
+		names := make([]string, len(res.Items))
+		for i, r := range res.Items {
+			names[i] = r.FullName
+		}
+		return page.Of(c.WP.LatestPipelines(names, false), q, res.HasMore), nil
 	}
-	names, err := c.pipelineNames(user, group)
+	names, err := c.pipelineNames(user, "")
 	if err != nil {
 		return page.Result[woodpecker.Pipeline]{}, err
 	}
 	slice := page.Take(names, q)
-	return page.Of(c.WP.LatestPipelines(slice.Items, true), q, slice.HasMore), nil
+	return page.Of(c.WP.LatestPipelines(slice.Items, false), q, slice.HasMore), nil
 }
 
 func (c *Catalog) CommitDetail(user, owner, name, sha string, q page.Query) (CommitDetail, error) {
@@ -529,6 +638,9 @@ func (c *Catalog) BoardPRs(user string, q page.Query) (page.Result[forgejo.PR], 
 	if !c.FJ.Ready() {
 		return page.Of([]forgejo.PR{}, q, false), nil
 	}
+	if c.IsOrgAdmin(user) {
+		return c.FJ.SearchPRs(c.Cfg.Org, "open", q)
+	}
 	visible, err := c.userRepos(user)
 	if err != nil {
 		return page.Result[forgejo.PR]{}, err
@@ -559,11 +671,6 @@ func (c *Catalog) BoardPipes(user, kind string, q page.Query) (page.Result[woodp
 	if !c.WP.Ready() {
 		return page.Of([]woodpecker.Pipeline{}, q, false), nil
 	}
-	visible, err := c.userRepos(user)
-	if err != nil {
-		return page.Result[woodpecker.Pipeline]{}, err
-	}
-	allow := visibleSet(visible)
 	want := map[string]bool{}
 	switch kind {
 	case "blocked":
@@ -578,16 +685,35 @@ func (c *Catalog) BoardPipes(user, kind string, q page.Query) (page.Result[woodp
 	if err != nil {
 		return page.Result[woodpecker.Pipeline]{}, err
 	}
+	var allow map[string]bool
+	if !c.IsOrgAdmin(user) {
+		visible, err := c.userRepos(user)
+		if err != nil {
+			return page.Result[woodpecker.Pipeline]{}, err
+		}
+		allow = visibleSet(visible)
+	}
 	var names []string
 	for _, r := range repos {
-		if r.IsActive && allow[r.FullName] {
-			names = append(names, r.FullName)
+		if !r.IsActive {
+			continue
 		}
+		if allow != nil && !allow[r.FullName] {
+			continue
+		}
+		names = append(names, r.FullName)
 	}
+	need := q.Norm().Page*q.Norm().Size + 1
 	var matched []woodpecker.Pipeline
-	for _, p := range c.WP.LatestPipelines(names, false) {
-		if want[strings.ToLower(p.Status)] {
-			matched = append(matched, p)
+	for i := 0; i < len(names) && len(matched) < need; i += 16 {
+		end := i + 16
+		if end > len(names) {
+			end = len(names)
+		}
+		for _, p := range c.WP.LatestPipelines(names[i:end], false) {
+			if want[strings.ToLower(p.Status)] {
+				matched = append(matched, p)
+			}
 		}
 	}
 	return page.Take(matched, q), nil
