@@ -4,7 +4,6 @@ set -euo pipefail
 REGISTRY="${REGISTRY:-harbor.saidc}"
 ACR_REGISTRY="${ACR_REGISTRY:-saidc-registry.cn-hongkong.cr.aliyuncs.com}"
 ACR_VPC_REGISTRY="${ACR_VPC_REGISTRY:-saidc-registry-vpc.cn-hongkong.cr.aliyuncs.com}"
-BASE_IMAGE="${BASE_IMAGE:-${REGISTRY}/base/saidc-uv:0.12.0}"
 
 require_env() {
   ENV="${ENV:-office}"
@@ -15,7 +14,6 @@ require_env() {
 }
 
 require_repo() {
-  : "${IMAGE:?set IMAGE (e.g. tm/tm-cs)}"
   : "${ROOT:?set ROOT to the git checkout}"
 }
 
@@ -31,9 +29,20 @@ commit_id() {
   export CI_COMMIT_ID
   export IMAGE_TAG="dev-${CI_COMMIT_ID}"
   export ACR_TAG="${CI_COMMIT_ID}"
-  export FULL_IMAGE="${REGISTRY}/${IMAGE}:${IMAGE_TAG}"
-  export ACR_IMAGE="${ACR_REGISTRY}/${IMAGE}:${ACR_TAG}"
-  export ACR_VPC_IMAGE="${ACR_VPC_REGISTRY}/${IMAGE}:${ACR_TAG}"
+}
+
+npm_token() {
+  if [[ -n "${NPM_TOKEN:-}" ]]; then
+    return 0
+  fi
+  local f
+  for f in /root/.npm/saidc.token "${HOME}/.npm/saidc.token" /home/saidc/.npm/saidc.token; do
+    if [[ -f "$f" ]]; then
+      NPM_TOKEN="$(tr -d '\r\n' <"$f")"
+      export NPM_TOKEN
+      return 0
+    fi
+  done
 }
 
 harbor_login() {
@@ -63,55 +72,6 @@ acr_login() {
   done
   echo "error: missing ACR secret" >&2
   exit 1
-}
-
-find_saidc_ws() {
-  local cand
-  if [[ -n "${SAIDC_WS:-}" && -f "${SAIDC_WS}/acahti/runner/lib.sh" ]]; then
-    return 0
-  fi
-  for cand in \
-    "$(cd "${ROOT}/.." && pwd)" \
-    /root/saidc-ws \
-    /home/saidc/saidc-ws \
-    "${HOME}/saidc-ws" \
-    "${HOME}/Projects/saidc-ws"; do
-    if [[ -f "${cand}/acahti/runner/lib.sh" ]]; then
-      SAIDC_WS="$cand"
-      return 0
-    fi
-  done
-  echo "error: set SAIDC_WS to the workspace that contains acahti/runner" >&2
-  exit 1
-}
-
-find_argos() {
-  local cand
-  if [[ -n "${ARGOS_ROOT:-}" && -d "${ARGOS_ROOT}" ]]; then
-    return 0
-  fi
-  find_saidc_ws
-  if [[ -d "${SAIDC_WS}/argos" ]]; then
-    ARGOS_ROOT="${SAIDC_WS}/argos"
-    return 0
-  fi
-  for cand in /root/saidc-ws/argos /home/saidc/saidc-ws/argos \
-    "$HOME/saidc-ws/argos" "$HOME/Projects/saidc-ws/argos"; do
-    if [[ -d "$cand" ]]; then
-      ARGOS_ROOT="$cand"
-      return 0
-    fi
-  done
-  echo "error: argos required; set ARGOS_ROOT" >&2
-  exit 1
-}
-
-deploy_image() {
-  if [[ "$ENV" == "office" ]]; then
-    echo "${REGISTRY}/${IMAGE}:${IMAGE_TAG}"
-  else
-    echo "${ACR_VPC_IMAGE}"
-  fi
 }
 
 deploy_tag() {

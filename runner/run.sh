@@ -16,7 +16,7 @@ if [[ ! -f "$envf" ]]; then
 fi
 # shellcheck disable=SC1090
 source "$envf"
-export KIND NS RELEASE IMAGE CHART ARGOS_SELECTORS PKG_PATH PKG_NAME
+export KIND NS RELEASE IMAGE IMAGES CHART ARGOS_SELECTORS PKG_PATH PKG_NAME BUILD_ARGS BASE_IMAGE
 : "${KIND:?set KIND in .acahti/repo.env}"
 
 export ACAHTI_RUNNER="${ACAHTI_RUNNER:-$here}"

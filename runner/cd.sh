@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# helm the chart, then argos.
+# helm the chart, then argos (argospy on PATH; packs from argos-pack).
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh
@@ -24,6 +24,7 @@ if [[ "${KIND:-}" == "helm" ]]; then
 else
   require_repo
   commit_id
+  : "${IMAGE:?set IMAGE in .acahti/repo.env}"
   repo_img="$(deploy_repo)"
   tag="$(deploy_tag)"
   echo "==> helm ${RELEASE} ENV=${ENV} ${repo_img}:${tag}"
@@ -31,11 +32,12 @@ else
   echo "OK helm ${RELEASE} ENV=${ENV} tag=${tag}"
 fi
 
-if [[ "${SMOKE:-1}" != "1" ]]; then
-  exit 0
-fi
-find_argos
 : "${ARGOS_SELECTORS:?set ARGOS_SELECTORS (semicolon-separated argos invocations)}"
+command -v argos >/dev/null || {
+  echo "error: argos CLI required on the agent (pip install argospy && pip install -e argos-pack)" >&2
+  exit 1
+}
+
 oldifs="$IFS"
 IFS=';'
 for sel in ${ARGOS_SELECTORS}; do
@@ -44,7 +46,7 @@ for sel in ${ARGOS_SELECTORS}; do
   [[ -z "$sel" ]] && continue
   IFS="$oldifs"
   # shellcheck disable=SC2086
-  (cd "$ARGOS_ROOT" && uv run argos run ${sel} --env "$ENV")
+  argos run ${sel} --env "$ENV"
   IFS=';'
 done
 IFS="$oldifs"
