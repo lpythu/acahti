@@ -273,10 +273,10 @@ func (c *Client) Activate(fullName string) error {
 		return err
 	}
 	c.forgetIDs()
-	return c.SetPipelinePath(fullName, ".acahti/pipelines")
+	return c.setPipelinePath(fullName, ".acahti/pipelines")
 }
 
-func (c *Client) SetPipelinePath(fullName, path string) error {
+func (c *Client) setPipelinePath(fullName, path string) error {
 	key, err := c.repoKey(fullName)
 	if err != nil {
 		return err
@@ -452,8 +452,29 @@ func (c *Client) latestPipe(fullName string, jobs bool) (Pipeline, error) {
 	return detail, nil
 }
 
-func (c *Client) LatestPipeline(fullName string) (Pipeline, error) {
-	return c.latestPipe(fullName, true)
+func (c *Client) EnrichJobs(fullName string, pipes []Pipeline) []Pipeline {
+	out := append([]Pipeline(nil), pipes...)
+	sem := make(chan struct{}, fanout)
+	var wg sync.WaitGroup
+	for i := range out {
+		if len(out[i].Jobs) > 0 || out[i].Number == 0 {
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			d, err := c.GetPipeline(fullName, out[i].Number)
+			if err != nil {
+				return
+			}
+			d.Repo = fullName
+			out[i] = d
+		}(i)
+	}
+	wg.Wait()
+	return out
 }
 
 func (c *Client) LatestPipelines(names []string, jobs bool) []Pipeline {
@@ -597,6 +618,18 @@ func (c *Client) Approve(fullName string, number int64) error {
 		return err
 	}
 	_, _, err = c.do(http.MethodPost, fmt.Sprintf("/api/repos/%s/pipelines/%d/approve", key, number), nil)
+	if err == nil {
+		c.forgetLatest(fullName)
+	}
+	return err
+}
+
+func (c *Client) Cancel(fullName string, number int64) error {
+	key, err := c.repoKey(fullName)
+	if err != nil {
+		return err
+	}
+	_, _, err = c.do(http.MethodPost, fmt.Sprintf("/api/repos/%s/pipelines/%d/cancel", key, number), nil)
 	if err == nil {
 		c.forgetLatest(fullName)
 	}

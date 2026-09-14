@@ -184,6 +184,18 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
+	byLogin, err := p.Cat.GroupsByLogin()
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	for i := range out.Items {
+		gs := byLogin[out.Items[i].Login]
+		if gs == nil {
+			gs = []string{}
+		}
+		out.Items[i].Groups = gs
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -325,31 +337,6 @@ func (p *Pages) Password(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := p.FJ.SetPassword(target, body.Password); err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
-}
-
-func (p *Pages) Approve(w http.ResponseWriter, r *http.Request) {
-	user, _, ok := p.requireJSON(w, r)
-	if !ok {
-		return
-	}
-	var body struct {
-		Repo   string `json:"repo"`
-		Number int64  `json:"number"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
-		return
-	}
-	owner, name, _ := strings.Cut(body.Repo, "/")
-	if _, err := p.Cat.RepoHeader(user, owner, name, ""); err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
-		return
-	}
-	if err := p.WP.Approve(body.Repo, body.Number); err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})

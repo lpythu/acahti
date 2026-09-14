@@ -112,34 +112,6 @@ func markGroup(repos []forgejo.Repo, group string, visible map[string]bool) []fo
 	return out
 }
 
-func groupCounts(grouped map[string][]forgejo.Repo) []RepoGroup {
-	out := make([]RepoGroup, 0, len(grouped))
-	for g, repos := range grouped {
-		out = append(out, RepoGroup{Group: g, Count: len(repos)})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Group < out[j].Group })
-	return out
-}
-
-func flattenGroups(grouped map[string][]forgejo.Repo, group string) []forgejo.Repo {
-	if group != "" {
-		repos := grouped[group]
-		if repos == nil {
-			return []forgejo.Repo{}
-		}
-		return repos
-	}
-	var out []forgejo.Repo
-	for _, repos := range grouped {
-		out = append(out, repos...)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].FullName < out[j].FullName })
-	if out == nil {
-		out = []forgejo.Repo{}
-	}
-	return out
-}
-
 func (c *Catalog) IsOrgAdmin(user string) bool {
 	if user == "" || !c.FJ.Ready() {
 		return false
@@ -319,73 +291,4 @@ func (c *Catalog) inGroup(user string, g groupTeams) bool {
 		}
 	}
 	return false
-}
-
-func (c *Catalog) grouped(user string) (map[string][]forgejo.Repo, error) {
-	if c.mem != nil {
-		if g, ok := c.mem.groupsOf(user); ok {
-			return g, nil
-		}
-	}
-	visibleRepos, err := c.userRepos(user)
-	if err != nil {
-		return nil, err
-	}
-	visible := visibleSet(visibleRepos)
-	if !c.FJ.Ready() {
-		return map[string][]forgejo.Repo{}, nil
-	}
-	admin := c.IsOrgAdmin(user)
-	clusters, err := c.clusterGroups()
-	if err != nil {
-		return nil, err
-	}
-	type item struct {
-		name string
-		g    groupTeams
-	}
-	items := make([]item, 0, len(clusters))
-	for name, g := range clusters {
-		items = append(items, item{name: name, g: g})
-	}
-	type row struct {
-		name string
-		keep []forgejo.Repo
-		skip bool
-		err  error
-	}
-	rows := make([]row, len(items))
-	var wg sync.WaitGroup
-	for i, it := range items {
-		wg.Add(1)
-		go func(i int, it item) {
-			defer wg.Done()
-			repos, err := c.teamRepos(it.g.ids())
-			if err != nil {
-				rows[i].err = err
-				return
-			}
-			if admin {
-				rows[i] = row{name: it.name, keep: markGroup(repos, it.name, nil)}
-				return
-			}
-			keep := markGroup(repos, it.name, visible)
-			rows[i] = row{name: it.name, keep: keep, skip: len(keep) == 0 && !c.inGroup(user, it.g)}
-		}(i, it)
-	}
-	wg.Wait()
-	out := map[string][]forgejo.Repo{}
-	for _, r := range rows {
-		if r.err != nil {
-			return nil, r.err
-		}
-		if r.skip {
-			continue
-		}
-		out[r.name] = r.keep
-	}
-	if c.mem != nil {
-		c.mem.setGroups(user, out)
-	}
-	return out, nil
 }

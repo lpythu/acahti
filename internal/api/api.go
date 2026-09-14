@@ -9,18 +9,14 @@ import (
 	"acahti/internal/auth"
 	"acahti/internal/config"
 	"acahti/internal/events"
-	"acahti/internal/forgejo"
 	"acahti/internal/httperr"
 	"acahti/internal/mcp"
 	"acahti/internal/oauth"
-	"acahti/internal/woodpecker"
 )
 
 type API struct {
 	Cfg  config.Config
 	Auth *auth.Service
-	FJ   *forgejo.Client
-	WP   *woodpecker.Client
 	Hub  *events.Hub
 	MCP  *mcp.Server
 }
@@ -122,6 +118,9 @@ func route(path, method string, args map[string]any) (string, map[string]any) {
 			if len(rest) == 2 && method == http.MethodGet {
 				return "pr_get", extra
 			}
+			if len(rest) == 3 && rest[2] == "comments" && method == http.MethodGet {
+				return "pr_comments", extra
+			}
 			if len(rest) == 3 && rest[2] == "comments" {
 				return "pr_comment", extra
 			}
@@ -133,20 +132,37 @@ func route(path, method string, args map[string]any) (string, map[string]any) {
 			extra["sha"] = rest[1]
 			return "checks_wait", extra
 		}
+		if len(rest) >= 1 && rest[0] == "pipelines" {
+			extra["repo"] = extra["owner"].(string) + "/" + extra["name"].(string)
+			if len(rest) == 1 && method == http.MethodGet {
+				return "pipeline_list", extra
+			}
+			if len(rest) == 1 && method == http.MethodPost {
+				return "pipeline_trigger", extra
+			}
+			if len(rest) >= 2 {
+				n, _ := strconv.ParseInt(rest[1], 10, 64)
+				extra["number"] = n
+				if len(rest) == 2 && method == http.MethodGet {
+					return "pipeline_get", extra
+				}
+				if len(rest) == 3 && rest[2] == "log" {
+					return "pipeline_log", extra
+				}
+				if len(rest) == 3 && rest[2] == "rerun" {
+					return "pipeline_rerun", extra
+				}
+				if len(rest) == 3 && rest[2] == "cancel" {
+					return "pipeline_cancel", extra
+				}
+				if len(rest) == 3 && rest[2] == "approve" {
+					return "deploy_approve", extra
+				}
+			}
+		}
 	}
-	if len(parts) >= 3 && parts[0] == "pipelines" {
-		extra["repo"] = parts[1]
-		n, _ := strconv.ParseInt(parts[2], 10, 64)
-		extra["number"] = n
-		if len(parts) == 4 && parts[3] == "log" {
-			return "pipeline_log", extra
-		}
-		if len(parts) == 4 && parts[3] == "rerun" {
-			return "pipeline_rerun", extra
-		}
-		if len(parts) == 4 && parts[3] == "approve" {
-			return "deploy_approve", extra
-		}
+	if len(parts) == 1 && parts[0] == "inbox" && method == http.MethodGet {
+		return "inbox", extra
 	}
 	if len(parts) == 1 && parts[0] == "publish" {
 		return "pkg_publish", extra

@@ -35,14 +35,15 @@ func (c *Client) Ready() bool {
 }
 
 type User struct {
-	ID          int64  `json:"id"`
-	Login       string `json:"login"`
-	LoginName   string `json:"login_name"`
-	SourceID    int64  `json:"source_id"`
-	Email       string `json:"email"`
-	IsAdmin     bool   `json:"is_admin"`
-	FullName    string `json:"full_name"`
-	Permissions Perm   `json:"permissions"`
+	ID          int64    `json:"id"`
+	Login       string   `json:"login"`
+	LoginName   string   `json:"login_name"`
+	SourceID    int64    `json:"source_id"`
+	Email       string   `json:"email"`
+	IsAdmin     bool     `json:"is_admin"`
+	FullName    string   `json:"full_name"`
+	Permissions Perm     `json:"permissions"`
+	Groups      []string `json:"groups,omitempty"`
 }
 
 type Perm struct {
@@ -121,12 +122,6 @@ type Package struct {
 	Version   string `json:"version"`
 	Type      string `json:"type"`
 	CreatedAt string `json:"created_at"`
-}
-
-type PackageFile struct {
-	ID   int64  `json:"id"`
-	Name string `json:"name"`
-	Size int64  `json:"Size"`
 }
 
 type PublicKey struct {
@@ -227,10 +222,6 @@ func listPage[T any](c *Client, path string, q page.Query, extra url.Values, sud
 		return page.Result[T]{}, err
 	}
 	return page.Clip(items, q), nil
-}
-
-func (c *Client) User(token string) (User, error) {
-	return c.user("", token)
 }
 
 func (c *Client) UserSudo(login string) (User, error) {
@@ -865,16 +856,6 @@ func (c *Client) ChecksGreen(owner, name, sha string) (bool, []Status, error) {
 		}
 	}
 	return ok, st, nil
-}
-
-func (c *Client) ListPackageFiles(owner, typ, name, version string) ([]PackageFile, error) {
-	p := "/api/v1/packages/" + url.PathEscape(owner) + "/" + url.PathEscape(typ) + "/" + url.PathEscape(name) + "/" + url.PathEscape(version) + "/files"
-	b, _, err := c.do(http.MethodGet, p, "", "", nil)
-	if err != nil {
-		return nil, err
-	}
-	var out []PackageFile
-	return out, json.Unmarshal(b, &out)
 }
 
 func (c *Client) ListPackages(owner, typ, query string, q page.Query) (page.Result[Package], error) {

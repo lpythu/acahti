@@ -2,10 +2,15 @@ package mcp
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"acahti/internal/forgejo"
 	"acahti/internal/httperr"
+	"acahti/internal/woodpecker"
 )
 
 func TestToolSet(t *testing.T) {
@@ -13,8 +18,9 @@ func TestToolSet(t *testing.T) {
 		"whoami",
 		"repo_list", "repo_get", "repo_create",
 		"branch_list", "ref_delete",
-		"pr_create", "pr_list", "pr_get", "pr_comment", "pr_merge",
-		"checks_wait", "pipeline_log", "pipeline_rerun",
+		"pr_create", "pr_list", "pr_get", "pr_comment", "pr_comments", "pr_merge",
+		"checks_wait", "pipeline_list", "pipeline_get", "pipeline_log",
+		"pipeline_rerun", "pipeline_trigger", "pipeline_cancel", "inbox",
 		"pkg_publish", "pkg_list", "agent_status", "deploy_approve",
 	}
 	have := map[string]bool{}
@@ -46,6 +52,71 @@ func TestStructuredError(t *testing.T) {
 func TestCodeForStatus(t *testing.T) {
 	if httperr.CodeForStatus(404) != "not_found" {
 		t.Fatal(httperr.CodeForStatus(404))
+	}
+}
+
+func TestCheckTimeout(t *testing.T) {
+	if checkTimeout(nil) != 600 {
+		t.Fatal("omit")
+	}
+	if checkTimeout(map[string]any{}) != 600 {
+		t.Fatal("empty")
+	}
+	if checkTimeout(map[string]any{"timeout_sec": 0}) != 0 {
+		t.Fatal("zero")
+	}
+	if checkTimeout(map[string]any{"timeout_sec": "0"}) != 0 {
+		t.Fatal("zero string")
+	}
+	if checkTimeout(map[string]any{"timeout_sec": 45.0}) != 45 {
+		t.Fatal("45")
+	}
+	if checkTimeout(map[string]any{"timeout_sec": -1}) != 600 {
+		t.Fatal("neg")
+	}
+}
+
+func TestFilterPipes(t *testing.T) {
+	items := []woodpecker.Pipeline{
+		{Number: 1, Commit: "abcdef", Branch: "dev", Status: "success"},
+		{Number: 2, Commit: "abc999", Branch: "test", Status: "failure"},
+		{Number: 3, Commit: "fff", Branch: "dev", Status: "running"},
+	}
+	got := filterPipes(items, "abc", "", "")
+	if len(got) != 2 || got[0].Number != 1 || got[1].Number != 2 {
+		t.Fatalf("sha=%+v", got)
+	}
+	got = filterPipes(items, "abcdef", "dev", "success")
+	if len(got) != 1 || got[0].Number != 1 {
+		t.Fatalf("all=%+v", got)
+	}
+}
+
+func TestWaitChecksSnapshot(t *testing.T) {
+	var hits int
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		_, _ = w.Write([]byte(`[{"status":"pending","context":"ci"}]`))
+	}))
+	t.Cleanup(hs.Close)
+	s := &Server{FJ: forgejo.New(hs.URL, "t")}
+	start := time.Now()
+	out, err := s.waitChecks("acme", "demo", "abc", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if time.Since(start) > time.Second {
+		t.Fatal("snapshot slept")
+	}
+	if hits != 1 {
+		t.Fatalf("hits=%d", hits)
+	}
+	m, _ := out.(map[string]any)
+	if m["ok"] != false {
+		t.Fatalf("%v", out)
+	}
+	if _, ok := m["timeout"]; ok {
+		t.Fatalf("snapshot must not set timeout: %v", out)
 	}
 }
 

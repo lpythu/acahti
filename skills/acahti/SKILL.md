@@ -1,6 +1,6 @@
 ---
 name: acahti
-description: Use Acahti. Install this file from $ROOT_URL/skill.md. Connect MCP at $ROOT_URL/mcp (OAuth). Before git commit, whoami and set local identity when the remote host is acahti.
+description: Use Acahti git, PRs, pipelines, commit checks, and logs. Install from $ROOT_URL/skill.md. Connect MCP at $ROOT_URL/mcp (OAuth). Before git commit, whoami and set local identity when the remote host is acahti.
 ---
 
 # Use Acahti
@@ -36,6 +36,19 @@ Before any `git commit` in the current repo:
 
 `git_email` is `{login}@noreply.$DOMAIN`. Do not ask the user for an email.
 
+## After push
+
+Trigger CI with `git push`, a tag, or opening a PR. Do not use `pipeline_trigger` as a substitute for official release.
+
+1. `git rev-parse HEAD`
+2. `checks_wait` `{owner, name, sha}`. Snapshot: `timeout_sec=0`.
+3. Failed or timeout: `pipeline_list` `{repo: owner/name, sha}` → `pipeline_get` → `pipeline_log` (omit `step`)
+4. Fix and push, or `pipeline_rerun`. `pipeline_cancel` only for a stuck run.
+5. Green: `pr_merge`. `blocked`: `deploy_approve`.
+6. Island triage: `inbox` `{section: prs|blocked|failed}`
+
+`pr_merge` only succeeds when commit checks are green. Do not push `main` / `release`; open a PR.
+
 ## Packages
 
 - PyPI: `$ROOT_URL/api/packages/$ACAHTI_ORG/pypi/simple/`
@@ -44,6 +57,4 @@ Before any `git commit` in the current repo:
 
 ## Tools
 
-`whoami` `repo_list` `repo_get` `repo_create` `branch_list` `ref_delete` `pr_create` `pr_list` `pr_get` `pr_comment` `pr_merge` `checks_wait` `pipeline_log` `pipeline_rerun` `pkg_list` `pkg_publish` `agent_status` `deploy_approve`
-
-`pr_merge` only succeeds when commit checks are green. Do not push `main` / `release`; open a PR.
+`whoami` `repo_list` `repo_get` `repo_create` `branch_list` `ref_delete` `pr_create` `pr_list` `pr_get` `pr_comment` `pr_comments` `pr_merge` `checks_wait` `pipeline_list` `pipeline_get` `pipeline_log` `pipeline_rerun` `pipeline_trigger` `pipeline_cancel` `inbox` `pkg_list` `pkg_publish` `agent_status` `deploy_approve`

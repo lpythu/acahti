@@ -517,7 +517,12 @@ func (c *Catalog) ListPipelines(user, repo, group string, q page.Query) (page.Re
 		if err := c.seeOK(user, owner, name); err != nil {
 			return page.Result[woodpecker.Pipeline]{}, err
 		}
-		return c.WP.ListPipelines(repo, q)
+		res, err := c.WP.ListPipelines(repo, q)
+		if err != nil {
+			return page.Result[woodpecker.Pipeline]{}, err
+		}
+		res.Items = c.WP.EnrichJobs(repo, res.Items)
+		return res, nil
 	}
 	if group != "" {
 		g, err := c.findGroup(group)
@@ -536,14 +541,14 @@ func (c *Catalog) ListPipelines(user, repo, group string, q page.Query) (page.Re
 		for i, r := range res.Items {
 			names[i] = r.FullName
 		}
-		return page.Of(c.WP.LatestPipelines(names, false), q, res.HasMore), nil
+		return page.Of(c.WP.LatestPipelines(names, true), q, res.HasMore), nil
 	}
 	names, err := c.pipelineNames(user, "")
 	if err != nil {
 		return page.Result[woodpecker.Pipeline]{}, err
 	}
 	slice := page.Take(names, q)
-	return page.Of(c.WP.LatestPipelines(slice.Items, false), q, slice.HasMore), nil
+	return page.Of(c.WP.LatestPipelines(slice.Items, true), q, slice.HasMore), nil
 }
 
 func (c *Catalog) CommitDetail(user, owner, name, sha string, q page.Query) (CommitDetail, error) {
@@ -632,6 +637,61 @@ func (c *Catalog) StepLog(user, repo string, number, step int64) (string, error)
 		return "", err
 	}
 	return woodpecker.FormatLog(raw), nil
+}
+
+func stepFailed(state string) bool {
+	switch strings.ToLower(state) {
+	case "failure", "error", "failed", "killed", "declined":
+		return true
+	}
+	return false
+}
+
+func tailLog(text string, n int64) string {
+	if n <= 0 {
+		return text
+	}
+	lines := strings.Split(text, "\n")
+	if int64(len(lines)) <= n {
+		return text
+	}
+	return strings.Join(lines[len(lines)-int(n):], "\n")
+}
+
+func (c *Catalog) PipelineLogs(user, repo string, number, step, tail int64) (map[string]any, error) {
+	detail, err := c.PipelineDetail(user, repo, number)
+	if err != nil {
+		return nil, err
+	}
+	if step > 0 {
+		text, err := c.StepLog(user, repo, number, step)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"log": tailLog(text, tail), "steps": detail.Steps}, nil
+	}
+	var failed []woodpecker.Step
+	for _, s := range detail.Steps {
+		if stepFailed(s.State) {
+			failed = append(failed, s)
+		}
+	}
+	if len(failed) == 0 {
+		return map[string]any{"log": "", "steps": detail.Steps}, nil
+	}
+	var b strings.Builder
+	for _, s := range failed {
+		id := s.ID
+		if id == 0 {
+			id = s.PID
+		}
+		text, err := c.StepLog(user, repo, number, id)
+		if err != nil {
+			text = err.Error()
+		}
+		fmt.Fprintf(&b, "=== %s (step %d) %s ===\n%s\n", s.Name, id, s.State, tailLog(text, tail))
+	}
+	return map[string]any{"log": b.String(), "steps": failed}, nil
 }
 
 func (c *Catalog) BoardPRs(user string, q page.Query) (page.Result[forgejo.PR], error) {

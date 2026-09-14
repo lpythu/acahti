@@ -1,8 +1,8 @@
 import { type FormEvent, useState } from "react"
+import { Link } from "react-router-dom"
 
 import { CopyField } from "@/components/copy-field"
 import { PagedList } from "@/components/paged-list"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -13,7 +13,62 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useLoad } from "@/hooks/use-load"
 import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
-import { api, type Invite } from "@/lib/api"
+import { api, type Invite, type User } from "@/lib/api"
+import { onboardNote, randomPassword } from "@/lib/onboard"
+import { useSession } from "@/lib/session"
+
+async function groupsByLogin() {
+  const map: Record<string, string[]> = {}
+  let pageNum = 1
+  for (;;) {
+    const listed = await api.repoGroups({ page: pageNum, page_size: 50 })
+    await Promise.all(
+      (listed.items || []).map(async (row) => {
+        const g = await api.group(row.group)
+        for (const m of g.members || []) {
+          const cur = map[m.login] || []
+          if (!cur.includes(row.group)) cur.push(row.group)
+          map[m.login] = cur
+        }
+      }),
+    )
+    if (!listed.has_more) break
+    pageNum++
+  }
+  for (const login of Object.keys(map)) {
+    map[login].sort((a, b) => a.localeCompare(b))
+  }
+  return map
+}
+
+function userGroups(u: User, fallback: Record<string, string[]> | null) {
+  if (u.groups) return u.groups
+  return fallback?.[u.login] || []
+}
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    /* note stays in the menu for a manual copy */
+  }
+}
+
+const PASSWORD_MASK = "••••••••"
+
+function PasswordInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [focused, setFocused] = useState(false)
+  return (
+    <Input
+      type="password"
+      autoComplete="new-password"
+      value={value || (focused ? "" : PASSWORD_MASK)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  )
+}
 
 function InviteMenu({
   invites,
@@ -66,20 +121,50 @@ function InviteMenu({
 function CreateUserMenu({
   admin,
   setAdmin,
+  root,
   onCreate,
 }: {
   admin: boolean
   setAdmin: (v: boolean) => void
-  onCreate: (e: FormEvent<HTMLFormElement>) => Promise<void>
+  root: string
+  onCreate: (login: string, password: string, admin: boolean) => Promise<string>
 }) {
   const t = useT()
+  const [note, setNote] = useState("")
+  const [err, setErr] = useState("")
+
   return (
-    <Popover>
-      <PopoverTrigger render={<Button type="button" size="sm" />}>
-        {t("createUser")}
-      </PopoverTrigger>
-      <PopoverContent className="w-80">
-        <form onSubmit={(e) => void onCreate(e)}>
+    <Popover
+      onOpenChange={(open) => {
+        if (!open) {
+          setNote("")
+          setErr("")
+        }
+      }}
+    >
+      <PopoverTrigger render={<Button type="button" size="sm" />}>{t("createUser")}</PopoverTrigger>
+      <PopoverContent className="flex w-96 flex-col gap-3">
+        <form
+          onSubmit={(e: FormEvent<HTMLFormElement>) => {
+            e.preventDefault()
+            const fd = new FormData(e.currentTarget)
+            const login = String(fd.get("username") || "").trim()
+            const password = String(fd.get("password") || "")
+            setErr("")
+            const form = e.currentTarget
+            void onCreate(login, password, admin)
+              .then((created) => {
+                const text = onboardNote(root, created, password)
+                setNote(text)
+                void copyText(text)
+                form.reset()
+                setAdmin(false)
+              })
+              .catch((e: unknown) => {
+                setErr(e instanceof Error ? e.message : t("loadError"))
+              })
+          }}
+        >
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="username">{t("username")}</FieldLabel>
@@ -96,6 +181,67 @@ function CreateUserMenu({
             <Button type="submit">{t("create")}</Button>
           </FieldGroup>
         </form>
+        {err ? <p className="text-sm text-destructive">{err}</p> : null}
+        {note ? (
+          <>
+            <p className="text-sm text-muted-foreground">{t("onboardHint")}</p>
+            <CopyField multiline value={note} />
+          </>
+        ) : null}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function OnboardMenu({
+  login,
+  root,
+  password,
+  onPassword,
+}: {
+  login: string
+  root: string
+  password: string
+  onPassword: (pw: string) => void
+}) {
+  const t = useT()
+  const [note, setNote] = useState("")
+  const [err, setErr] = useState("")
+
+  async function prepare() {
+    setErr("")
+    try {
+      let pw = password.trim()
+      if (!pw) {
+        pw = randomPassword()
+        onPassword(pw)
+      }
+      await api.setPassword(login, pw)
+      const text = onboardNote(root, login, pw)
+      setNote(text)
+      await copyText(text)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : t("loadError"))
+    }
+  }
+
+  return (
+    <Popover
+      onOpenChange={(open) => {
+        if (open) void prepare()
+        else {
+          setNote("")
+          setErr("")
+        }
+      }}
+    >
+      <PopoverTrigger render={<Button type="button" size="sm" disabled={!root} />}>
+        {t("join")}
+      </PopoverTrigger>
+      <PopoverContent className="flex w-96 flex-col gap-3">
+        <p className="text-sm text-muted-foreground">{t("onboardHint")}</p>
+        {err ? <p className="text-sm text-destructive">{err}</p> : null}
+        {note ? <CopyField multiline value={note} /> : null}
       </PopoverContent>
     </Popover>
   )
@@ -103,44 +249,35 @@ function CreateUserMenu({
 
 export function UsersPage() {
   const t = useT()
+  const { me } = useSession()
+  const root = (me?.root_url || "").replace(/\/$/, "")
   const usersLoad = usePage((q) => api.users(q), [])
   const invitesLoad = useLoad(async () => {
     const r = await api.invites()
     return { invites: r.invites || [], join: r.join }
   }, [])
-  const [notice, setNotice] = useState("")
   const [formErr, setFormErr] = useState("")
   const [admin, setAdmin] = useState(false)
   const [resets, setResets] = useState<Record<string, string>>({})
   const users = usersLoad.items
+  const apiHasGroups = Boolean(usersLoad.data) && users.every((u) => u.groups !== undefined)
+  const membership = useLoad(groupsByLogin, [], Boolean(usersLoad.data) && !apiHasGroups)
   const invites = invitesLoad.data?.invites || []
   const joinBase = invitesLoad.data?.join || "/join"
 
-  async function onCreate(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const fd = new FormData(e.currentTarget)
-    setFormErr("")
-    setNotice("")
-    try {
-      const r = await api.createUser(String(fd.get("username") || ""), String(fd.get("password") || ""), admin)
-      setNotice(t("userCreated", { name: r.user.login }))
-      e.currentTarget.reset()
-      setAdmin(false)
-      await usersLoad.reload()
-    } catch (err) {
-      setFormErr(err instanceof Error ? err.message : t("loadError"))
-    }
+  async function onCreate(login: string, password: string, isAdmin: boolean) {
+    const r = await api.createUser(login, password, isAdmin)
+    setResets((m) => ({ ...m, [r.user.login]: password }))
+    await usersLoad.reload()
+    return r.user.login
   }
 
   async function resetRow(login: string) {
     const pw = resets[login] || ""
     if (!pw) return
     setFormErr("")
-    setNotice("")
     try {
       await api.setPassword(login, pw)
-      setNotice(t("passwordSet", { name: login }))
-      setResets((m) => ({ ...m, [login]: "" }))
     } catch (err) {
       setFormErr(err instanceof Error ? err.message : t("loadError"))
     }
@@ -173,50 +310,60 @@ export function UsersPage() {
                 await invitesLoad.reload()
               }}
             />
-            <CreateUserMenu admin={admin} setAdmin={setAdmin} onCreate={onCreate} />
+            <CreateUserMenu admin={admin} setAdmin={setAdmin} root={root} onCreate={onCreate} />
           </div>
         </div>
       }
     >
       {() => (
-        <>
-          {notice ? (
-            <Alert>
-              <AlertTitle>{notice}</AlertTitle>
-              <AlertDescription>{t("loginWithPassword")}</AlertDescription>
-            </Alert>
-          ) : null}
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("username")}</TableHead>
-                <TableHead>{t("admin")}</TableHead>
-                <TableHead>{t("password")}</TableHead>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("username")}</TableHead>
+              <TableHead>{t("group")}</TableHead>
+              <TableHead>{t("admin")}</TableHead>
+              <TableHead>{t("password")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {users.map((u) => (
+              <TableRow key={u.login}>
+                <TableCell>{u.login}</TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1.5">
+                    {userGroups(u, membership.data).map((g) => (
+                      <Link
+                        key={g}
+                        to={`/repos?group=${encodeURIComponent(g)}`}
+                        className="inline-flex rounded-md bg-background px-2 py-0.5 text-xs shadow-sm ring-1 ring-foreground/10 hover:bg-muted"
+                      >
+                        {g}
+                      </Link>
+                    ))}
+                  </div>
+                </TableCell>
+                <TableCell>{u.is_admin ? t("admin") : ""}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <PasswordInput
+                      value={resets[u.login] || ""}
+                      onChange={(v) => setResets((m) => ({ ...m, [u.login]: v }))}
+                    />
+                    <Button type="button" size="sm" variant="outline" onClick={() => void resetRow(u.login)}>
+                      {t("resetPassword")}
+                    </Button>
+                    <OnboardMenu
+                      login={u.login}
+                      root={root}
+                      password={resets[u.login] || ""}
+                      onPassword={(pw) => setResets((m) => ({ ...m, [u.login]: pw }))}
+                    />
+                  </div>
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.map((u) => (
-                <TableRow key={u.login}>
-                  <TableCell>{u.login}</TableCell>
-                  <TableCell>{u.is_admin ? t("admin") : ""}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="password"
-                        autoComplete="new-password"
-                        value={resets[u.login] || ""}
-                        onChange={(e) => setResets((m) => ({ ...m, [u.login]: e.target.value }))}
-                      />
-                      <Button type="button" size="sm" variant="outline" onClick={() => void resetRow(u.login)}>
-                        {t("resetPassword")}
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </PagedList>
   )

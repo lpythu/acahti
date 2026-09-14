@@ -1,7 +1,6 @@
-import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom"
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { Toaster } from "@/components/ui/sonner"
 import { I18nProvider } from "@/i18n/i18n"
 import { SessionProvider } from "@/lib/session"
 import { AdminHomePage } from "@/pages/admin-home"
@@ -28,11 +27,6 @@ import { JoinPage } from "@/pages/join"
 import { UsePage } from "@/pages/use"
 import { UsersPage } from "@/pages/users"
 
-function RepoPipelineRedirect() {
-  const { owner, name, number } = useParams()
-  return <Navigate to={`/pipelines/${owner}/${name}/${number}`} replace />
-}
-
 export default function App() {
   return (
     <I18nProvider>
@@ -44,8 +38,6 @@ export default function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route path="/join" element={<JoinPage />} />
               <Route path="/oauth/consent" element={<ConsentPage />} />
-              <Route path="/keys" element={<Navigate to="/account/keys" replace />} />
-              <Route path="/users" element={<Navigate to="/admin/users" replace />} />
               <Route element={<AppShell />}>
                 <Route path="/board" element={<BoardPage />} />
                 <Route path="/repos" element={<ReposPage />} />
@@ -57,7 +49,6 @@ export default function App() {
                   <Route path="pulls" element={<RepoPullsPage />} />
                   <Route path="pulls/:number" element={<PullPage />} />
                   <Route path="pipelines" element={<RepoPipelinesPage />} />
-                  <Route path="pipelines/:number" element={<RepoPipelineRedirect />} />
                   <Route path="access" element={<RepoAccessPage />} />
                 </Route>
                 <Route path="/pipelines" element={<PipelinesPage />} />
@@ -74,7 +65,6 @@ export default function App() {
             </Routes>
           </SessionProvider>
         </BrowserRouter>
-        <Toaster />
       </TooltipProvider>
     </I18nProvider>
   )

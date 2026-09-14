@@ -44,3 +44,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 export function useT() {
   return useContext(I18n).t
 }
+
+export function useLocale() {
+  return useContext(I18n).locale
+}

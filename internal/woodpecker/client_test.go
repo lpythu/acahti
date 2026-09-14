@@ -54,6 +54,24 @@ func TestRepoKeyUsesCache(t *testing.T) {
 	}
 }
 
+func TestCancelPostsPath(t *testing.T) {
+	var got string
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Method + " " + r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(s.Close)
+	c := New(s.URL, "t")
+	c.ids["acme/demo"] = 7
+	c.reposAt = time.Now()
+	if err := c.Cancel("acme/demo", 12); err != nil {
+		t.Fatal(err)
+	}
+	if got != "POST /api/repos/7/pipelines/12/cancel" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestLatestPipelinesPreservesOrder(t *testing.T) {
 	c := New("http://127.0.0.1", "t")
 	c.storeLatest("a/one", Pipeline{Number: 1, Repo: "a/one", Status: "success"})

@@ -1,10 +1,9 @@
 import { useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 
 import { PagedList } from "@/components/paged-list"
-import { StatusBadge } from "@/components/status-badge"
+import { PipelineRunRow } from "@/components/pipeline-run-row"
 import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api } from "@/lib/api"
@@ -14,10 +13,7 @@ export function RepoPipelinesPage() {
   const t = useT()
   const nav = useNavigate()
   const { owner, name, data } = useRepo()
-  const list = usePage(
-    (q) => api.pipelines({ ...q, repo: `${owner}/${name}` }),
-    [owner, name],
-  )
+  const list = usePage((q) => api.pipelines({ ...q, repo: `${owner}/${name}` }), [owner, name])
   const [busy, setBusy] = useState(false)
   const [actionErr, setActionErr] = useState("")
 
@@ -38,7 +34,7 @@ export function RepoPipelinesPage() {
     <PagedList
       list={{ ...list, error: list.error || actionErr }}
       emptyText={t("noPipelines")}
-      skeleton="table"
+      skeleton="lines"
       header={
         <Button className="w-fit" disabled={busy || !data} onClick={() => void runPipe()}>
           {t("run")}
@@ -46,30 +42,11 @@ export function RepoPipelinesPage() {
       }
     >
       {(items) => (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>#</TableHead>
-              <TableHead>{t("status")}</TableHead>
-              <TableHead>{t("title")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {items.map((p) => (
-              <TableRow key={p.number}>
-                <TableCell>
-                  <Link className="hover:underline" to={`/pipelines/${owner}/${name}/${p.number}`}>
-                    {p.number}
-                  </Link>
-                </TableCell>
-                <TableCell>
-                  <StatusBadge status={p.status} />
-                </TableCell>
-                <TableCell>{p.title || p.event}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <ul className="divide-y rounded-md border">
+          {items.map((p) => (
+            <PipelineRunRow key={p.number} pipe={p} hideRepo />
+          ))}
+        </ul>
       )}
     </PagedList>
   )

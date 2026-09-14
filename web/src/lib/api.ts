@@ -1,7 +1,5 @@
 import { pageQS, type Page, type PageQuery } from "@/lib/page"
 
-export type { Page, PageQuery }
-
 export type Me = {
   user: string
   admin: boolean
@@ -78,7 +76,7 @@ export type Stack = {
   upgrade_hint: string
 }
 
-export type User = { login: string; email: string; is_admin: boolean; full_name: string }
+export type User = { login: string; email: string; is_admin: boolean; full_name: string; groups?: string[] }
 
 export type PublicKey = { id: number; title: string; key: string }
 
@@ -341,6 +339,8 @@ export const api = {
     req<{ log: string }>(`/ui/pipelines/${owner}/${name}/${n}/log?step=${step}`),
   rerun: (owner: string, name: string, n: number) =>
     req<Pipeline>(`/ui/pipelines/${owner}/${name}/${n}/rerun`, { method: "POST" }),
+  cancel: (owner: string, name: string, n: number) =>
+    req<{ ok: boolean }>(`/ui/pipelines/${owner}/${name}/${n}/cancel`, { method: "POST" }),
   approve: (owner: string, name: string, n: number) =>
     req<{ ok: boolean }>(`/ui/pipelines/${owner}/${name}/${n}/approve`, { method: "POST" }),
   packages: (q?: PageQuery, kind?: string) =>

@@ -25,7 +25,7 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 	oa, _ := oauth.Open(cfg.DataDir, cfg.RootURL, a)
 	pages := web.New(cfg, fj, wp, a, inv, oa, hub)
 	mc := mcp.New(cfg, a, fj, wp)
-	rest := &api.API{Cfg: cfg, Auth: a, FJ: fj, WP: wp, Hub: hub, MCP: mc}
+	rest := &api.API{Cfg: cfg, Auth: a, Hub: hub, MCP: mc}
 	fjProxy := reverse(cfg.ForgejoURL)
 
 	mux := http.NewServeMux()
@@ -74,6 +74,7 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 	mux.HandleFunc("GET /ui/pipelines/{owner}/{name}/{n}", pages.Pipeline)
 	mux.HandleFunc("GET /ui/pipelines/{owner}/{name}/{n}/log", pages.Pipeline)
 	mux.HandleFunc("POST /ui/pipelines/{owner}/{name}/{n}/rerun", pages.Pipeline)
+	mux.HandleFunc("POST /ui/pipelines/{owner}/{name}/{n}/cancel", pages.Pipeline)
 	mux.HandleFunc("POST /ui/pipelines/{owner}/{name}/{n}/approve", pages.Pipeline)
 	mux.HandleFunc("GET /ui/packages", pages.Packages)
 	mux.HandleFunc("GET /ui/packages/{kind}/{name...}", pages.Packages)
@@ -88,11 +89,9 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 	mux.HandleFunc("GET /ui/keys", pages.Keys)
 	mux.HandleFunc("POST /ui/keys", pages.Keys)
 	mux.HandleFunc("POST /ui/password", pages.Password)
-	mux.HandleFunc("POST /ui/approve", pages.Approve)
 	mux.HandleFunc("GET /logout", pages.Logout)
 	mux.Handle("GET /assets/", http.FileServer(http.FS(pages.Files())))
 	mux.HandleFunc("GET /acahti.svg", pages.PublicFile)
-	mux.HandleFunc("GET /acahti-mark.png", pages.PublicFile)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			http.NotFound(w, r)
@@ -103,20 +102,7 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 	mux.HandleFunc("POST /hooks/forgejo", func(w http.ResponseWriter, r *http.Request) {
 		var payload map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&payload)
-		kind, _ := payload["action"].(string)
-		if kind == "" {
-			kind, _ = payload["ref"].(string)
-			if kind != "" {
-				kind = "push"
-			}
-		}
 		hub.Publish("forgejo", payload)
-		w.WriteHeader(http.StatusNoContent)
-	})
-	mux.HandleFunc("POST /hooks/woodpecker", func(w http.ResponseWriter, r *http.Request) {
-		var payload map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&payload)
-		hub.Publish("woodpecker", payload)
 		w.WriteHeader(http.StatusNoContent)
 	})
 

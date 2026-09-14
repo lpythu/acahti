@@ -66,21 +66,16 @@ func TestWriteID(t *testing.T) {
 	}
 }
 
-func TestFlattenGroups(t *testing.T) {
-	grouped := map[string][]forgejo.Repo{
-		"Express":  {{FullName: "saidc/ejp", Group: "Express"}},
-		"Platform": {{FullName: "saidc/docs", Group: "Platform"}, {FullName: "saidc/ops", Group: "Platform"}},
+func TestStepFailedAndTailLog(t *testing.T) {
+	if !stepFailed("failure") || !stepFailed("killed") || stepFailed("success") {
+		t.Fatal("stepFailed")
 	}
-	if n := len(flattenGroups(grouped, "Express")); n != 1 {
-		t.Fatalf("express=%d", n)
+	text := "a\nb\nc\nd"
+	if got := tailLog(text, 2); got != "c\nd" {
+		t.Fatalf("tail=%q", got)
 	}
-	all := flattenGroups(grouped, "")
-	if len(all) != 3 || all[0].FullName != "saidc/docs" {
-		t.Fatalf("all=%+v", all)
-	}
-	counts := groupCounts(grouped)
-	if len(counts) != 2 || counts[0].Group != "Express" || counts[0].Count != 1 || counts[1].Count != 2 {
-		t.Fatalf("%+v", counts)
+	if got := tailLog(text, 0); got != text {
+		t.Fatalf("all=%q", got)
 	}
 }
 

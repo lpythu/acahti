@@ -16,6 +16,8 @@ func TestAcahtiFillsIslandURLs(t *testing.T) {
 		"https://acahti.example.com/mcp",
 		"https://acahti.example.com/acme/<repo>.git",
 		"ssh://git@acahti.example.com:2222/acme/<repo>.git",
+		"pipeline_list",
+		"checks_wait",
 	} {
 		if !strings.Contains(s, need) {
 			t.Fatalf("missing %q in\n%s", need, s)

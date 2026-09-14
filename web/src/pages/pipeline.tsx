@@ -90,6 +90,16 @@ export function PipelinePage() {
     }
   }
 
+  async function cancel() {
+    setBusy(true)
+    try {
+      await api.cancel(owner, name, n)
+      await reload()
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (loading && !data) {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
@@ -155,6 +165,11 @@ export function PipelinePage() {
           {p.status === "blocked" ? (
             <Button size="sm" disabled={busy} onClick={() => void approve()}>
               {t("approve")}
+            </Button>
+          ) : null}
+          {p.status === "running" || p.status === "pending" ? (
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => void cancel()}>
+              {t("cancel")}
             </Button>
           ) : null}
           <Button size="sm" variant="outline" disabled={busy} onClick={() => void rerun()}>

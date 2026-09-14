@@ -100,3 +100,29 @@ export function triggerVars(p: Pipeline): Record<string, string> {
     ref,
   }
 }
+
+export function runTitle(p: Pipeline) {
+  const raw = (p.message || p.title || "").trim()
+  return raw.split("\n")[0] || p.event || "pipeline"
+}
+
+export function runRef(p: Pipeline) {
+  return shortRef(p.ref) || p.branch || ""
+}
+
+export function runEventKey(event?: string): MessageKey {
+  switch ((event || "").toLowerCase()) {
+    case "push":
+      return "runPush"
+    case "tag":
+    case "release":
+      return "runTag"
+    case "pull_request":
+    case "pull_request_closed":
+      return "runPR"
+    case "cron":
+      return "runCron"
+    default:
+      return "runManual"
+  }
+}

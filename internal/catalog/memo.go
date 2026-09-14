@@ -15,18 +15,16 @@ type stamp[T any] struct {
 }
 
 type memo struct {
-	mu     sync.Mutex
-	admin  map[string]stamp[bool]
-	repos  map[string]stamp[[]forgejo.Repo]
-	groups map[string]stamp[map[string][]forgejo.Repo]
-	teams  stamp[[]forgejo.Team]
+	mu    sync.Mutex
+	admin map[string]stamp[bool]
+	repos map[string]stamp[[]forgejo.Repo]
+	teams stamp[[]forgejo.Team]
 }
 
 func newMemo() *memo {
 	return &memo{
-		admin:  map[string]stamp[bool]{},
-		repos:  map[string]stamp[[]forgejo.Repo]{},
-		groups: map[string]stamp[map[string][]forgejo.Repo]{},
+		admin: map[string]stamp[bool]{},
+		repos: map[string]stamp[[]forgejo.Repo]{},
 	}
 }
 
@@ -67,22 +65,6 @@ func (m *memo) setRepos(user string, repos []forgejo.Repo) {
 	m.mu.Unlock()
 }
 
-func (m *memo) groupsOf(user string) (map[string][]forgejo.Repo, bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	g, ok := got(m.groups, user)
-	if !ok {
-		return nil, false
-	}
-	return cloneGroups(g), true
-}
-
-func (m *memo) setGroups(user string, g map[string][]forgejo.Repo) {
-	m.mu.Lock()
-	m.groups[user] = stamp[map[string][]forgejo.Repo]{at: time.Now(), v: cloneGroups(g)}
-	m.mu.Unlock()
-}
-
 func (m *memo) teamsOf() ([]forgejo.Team, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -102,17 +84,8 @@ func (m *memo) drop() {
 	m.mu.Lock()
 	m.admin = map[string]stamp[bool]{}
 	m.repos = map[string]stamp[[]forgejo.Repo]{}
-	m.groups = map[string]stamp[map[string][]forgejo.Repo]{}
 	m.teams = stamp[[]forgejo.Team]{}
 	m.mu.Unlock()
-}
-
-func cloneGroups(in map[string][]forgejo.Repo) map[string][]forgejo.Repo {
-	out := make(map[string][]forgejo.Repo, len(in))
-	for k, v := range in {
-		out[k] = append([]forgejo.Repo{}, v...)
-	}
-	return out
 }
 
 func (c *Catalog) forget() {

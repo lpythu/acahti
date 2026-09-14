@@ -1,32 +1,63 @@
-import { cn } from "cn"
-
-import { resolveTone } from "@/components/status-badge"
+import { RunStatusIcon } from "@/components/run-status-icon"
+import { statusText } from "@/components/status-badge"
+import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { useT } from "@/i18n/i18n"
 import type { Stage } from "@/lib/pipeline"
 
-const DOT: Record<string, string> = {
-  success: "bg-emerald-500",
-  running: "bg-sky-500",
-  pending: "bg-muted-foreground/40",
-  warning: "bg-amber-500",
-  danger: "bg-red-500",
-}
+const VISIBLE = 4
 
 export function PipelineStages({ stages }: { stages: Stage[] }) {
-  if (!stages.length) return <span className="text-muted-foreground">—</span>
+  const t = useT()
+  if (!stages.length) return null
+
+  const shown = stages.slice(0, VISIBLE)
+  const extra = stages.slice(VISIBLE)
 
   return (
-    <ol className="flex items-start">
-      {stages.map((s, i) => (
-        <li key={`${s.name}-${i}`} className="flex items-start">
-          {i > 0 ? <span className="mt-1.5 h-px w-3 shrink-0 bg-border" /> : null}
-          <div className="flex min-w-0 flex-col items-center gap-1">
-            <span className={cn("size-2.5 shrink-0 rounded-full", DOT[resolveTone(s.state)])} />
-            {s.name ? (
-              <span className="max-w-16 truncate text-[10px] leading-none text-muted-foreground">{s.name}</span>
-            ) : null}
-          </div>
+    <ol className="flex max-w-64 shrink-0 flex-wrap items-center justify-end gap-1" aria-label={t("jobs")}>
+      {shown.map((s, i) => {
+        const label = statusText(s.state, t)
+        return (
+          <li key={`${s.name}-${i}`}>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Badge variant="outline" className="font-normal">
+                    <RunStatusIcon status={s.state} className="size-3" />
+                    <span className="max-w-20 truncate">{s.name}</span>
+                  </Badge>
+                }
+                aria-label={`${s.name}: ${label}`}
+              />
+              <TooltipContent>
+                <span>{s.name}</span>
+                <span className="opacity-70">{label}</span>
+              </TooltipContent>
+            </Tooltip>
+          </li>
+        )
+      })}
+      {extra.length ? (
+        <li>
+          <Tooltip>
+            <TooltipTrigger
+              render={<Badge variant="outline" className="font-normal" />}
+              aria-label={`+${extra.length}`}
+            >
+              +{extra.length}
+            </TooltipTrigger>
+            <TooltipContent className="flex-col items-start gap-1">
+              {extra.map((s, i) => (
+                <span key={`${s.name}-${i}`}>
+                  {s.name}
+                  <span className="opacity-70"> {statusText(s.state, t)}</span>
+                </span>
+              ))}
+            </TooltipContent>
+          </Tooltip>
         </li>
-      ))}
+      ) : null}
     </ol>
   )
 }

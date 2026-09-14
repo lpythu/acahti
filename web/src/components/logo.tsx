@@ -22,12 +22,3 @@ export function AcahtiMark({ className }: { className?: string }) {
     </svg>
   )
 }
-
-export function AcahtiWordmark({ className }: { className?: string }) {
-  return (
-    <span className={className}>
-      <AcahtiMark className="size-6 text-foreground" />
-      <span className="font-semibold tracking-tight">Acahti</span>
-    </span>
-  )
-}

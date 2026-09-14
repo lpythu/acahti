@@ -89,12 +89,18 @@ func tools() []toolSpec {
 		{Name: "ref_delete", Description: "Delete a git ref", InputSchema: obj(map[string]any{"owner": str, "name": str, "ref": str}, "owner", "name", "ref")},
 		{Name: "pr_create", Description: "Open a pull request", InputSchema: obj(map[string]any{"owner": str, "name": str, "title": str, "head": str, "base": str, "body": str}, "owner", "name", "title", "head")},
 		{Name: "pr_list", Description: "List pull requests", InputSchema: obj(map[string]any{"owner": str, "name": str, "state": str, "page": num, "page_size": num}, "owner", "name")},
-		{Name: "pr_get", Description: "Get a pull request", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
+		{Name: "pr_get", Description: "Get a pull request with commit checks", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
 		{Name: "pr_comment", Description: "Comment on a pull request", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num, "body": str}, "owner", "name", "number", "body")},
+		{Name: "pr_comments", Description: "List pull request comments", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num, "page": num, "page_size": num}, "owner", "name", "number")},
 		{Name: "pr_merge", Description: "Merge a PR only when commit checks are green", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
-		{Name: "checks_wait", Description: "Wait until commit checks finish or timeout", InputSchema: obj(map[string]any{"owner": str, "name": str, "sha": str, "timeout_sec": num}, "owner", "name", "sha")},
-		{Name: "pipeline_log", Description: "Fetch pipeline logs", InputSchema: obj(map[string]any{"repo": str, "number": num, "step": num}, "repo", "number")},
+		{Name: "checks_wait", Description: "Wait until commit checks finish or timeout. timeout_sec=0 is a snapshot", InputSchema: obj(map[string]any{"owner": str, "name": str, "sha": str, "timeout_sec": num}, "owner", "name", "sha")},
+		{Name: "pipeline_list", Description: "List pipelines for a repo", InputSchema: obj(map[string]any{"repo": str, "sha": str, "branch": str, "status": str, "page": num, "page_size": num}, "repo")},
+		{Name: "pipeline_get", Description: "Get one pipeline and its steps", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
+		{Name: "pipeline_log", Description: "Fetch pipeline logs. Omit step for failed steps only", InputSchema: obj(map[string]any{"repo": str, "number": num, "step": num, "tail_lines": num}, "repo", "number")},
 		{Name: "pipeline_rerun", Description: "Rerun a pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
+		{Name: "pipeline_trigger", Description: "Manual run on a ref. Official release is still git push", InputSchema: obj(map[string]any{"repo": str, "ref": str}, "repo")},
+		{Name: "pipeline_cancel", Description: "Cancel a running pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
+		{Name: "inbox", Description: "Island inbox: open PRs, blocked deploys, or failed pipelines", InputSchema: obj(map[string]any{"section": str, "page": num, "page_size": num})},
 		{Name: "pkg_publish", Description: "Publish a language package (pypi wheel URL or npm tarball URL)", InputSchema: obj(map[string]any{"kind": str, "url": str, "filename": str}, "kind", "url")},
 		{Name: "pkg_list", Description: "List language packages", InputSchema: obj(map[string]any{"owner": str, "kind": str, "page": num, "page_size": num})},
 		{Name: "whoami", Description: "Acahti git identity for this token: git_name, git_email, apply_when_remote_host, setup_local", InputSchema: obj(nil)},
@@ -246,49 +252,48 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 	case "pr_list":
 		return s.FJ.ListPRs(str("owner"), str("name"), str("state"), pq)
 	case "pr_get":
-		return s.FJ.GetPR(str("owner"), str("name"), int(num("number")))
+		return s.Cat.PRDetail(token, str("owner"), str("name"), int(num("number")))
 	case "pr_comment":
 		return map[string]any{"ok": true}, s.FJ.CommentPR(str("owner"), str("name"), int(num("number")), str("body"))
+	case "pr_comments":
+		return s.Cat.ListComments(token, str("owner"), str("name"), int(num("number")), pq)
 	case "pr_merge":
 		return s.Cat.MergePR(token, str("owner"), str("name"), int(num("number")))
 	case "checks_wait":
-		owner, name, sha := str("owner"), str("name"), str("sha")
-		timeout := num("timeout_sec")
-		if timeout <= 0 {
-			timeout = 600
-		}
-		deadline := time.Now().Add(time.Duration(timeout) * time.Second)
-		var last []forgejo.Status
-		for time.Now().Before(deadline) {
-			ok, st, err := s.FJ.ChecksGreen(owner, name, sha)
-			if err != nil {
-				return nil, err
-			}
-			last = st
-			pending := false
-			failed := false
-			for _, x := range st {
-				switch strings.ToLower(x.Status) {
-				case "pending":
-					pending = true
-				case "failure", "error":
-					failed = true
-				}
-			}
-			if failed {
-				return map[string]any{"ok": false, "statuses": st}, nil
-			}
-			if ok && !pending && len(st) > 0 {
-				return map[string]any{"ok": true, "statuses": st}, nil
-			}
-			time.Sleep(3 * time.Second)
-		}
-		return map[string]any{"ok": false, "timeout": true, "statuses": last}, nil
+		return s.waitChecks(str("owner"), str("name"), str("sha"), checkTimeout(a))
+	case "pipeline_list":
+		return s.listPipes(token, repoArg(str), str("sha"), str("branch"), str("status"), pq)
+	case "pipeline_get":
+		return s.Cat.PipelineDetail(token, repoArg(str), num("number"))
 	case "pipeline_log":
-		text, err := s.Cat.StepLog(token, str("repo"), num("number"), num("step"))
-		return map[string]any{"log": text}, err
+		return s.Cat.PipelineLogs(token, repoArg(str), num("number"), num("step"), num("tail_lines"))
 	case "pipeline_rerun":
-		return s.WP.Rerun(str("repo"), num("number"))
+		return s.WP.Rerun(repoArg(str), num("number"))
+	case "pipeline_trigger":
+		repo := repoArg(str)
+		if err := s.seeRepo(token, repo); err != nil {
+			return nil, err
+		}
+		ref := str("ref")
+		if ref == "" {
+			ref = "dev"
+		}
+		return s.WP.Trigger(repo, ref)
+	case "pipeline_cancel":
+		repo := repoArg(str)
+		if err := s.seeRepo(token, repo); err != nil {
+			return nil, err
+		}
+		return map[string]any{"ok": true}, s.WP.Cancel(repo, num("number"))
+	case "inbox":
+		section := str("section")
+		if section == "" {
+			section = "failed"
+		}
+		if section == "prs" {
+			return s.Cat.BoardPRs(token, pq)
+		}
+		return s.Cat.BoardPipes(token, section, pq)
 	case "pkg_list":
 		owner := str("owner")
 		if owner == "" {
@@ -304,6 +309,149 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 	default:
 		return nil, fmt.Errorf("unknown tool %s", name)
 	}
+}
+
+func repoArg(str func(string) string) string {
+	if r := str("repo"); r != "" {
+		return r
+	}
+	o, n := str("owner"), str("name")
+	if o != "" && n != "" {
+		return o + "/" + n
+	}
+	return ""
+}
+
+func checkTimeout(a map[string]any) int64 {
+	v, ok := a["timeout_sec"]
+	if !ok {
+		return 600
+	}
+	n := int64(0)
+	switch x := v.(type) {
+	case float64:
+		n = int64(x)
+	case json.Number:
+		n, _ = x.Int64()
+	case string:
+		n, _ = strconv.ParseInt(x, 10, 64)
+	case int:
+		n = int64(x)
+	case int64:
+		n = x
+	}
+	if n < 0 {
+		return 600
+	}
+	return n
+}
+
+func (s *Server) seeRepo(token, repo string) error {
+	owner, name, _ := strings.Cut(repo, "/")
+	if owner == "" || name == "" {
+		return fmt.Errorf("repo must be owner/name")
+	}
+	_, err := s.Cat.RepoHeader(token, owner, name, "")
+	return err
+}
+
+func (s *Server) waitChecks(owner, name, sha string, timeout int64) (any, error) {
+	read := func() (map[string]any, bool, error) {
+		ok, st, err := s.FJ.ChecksGreen(owner, name, sha)
+		if err != nil {
+			return nil, false, err
+		}
+		pending := false
+		failed := false
+		for _, x := range st {
+			switch strings.ToLower(x.Status) {
+			case "pending":
+				pending = true
+			case "failure", "error":
+				failed = true
+			}
+		}
+		if failed {
+			return map[string]any{"ok": false, "statuses": st}, true, nil
+		}
+		if ok && !pending && len(st) > 0 {
+			return map[string]any{"ok": true, "statuses": st}, true, nil
+		}
+		return map[string]any{"ok": false, "statuses": st}, false, nil
+	}
+	if timeout == 0 {
+		out, _, err := read()
+		return out, err
+	}
+	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
+	var last any
+	for time.Now().Before(deadline) {
+		out, done, err := read()
+		if err != nil {
+			return nil, err
+		}
+		last = out
+		if done {
+			return out, nil
+		}
+		time.Sleep(3 * time.Second)
+	}
+	if last == nil {
+		out, _, err := read()
+		if err != nil {
+			return nil, err
+		}
+		last = out
+	}
+	m, _ := last.(map[string]any)
+	if m == nil {
+		m = map[string]any{"ok": false}
+	}
+	m["timeout"] = true
+	return m, nil
+}
+
+func (s *Server) listPipes(token, repo, sha, branch, status string, q page.Query) (any, error) {
+	if repo == "" {
+		return nil, fmt.Errorf("repo required")
+	}
+	if sha == "" && branch == "" && status == "" {
+		return s.Cat.ListPipelines(token, repo, "", q)
+	}
+	var matched []woodpecker.Pipeline
+	need := q.Norm().Page*q.Norm().Size + 1
+	pq := page.Query{Page: 1, Size: page.MaxSize}
+	for len(matched) < need && pq.Page <= page.MaxWalk {
+		res, err := s.Cat.ListPipelines(token, repo, "", pq)
+		if err != nil {
+			return nil, err
+		}
+		matched = append(matched, filterPipes(res.Items, sha, branch, status)...)
+		if !res.HasMore {
+			break
+		}
+		pq.Page++
+	}
+	return page.Take(matched, q), nil
+}
+
+func filterPipes(items []woodpecker.Pipeline, sha, branch, status string) []woodpecker.Pipeline {
+	sha = strings.ToLower(sha)
+	status = strings.ToLower(status)
+	var out []woodpecker.Pipeline
+	for _, p := range items {
+		if sha != "" && !strings.HasPrefix(strings.ToLower(p.Commit), sha) {
+			continue
+		}
+		if branch != "" && p.Branch != branch {
+			continue
+		}
+		if status != "" && strings.ToLower(p.Status) != status {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 func (s *Server) publish(token, kind, fileURL, filename string) (any, error) {

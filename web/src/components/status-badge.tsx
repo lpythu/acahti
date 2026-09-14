@@ -50,6 +50,11 @@ export function resolveTone(status: string): Tone {
   return TONE[status.toLowerCase()] ?? "pending"
 }
 
+export function statusText(status: string, t: (key: MessageKey) => string): string {
+  const key = LABEL[status.toLowerCase()]
+  return key ? t(key) : status
+}
+
 export function StatusBadge({ status }: { status: string }) {
   const t = useT()
   const key = status.toLowerCase()

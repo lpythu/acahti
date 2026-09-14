@@ -1,6 +1,7 @@
 .env
 *.token
 *.secret
+*.test
 /bin/
 dist/
 web/node_modules

@@ -7,22 +7,6 @@ import (
 	"acahti/internal/forgejo"
 )
 
-func TestMemoGroupsRoundTrip(t *testing.T) {
-	m := newMemo()
-	in := map[string][]forgejo.Repo{"Express": {{FullName: "saidc/ejp"}}}
-	m.setGroups("ada", in)
-	in["Express"][0].FullName = "mutated"
-	got, ok := m.groupsOf("ada")
-	if !ok || got["Express"][0].FullName != "saidc/ejp" {
-		t.Fatalf("%v %v", ok, got)
-	}
-	got["Express"][0].FullName = "caller"
-	again, _ := m.groupsOf("ada")
-	if again["Express"][0].FullName != "saidc/ejp" {
-		t.Fatal("cache leaked")
-	}
-}
-
 func TestMemoDropAndTTL(t *testing.T) {
 	m := newMemo()
 	m.setAdmin("ada", true)

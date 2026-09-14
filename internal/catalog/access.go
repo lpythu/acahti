@@ -90,6 +90,31 @@ func (c *Catalog) ensureRoleTeam(group, perm string) (forgejo.Team, error) {
 	return t, nil
 }
 
+func (c *Catalog) GroupsByLogin() (map[string][]string, error) {
+	if c == nil || !c.FJ.Ready() {
+		return map[string][]string{}, nil
+	}
+	clusters, err := c.clusterGroups()
+	if err != nil {
+		return nil, err
+	}
+	out := map[string][]string{}
+	for name, g := range clusters {
+		members, err := c.groupMembers(g)
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range members {
+			out[m.Login] = append(out[m.Login], name)
+		}
+	}
+	for login, gs := range out {
+		sort.Strings(gs)
+		out[login] = gs
+	}
+	return out, nil
+}
+
 func (c *Catalog) groupMembers(g groupTeams) ([]AccessPerson, error) {
 	byLogin := map[string]string{}
 	order := []string{}
