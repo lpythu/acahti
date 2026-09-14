@@ -392,9 +392,6 @@ export const messages = {
     viaDirect: "直接授权",
     accessDesc: "谁能看和改这个仓库。",
     groupAccessDesc: "组成员能看到组内仓库。单个仓库的额外授权在仓库权限页。",
-    groupCreated: "已创建组 {name}。",
-    memberAdded: "已添加 {name}。",
-    repoAdded: "已把 {name} 加入组。",
   },
 } as const
 
