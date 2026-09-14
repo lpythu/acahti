@@ -26,9 +26,6 @@ bash "${root}/scripts/bootstrap.sh"
 echo "==> up"
 bash "${root}/scripts/up.sh"
 
-echo "==> configure"
-bash "${root}/scripts/configure.sh"
-
 # shellcheck disable=SC1091
 set -a
 source "${root}/.env"

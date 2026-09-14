@@ -30,7 +30,7 @@ flowchart LR
   agents -->|"git HTTPS"| gw
 ```
 
-Gateway is the only HTTP app this repo starts. Bind is `GATEWAY_BIND` (default `127.0.0.1:8080`). TLS and the public hostname are **out of tree**: point your reverse proxy or tunnel at that bind and set `ROOT_URL` / `DOMAIN` to the public URL. Public identity is **Acahti**: SPA, MCP, `/acahti/v1`, git HTTPS, and `/api/packages`. Forgejo and Woodpecker stay on the compose network (plus loopback for setup). `/ci` and Forgejo HTML (`/login/oauth`, `/user/login`, `/api/v1`) are not public.
+Gateway is the only HTTP app this repo starts. Bind is `GATEWAY_BIND` (default `127.0.0.1:8080`). TLS and the public hostname are **out of tree**: point your reverse proxy or tunnel at that bind and set `ROOT_URL` / `DOMAIN` to the public URL. Public identity is **Acahti**: SPA, MCP, `/acahti/v1`, git HTTPS, and `/api/packages`. Forgejo and Woodpecker stay on the compose network (plus loopback for setup). `/ci` and Forgejo HTML (`/login/oauth`, `/user/login`, `/api/v1`) are not public. Woodpecker authorize and token refresh use `http://forgejo:3000` only — never `ROOT_URL`. `WOODPECKER_HOST` is `http://127.0.0.1:8000/ci`. Every `up.sh` re-binds that session.
 
 ## Host roles
 
@@ -41,7 +41,7 @@ Gateway is the only HTTP app this repo starts. Bind is `GATEWAY_BIND` (default `
 
 Product repos **on this island** declare pipelines in `.acahti/pipelines/` and knobs in `.acahti/repo.env`. The host runner on buildof executes [runner/](runner/) (`run.sh` → `ci.sh` / `cd.sh` / `pkg.sh`). `ssh office` / `ssh thk` only appear inside `runner/kube.sh`. Product branches stay `dev` / `test`.
 
-**This repo** (acahti itself): `main` only. Release: bump `ACAHTI_VERSION`, `git push origin main`, `bash scripts/tag-release.sh` → tag `v$ACAHTI_VERSION` → GitHub Actions on the **acahti** machine → `scripts/up.sh`.
+**This repo** (acahti itself): `main` only. Release: bump `ACAHTI_VERSION`, `git push origin main`, `bash scripts/tag-release.sh` → tag `v$ACAHTI_VERSION` → GitHub Actions on the **acahti** machine → `scripts/up.sh` (compose + configure).
 
 ## Install contract (for an agent)
 
@@ -52,8 +52,8 @@ Chicken and egg: the laptop agent SSHs to an empty host and follows this list. D
 3. Put your reverse proxy or tunnel in front of `GATEWAY_BIND` (default `127.0.0.1:8080`). This repo does not ship Caddy or cloudflared.
 4. On the acahti host, as a sudoer: `bash scripts/install.sh`.
    - `bootstrap.sh` — Docker, `/var/lib/acahti/{forgejo,woodpecker,postgres,gateway}`
-   - `up.sh` — `compose up` (never `down -v`)
-   - `configure.sh` — admin, org, Actions off, OAuth on the compose net, gateway tokens
+   - `up.sh` — `compose up` (never `down -v`), then `configure.sh`
+   - `configure.sh` — admin, org, Woodpecker↔Forgejo OAuth on the compose net, gateway tokens
    - if `ACAHTI_BUILD` is set, SSH-install one `ROLE=both` agent on that host
 5. Print the Use contract (same two lines as `/`, `/skill.md`, and README Usage). On failure stop and return logs; do not leave a half install.
 

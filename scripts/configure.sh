@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# After up.sh: admin, org, CI OAuth app, gateway admin token, default policy.
+# After compose is up: admin, org, CI OAuth on the compose net, gateway tokens.
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
@@ -20,7 +20,7 @@ for _ in $(seq 1 90); do
   fi
   sleep 2
 done
-if [[ "$ok" -ne 1 ]]; then
+if [[ "${ok}" -ne 1 ]]; then
   echo "Forgejo did not become ready on :3000" >&2
   "${COMPOSE[@]}" logs --tail=80 forgejo
   exit 1
@@ -76,23 +76,14 @@ if ! api GET "/api/v1/orgs/${ACAHTI_ORG}" >/dev/null 2>&1; then
 fi
 
 echo "==> Woodpecker OAuth app"
-if [[ -z "${WOODPECKER_FORGEJO_CLIENT:-}" || -z "${WOODPECKER_FORGEJO_SECRET:-}" ]]; then
-  redirect="${ROOT_URL}/ci/authorize"
-  loopback="http://127.0.0.1:8000/ci/authorize"
-  body="$(python3 -c "import json; print(json.dumps({
-    'name': 'acahti-ci',
-    'confidential_client': True,
-    'redirect_uris': ['${redirect}', '${loopback}'],
-  }))")"
-  resp="$(api POST /api/v1/user/applications/oauth2 "${body}")"
-  client="$(python3 -c "import json,sys; print(json.load(sys.stdin)['client_id'])" <<<"${resp}")"
-  secret="$(python3 -c "import json,sys; print(json.load(sys.stdin)['client_secret'])" <<<"${resp}")"
-  _upsert_env WOODPECKER_FORGEJO_CLIENT "${client}"
-  _upsert_env WOODPECKER_FORGEJO_SECRET "${secret}"
-  WOODPECKER_FORGEJO_CLIENT="${client}"
-  WOODPECKER_FORGEJO_SECRET="${secret}"
-  "${COMPOSE[@]}" up -d woodpecker
-fi
+oauth_json="$(ACAHTI_ADMIN_TOKEN="${token}" python3 "${root}/scripts/woodpecker-oauth-app.py")"
+client_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["client_id"])' <<<"${oauth_json}")"
+client_secret="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["client_secret"])' <<<"${oauth_json}")"
+_upsert_env WOODPECKER_FORGEJO_CLIENT "${client_id}"
+_upsert_env WOODPECKER_FORGEJO_SECRET "${client_secret}"
+WOODPECKER_FORGEJO_CLIENT="${client_id}"
+WOODPECKER_FORGEJO_SECRET="${client_secret}"
+"${COMPOSE[@]}" up -d woodpecker
 
 echo "==> wait for Woodpecker on 127.0.0.1:8000"
 ok=0
@@ -104,28 +95,33 @@ for _ in $(seq 1 60); do
   fi
   sleep 2
 done
-if [[ "$ok" -ne 1 ]]; then
+if [[ "${ok}" -ne 1 ]]; then
   echo "Woodpecker did not become ready on :8000" >&2
   "${COMPOSE[@]}" logs --tail=80 woodpecker
   exit 1
 fi
 
-if [[ -z "${WOODPECKER_TOKEN:-}" ]]; then
-  echo "==> Woodpecker token"
-  wp_token="$(ACAHTI_ADMIN_USER="${ACAHTI_ADMIN_USER}" ACAHTI_ADMIN_PASSWORD="${ACAHTI_ADMIN_PASSWORD}" \
-    ROOT_URL="${ROOT_URL}" DOMAIN="${DOMAIN}" \
-    python3 "${root}/scripts/woodpecker-oauth.py")"
-  _upsert_env WOODPECKER_TOKEN "${wp_token}"
-  WOODPECKER_TOKEN="${wp_token}"
-  printf '%s\n' "${wp_token}" | sudo tee "${ACAHTI_DATA}/woodpecker.token" >/dev/null
-  sudo chmod 600 "${ACAHTI_DATA}/woodpecker.token"
+echo "==> Woodpecker forge session"
+wp_token="$(ACAHTI_ADMIN_USER="${ACAHTI_ADMIN_USER}" ACAHTI_ADMIN_PASSWORD="${ACAHTI_ADMIN_PASSWORD}" \
+  ROOT_URL="${ROOT_URL}" DOMAIN="${DOMAIN}" \
+  python3 "${root}/scripts/woodpecker-oauth.py")"
+_upsert_env WOODPECKER_TOKEN "${wp_token}"
+WOODPECKER_TOKEN="${wp_token}"
+printf '%s\n' "${wp_token}" | sudo tee "${ACAHTI_DATA}/woodpecker.token" >/dev/null
+sudo chmod 600 "${ACAHTI_DATA}/woodpecker.token"
+
+if ! curl -fsS \
+  -H "Authorization: Bearer ${wp_token}" \
+  -H "Cookie: user_sess=${wp_token}" \
+  "http://127.0.0.1:8000/ci/api/user/repos?page=1&perPage=1" >/dev/null; then
+  echo "Woodpecker cannot list Forgejo repos; forge OAuth is dead" >&2
+  "${COMPOSE[@]}" logs --tail=80 woodpecker
+  exit 1
 fi
 
 printf '%s\n' "${WOODPECKER_AGENT_SECRET}" | sudo tee "${ACAHTI_DATA}/agent.secret" >/dev/null
 sudo chmod 600 "${ACAHTI_DATA}/agent.secret"
 
-hook_url="${ROOT_URL}/hooks/forgejo"
-# Prefer compose-net so hooks work before public DNS.
 existing="$(api GET "/api/v1/orgs/${ACAHTI_ORG}/hooks" || echo '[]')"
 if ! python3 -c "import json,sys; hooks=json.loads(sys.argv[1]); sys.exit(0 if any('/hooks/forgejo' in (h.get('config') or {}).get('url','') for h in hooks) else 1)" "${existing}"; then
   api POST "/api/v1/orgs/${ACAHTI_ORG}/hooks" "$(python3 -c "import json; print(json.dumps({
@@ -136,7 +132,6 @@ if ! python3 -c "import json,sys; hooks=json.loads(sys.argv[1]); sys.exit(0 if a
   }))")" >/dev/null || true
 fi
 
-# Reload gateway with tokens.
 "${COMPOSE[@]}" up -d gateway
 
 echo "Install ${ROOT_URL}/skill.md"

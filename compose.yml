@@ -121,13 +121,14 @@ services:
       forgejo:
         condition: service_started
     environment:
-      WOODPECKER_HOST: ${ROOT_URL:-https://acahti.example.com}/ci
+      # Loopback only. Public gateway closes /ci and /login/oauth; forge
+      # authorize + token refresh stay on WOODPECKER_FORGEJO_URL.
+      WOODPECKER_HOST: http://127.0.0.1:8000/ci
       WOODPECKER_EXPERT_WEBHOOK_HOST: http://woodpecker:8000/ci
       WOODPECKER_OPEN: "false"
       WOODPECKER_ADMIN: ${ACAHTI_ADMIN_USER:-acahti}
       WOODPECKER_FORGEJO: "true"
       WOODPECKER_FORGEJO_URL: http://forgejo:3000
-      WOODPECKER_EXPERT_FORGE_OAUTH_HOST: ${ROOT_URL:-https://acahti.example.com}
       WOODPECKER_FORGE_TIMEOUT: 30s
       WOODPECKER_FORGEJO_CLIENT: ${WOODPECKER_FORGEJO_CLIENT:-}
       WOODPECKER_FORGEJO_SECRET: ${WOODPECKER_FORGEJO_SECRET:-}
