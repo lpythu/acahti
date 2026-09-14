@@ -33,6 +33,7 @@ const SECTION_KEY: Record<string, MessageKey> = {
   branches: "branches",
   pulls: "tabPulls",
   pipelines: "tabPipes",
+  access: "access",
 }
 
 function RepoBreadcrumb({ owner, name, group }: { owner: string; name: string; group: string }) {

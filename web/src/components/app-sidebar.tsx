@@ -9,6 +9,7 @@ import {
   PanelLeftIcon,
   ShieldIcon,
   UsersIcon,
+  LockIcon,
   WorkflowIcon,
 } from "lucide-react"
 import { cn } from "cn"
@@ -54,7 +55,7 @@ function SidebarCollapseToggle() {
 function secondaryItems(
   path: string,
   ref: string,
-  t: (k: "files" | "commits" | "branches" | "tabPulls" | "tabPipes" | "adminHome" | "users") => string,
+  t: (k: "files" | "commits" | "branches" | "tabPulls" | "tabPipes" | "access" | "adminHome" | "users") => string,
 ): { title: string; url: string; icon?: ReactNode; end?: boolean }[] {
   const base = repoBase(path)
   const q = ref ? `?ref=${encodeURIComponent(ref)}` : ""
@@ -65,6 +66,7 @@ function secondaryItems(
       { title: t("branches"), url: `${base}/branches`, icon: <GitBranchIcon /> },
       { title: t("tabPulls"), url: `${base}/pulls`, icon: <GitPullRequestIcon /> },
       { title: t("tabPipes"), url: `${base}/pipelines`, icon: <WorkflowIcon /> },
+      { title: t("access"), url: `${base}/access`, icon: <LockIcon /> },
     ]
   }
   if (path.startsWith("/admin")) {

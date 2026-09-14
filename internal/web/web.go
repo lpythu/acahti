@@ -75,6 +75,9 @@ func (p *Pages) Me(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !admin && p.Cat != nil && p.Cat.IsOrgAdmin(user) {
+		admin = true
+	}
 	writeJSON(w, http.StatusOK, identity.Session(user, admin, p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
 }
 
@@ -93,7 +96,7 @@ func (p *Pages) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	login := strings.TrimSpace(body.Username)
 	p.SetSession(w, login)
-	writeJSON(w, http.StatusOK, identity.Session(login, login == p.Cfg.AdminUser, p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
+	writeJSON(w, http.StatusOK, identity.Session(login, p.Cat != nil && p.Cat.IsOrgAdmin(login), p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
 }
 
 func (p *Pages) Logout(w http.ResponseWriter, r *http.Request) {

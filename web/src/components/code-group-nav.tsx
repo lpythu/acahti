@@ -16,6 +16,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
+import { useLoad } from "@/hooks/use-load"
 import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api, splitRepo } from "@/lib/api"
@@ -127,7 +128,17 @@ export function CodeGroupNav({ section }: { section: CodeGroupSection }) {
   const filterGroup = sp.get("group") || ""
   const filterRepo = sp.get("repo") || ""
   const groups = usePage((q) => api.repoGroups(q), [], { url: false })
-  const openAll = groups.items.length <= 1 && !filterGroup
+  const pipe = parsePipelinePath(pathname)
+  const current = repoBase(pathname)
+  const headOwner = pipe?.owner || (current ? current.split("/")[2] : splitRepo(filterRepo).owner)
+  const headName = pipe?.name || (current ? current.split("/")[3] : splitRepo(filterRepo).name)
+  const head = useLoad(
+    () => api.repo(headOwner, headName),
+    [headOwner, headName],
+    Boolean(headOwner && headName),
+  )
+  const currentGroup = filterGroup || head.data?.repo.group || ""
+  const openAll = groups.items.length <= 1 && !filterGroup && !currentGroup
 
   if (!groups.items.length) return null
 
@@ -146,7 +157,7 @@ export function CodeGroupNav({ section }: { section: CodeGroupSection }) {
               pathname={pathname}
               filterGroup={filterGroup}
               filterRepo={filterRepo}
-              defaultOpen={openAll || g.group === filterGroup}
+              defaultOpen={openAll || g.group === currentGroup}
               itemIcon={itemIcon}
             />
           ))}

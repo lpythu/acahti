@@ -16,6 +16,38 @@ func TestOwnersTeam(t *testing.T) {
 	}
 }
 
+func TestValidGroupName(t *testing.T) {
+	if err := ValidGroupName("Platform"); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"", "Owners", "1bad", "foo.bar", "has space"} {
+		if ValidGroupName(name) == nil {
+			t.Fatalf("accepted %q", name)
+		}
+	}
+}
+
+func TestParseRoleTeam(t *testing.T) {
+	g, perm, ok := parseRoleTeam("Platform")
+	if !ok || g != "Platform" || perm != permWrite {
+		t.Fatalf("%s %s %v", g, perm, ok)
+	}
+	g, perm, ok = parseRoleTeam("Platform.read")
+	if !ok || g != "Platform" || perm != permRead {
+		t.Fatalf("%s %s %v", g, perm, ok)
+	}
+	g, perm, ok = parseRoleTeam("Platform.admin")
+	if !ok || g != "Platform" || perm != permAdmin {
+		t.Fatalf("%s %s %v", g, perm, ok)
+	}
+	if _, _, ok = parseRoleTeam("Owners"); ok {
+		t.Fatal("owners")
+	}
+	if roleTeamName("Express", "admin") != "Express.admin" || roleTeamName("Express", "write") != "Express" {
+		t.Fatal("roleTeamName")
+	}
+}
+
 func TestMarkGroupVisible(t *testing.T) {
 	repos := []forgejo.Repo{
 		{FullName: "saidc/api-gateway"},

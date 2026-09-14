@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
 
 import { PageFrame } from "@/components/page-frame"
 import { Button } from "@/components/ui/button"
@@ -18,12 +19,26 @@ export function Pager({
   if (page <= 1 && !hasMore) return null
   return (
     <div className="flex items-center justify-end gap-2">
-      <Button type="button" variant="outline" size="sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>
-        {t("prev")}
+      <Button
+        type="button"
+        variant="outline"
+        size="icon-sm"
+        disabled={page <= 1}
+        aria-label={t("prev")}
+        onClick={() => onPage(page - 1)}
+      >
+        <ChevronLeftIcon />
       </Button>
       <span className="text-sm text-muted-foreground">{t("pageN", { n: page })}</span>
-      <Button type="button" variant="outline" size="sm" disabled={!hasMore} onClick={() => onPage(page + 1)}>
-        {t("next")}
+      <Button
+        type="button"
+        variant="outline"
+        size="icon-sm"
+        disabled={!hasMore}
+        aria-label={t("next")}
+        onClick={() => onPage(page + 1)}
+      >
+        <ChevronRightIcon />
       </Button>
     </div>
   )

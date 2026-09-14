@@ -19,6 +19,7 @@ import { RepoCommitsPage } from "@/pages/repo-commits"
 import { RepoFilesPage } from "@/pages/repo-files"
 import { RepoLayout } from "@/pages/repo-layout"
 import { RepoPipelinesPage } from "@/pages/repo-pipelines"
+import { RepoAccessPage } from "@/pages/repo-access"
 import { RepoPullsPage } from "@/pages/repo-pulls"
 import { ReposPage } from "@/pages/repos"
 import { AdminGate, AppShell } from "@/pages/shell"
@@ -57,6 +58,7 @@ export default function App() {
                   <Route path="pulls/:number" element={<PullPage />} />
                   <Route path="pipelines" element={<RepoPipelinesPage />} />
                   <Route path="pipelines/:number" element={<RepoPipelineRedirect />} />
+                  <Route path="access" element={<RepoAccessPage />} />
                 </Route>
                 <Route path="/pipelines" element={<PipelinesPage />} />
                 <Route path="/pipelines/:owner/:name/:number" element={<PipelinePage />} />

@@ -34,13 +34,30 @@ func (c *Client) Ready() bool {
 }
 
 type User struct {
-	ID        int64  `json:"id"`
-	Login     string `json:"login"`
-	LoginName string `json:"login_name"`
-	SourceID  int64  `json:"source_id"`
-	Email     string `json:"email"`
-	IsAdmin   bool   `json:"is_admin"`
-	FullName  string `json:"full_name"`
+	ID          int64  `json:"id"`
+	Login       string `json:"login"`
+	LoginName   string `json:"login_name"`
+	SourceID    int64  `json:"source_id"`
+	Email       string `json:"email"`
+	IsAdmin     bool   `json:"is_admin"`
+	FullName    string `json:"full_name"`
+	Permissions Perm   `json:"permissions"`
+}
+
+type Perm struct {
+	Admin bool `json:"admin"`
+	Push  bool `json:"push"`
+	Pull  bool `json:"pull"`
+}
+
+func (p Perm) Level() string {
+	if p.Admin {
+		return "admin"
+	}
+	if p.Push {
+		return "write"
+	}
+	return "read"
 }
 
 type Repo struct {
@@ -54,6 +71,7 @@ type Repo struct {
 	HTMLURL       string `json:"html_url"`
 	Repo          string `json:"repo,omitempty"`
 	Group         string `json:"group,omitempty"`
+	Permissions   Perm   `json:"permissions"`
 }
 
 type Team struct {
@@ -371,24 +389,40 @@ func (c *Client) AddOrgMember(org, user string) error {
 	return err
 }
 
-func (c *Client) CreateTeam(org, name, perm string) (int64, error) {
-	b, _, err := c.do(http.MethodPost, "/api/v1/orgs/"+url.PathEscape(org)+"/teams", "", "", map[string]any{
+func teamBody(name, perm string) map[string]any {
+	if perm != "read" && perm != "admin" {
+		perm = "write"
+	}
+	return map[string]any{
 		"name":                      name,
 		"permission":                perm,
 		"can_create_org_repo":       false,
 		"includes_all_repositories": false,
-		"units":                     []string{"repo.code", "repo.issues", "repo.pulls", "repo.releases", "repo.ext_wiki", "repo.wiki", "repo.packages"},
-	})
+		"units_map": map[string]string{
+			"repo.code":       perm,
+			"repo.issues":     perm,
+			"repo.pulls":      perm,
+			"repo.releases":   perm,
+			"repo.wiki":       perm,
+			"repo.projects":   perm,
+			"repo.packages":   perm,
+			"repo.actions":    "none",
+			"repo.ext_issues": "none",
+			"repo.ext_wiki":   "none",
+		},
+	}
+}
+
+func (c *Client) CreateTeam(org, name, perm string) (Team, error) {
+	b, _, err := c.do(http.MethodPost, "/api/v1/orgs/"+url.PathEscape(org)+"/teams", "", "", teamBody(name, perm))
 	if err != nil {
-		return 0, err
+		return Team{}, err
 	}
-	var t struct {
-		ID int64 `json:"id"`
-	}
+	var t Team
 	if err := json.Unmarshal(b, &t); err != nil {
-		return 0, err
+		return Team{}, err
 	}
-	return t.ID, nil
+	return t, nil
 }
 
 func (c *Client) AddTeamMember(teamID int64, user string) error {
@@ -406,6 +440,27 @@ func (c *Client) RemoveTeamMember(teamID int64, user string) error {
 	return err
 }
 
+func (c *Client) RemoveTeamRepo(teamID int64, org, repo string) error {
+	_, _, err := c.do(http.MethodDelete, fmt.Sprintf("/api/v1/teams/%d/repos/%s/%s", teamID, url.PathEscape(org), url.PathEscape(repo)), "", "", nil)
+	return err
+}
+
+func (c *Client) DeleteTeam(teamID int64) error {
+	_, _, err := c.do(http.MethodDelete, fmt.Sprintf("/api/v1/teams/%d", teamID), "", "", nil)
+	return err
+}
+
+func (c *Client) TeamHasMember(teamID int64, user string) (bool, error) {
+	_, code, err := c.do(http.MethodGet, fmt.Sprintf("/api/v1/teams/%d/members/%s", teamID, url.PathEscape(user)), "", "", nil)
+	if code == http.StatusNotFound {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (c *Client) ListOrgTeams(org string, q page.Query) (page.Result[Team], error) {
 	return listPage[Team](c, "/api/v1/orgs/"+url.PathEscape(org)+"/teams", q, nil, "")
 }
@@ -420,6 +475,35 @@ func (c *Client) ListTeamMembers(teamID int64, q page.Query) (page.Result[User],
 
 func (c *Client) ListRepoTeams(owner, name string, q page.Query) (page.Result[Team], error) {
 	return listPage[Team](c, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/teams", q, nil, "")
+}
+
+func (c *Client) ListCollaborators(owner, name string, q page.Query) (page.Result[User], error) {
+	return listPage[User](c, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/collaborators", q, nil, "")
+}
+
+func NormalizePerm(p string) string {
+	switch strings.ToLower(strings.TrimSpace(p)) {
+	case "admin", "owner":
+		return "admin"
+	case "write", "push":
+		return "write"
+	default:
+		return "read"
+	}
+}
+
+func (c *Client) CollaboratorPerm(owner, name, user string) (string, error) {
+	b, _, err := c.do(http.MethodGet, fmt.Sprintf("/api/v1/repos/%s/%s/collaborators/%s/permission", url.PathEscape(owner), url.PathEscape(name), url.PathEscape(user)), "", "", nil)
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		Permission string `json:"permission"`
+	}
+	if err := json.Unmarshal(b, &out); err != nil {
+		return "", err
+	}
+	return NormalizePerm(out.Permission), nil
 }
 
 func (c *Client) FindOrgTeam(org, name string) (Team, error) {
@@ -439,8 +523,13 @@ func (c *Client) FindOrgTeam(org, name string) (Team, error) {
 
 func (c *Client) AddCollaborator(owner, repo, user, perm string) error {
 	_, _, err := c.do(http.MethodPut, fmt.Sprintf("/api/v1/repos/%s/%s/collaborators/%s", url.PathEscape(owner), url.PathEscape(repo), url.PathEscape(user)), "", "", map[string]any{
-		"permission": perm,
+		"permission": NormalizePerm(perm),
 	})
+	return err
+}
+
+func (c *Client) RemoveCollaborator(owner, repo, user string) error {
+	_, _, err := c.do(http.MethodDelete, fmt.Sprintf("/api/v1/repos/%s/%s/collaborators/%s", url.PathEscape(owner), url.PathEscape(repo), url.PathEscape(user)), "", "", nil)
 	return err
 }
 

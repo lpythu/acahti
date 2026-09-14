@@ -84,6 +84,8 @@ export type PublicKey = { id: number; title: string; key: string }
 
 export type Invite = { code: string }
 
+export type Perm = { admin: boolean; push: boolean; pull: boolean }
+
 export type Repo = {
   name: string
   full_name: string
@@ -91,6 +93,24 @@ export type Repo = {
   default_branch: string
   clone_url?: string
   group?: string
+  permissions?: Perm
+}
+
+export type AccessPerson = { login: string; permission: string }
+
+export type GroupAccess = {
+  name: string
+  can_manage: boolean
+  members: AccessPerson[]
+  repos: Repo[]
+}
+
+export type RepoAccess = {
+  group: string
+  permission: string
+  can_manage: boolean
+  groups: { name: string; permission: string }[]
+  collaborators: AccessPerson[]
 }
 
 export type Package = { id: number; name: string; version: string; type: string; created_at?: string }
@@ -263,6 +283,37 @@ export const api = {
     req<{ ok: boolean }>("/ui/keys", { method: "POST", body: JSON.stringify({ title, key }) }),
   repoGroups: (q?: PageQuery) => req<Page<RepoGroup>>(`/ui/repos${pageQS(q, { groups: "1" })}`),
   repos: (q?: PageQuery, group?: string) => req<Page<Repo>>(`/ui/repos${pageQS(q, { group })}`),
+  group: (name: string) => req<GroupAccess>(`/ui/groups/${encodeURIComponent(name)}`),
+  createGroup: (name: string) =>
+    req<GroupAccess>("/ui/groups", { method: "POST", body: JSON.stringify({ name }) }),
+  deleteGroup: (name: string) => req<{ ok: boolean }>(`/ui/groups/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  setGroupMember: (group: string, login: string, permission: string) =>
+    req<{ ok: boolean }>(`/ui/groups/${encodeURIComponent(group)}/members/${encodeURIComponent(login)}`, {
+      method: "PUT",
+      body: JSON.stringify({ permission }),
+    }),
+  removeGroupMember: (group: string, login: string) =>
+    req<{ ok: boolean }>(`/ui/groups/${encodeURIComponent(group)}/members/${encodeURIComponent(login)}`, {
+      method: "DELETE",
+    }),
+  addGroupRepo: (group: string, repo: string) =>
+    req<{ ok: boolean }>(`/ui/groups/${encodeURIComponent(group)}/repos/${encodeURIComponent(repo)}`, {
+      method: "PUT",
+    }),
+  removeGroupRepo: (group: string, repo: string) =>
+    req<{ ok: boolean }>(`/ui/groups/${encodeURIComponent(group)}/repos/${encodeURIComponent(repo)}`, {
+      method: "DELETE",
+    }),
+  repoAccess: (owner: string, name: string) => req<RepoAccess>(`/ui/repos/${owner}/${name}/access`),
+  setCollaborator: (owner: string, name: string, login: string, permission: string) =>
+    req<{ ok: boolean }>(`/ui/repos/${owner}/${name}/collaborators/${encodeURIComponent(login)}`, {
+      method: "PUT",
+      body: JSON.stringify({ permission }),
+    }),
+  removeCollaborator: (owner: string, name: string, login: string) =>
+    req<{ ok: boolean }>(`/ui/repos/${owner}/${name}/collaborators/${encodeURIComponent(login)}`, {
+      method: "DELETE",
+    }),
   repo: (owner: string, name: string, ref?: string) =>
     req<RepoHeader>(`/ui/repos/${owner}/${name}${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`),
   contents: (owner: string, name: string, opts?: PageQuery & { ref?: string; path?: string }) =>

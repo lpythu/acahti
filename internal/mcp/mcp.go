@@ -223,10 +223,10 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 			return nil, err
 		}
 		if g := str("group"); g != "" {
-			if t, err := s.FJ.FindOrgTeam(org, g); err == nil {
-				_ = s.FJ.AddTeamRepo(t.ID, org, repo.Name)
-				repo.Group = g
+			if err := s.Cat.AttachRepo(g, repo.Name); err != nil {
+				return nil, err
 			}
+			repo.Group = g
 		}
 		_ = s.FJ.ProtectTrains(org, repo.Name)
 		if s.WP.Ready() {
