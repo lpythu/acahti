@@ -34,6 +34,26 @@ func TestToolSet(t *testing.T) {
 	}
 }
 
+func TestToolSchemasObjectProperties(t *testing.T) {
+	raw, err := json.Marshal(tools())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var listed []map[string]any
+	if err := json.Unmarshal(raw, &listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) == 0 {
+		t.Fatal("empty")
+	}
+	for _, tool := range listed {
+		schema, _ := tool["inputSchema"].(map[string]any)
+		if _, ok := schema["properties"].(map[string]any); !ok {
+			t.Fatalf("%s properties=%T %v", tool["name"], schema["properties"], schema["properties"])
+		}
+	}
+}
+
 func TestStructuredError(t *testing.T) {
 	err := fail("failed_precondition", "checks not green")
 	b, _ := json.Marshal(err.Data)

@@ -72,6 +72,9 @@ type toolSpec struct {
 
 func tools() []toolSpec {
 	obj := func(props map[string]any, req ...string) map[string]any {
+		if props == nil {
+			props = map[string]any{}
+		}
 		m := map[string]any{"type": "object", "properties": props}
 		if len(req) > 0 {
 			m["required"] = req
