@@ -55,6 +55,15 @@ func TestCodeForStatus(t *testing.T) {
 	}
 }
 
+func TestAsInt64(t *testing.T) {
+	if asInt64(int64(2)) != 2 || asInt64(2) != 2 || asInt64(2.0) != 2 || asInt64("2") != 2 {
+		t.Fatal(asInt64(int64(2)), asInt64(2), asInt64(2.0), asInt64("2"))
+	}
+	if asInt64(nil) != 0 {
+		t.Fatal("nil")
+	}
+}
+
 func TestCheckTimeout(t *testing.T) {
 	if checkTimeout(nil) != 600 {
 		t.Fatal("omit")

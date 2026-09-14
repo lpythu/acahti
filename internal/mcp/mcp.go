@@ -195,17 +195,7 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		return v
 	}
 	num := func(k string) int64 {
-		switch v := a[k].(type) {
-		case float64:
-			return int64(v)
-		case json.Number:
-			n, _ := v.Int64()
-			return n
-		case string:
-			n, _ := strconv.ParseInt(v, 10, 64)
-			return n
-		}
-		return 0
+		return asInt64(a[k])
 	}
 	org := s.Cfg.Org
 	pq := page.FromInts(int(num("page")), int(num("page_size")))
@@ -309,6 +299,26 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 	default:
 		return nil, fmt.Errorf("unknown tool %s", name)
 	}
+}
+
+func asInt64(v any) int64 {
+	switch x := v.(type) {
+	case float64:
+		return int64(x)
+	case json.Number:
+		n, _ := x.Int64()
+		return n
+	case string:
+		n, _ := strconv.ParseInt(x, 10, 64)
+		return n
+	case int:
+		return int64(x)
+	case int32:
+		return int64(x)
+	case int64:
+		return x
+	}
+	return 0
 }
 
 func repoArg(str func(string) string) string {
