@@ -74,7 +74,7 @@ export function RepoCommitsPage() {
   const currentRef = urlRef || head?.ref || head?.repo.default_branch || ""
   const branches = useLoad(() => api.branches(owner, name, { page: 1, page_size: 100 }), [owner, name])
   const list = usePage(
-    (q) => api.commits(owner, name, { page: q.page, page_size: q.pageSize, ref: urlRef || undefined }),
+    (q) => api.commits(owner, name, { page: q.page, page_size: q.page_size, ref: urlRef || undefined }),
     [owner, name, urlRef],
   )
   const branchNames = useMemo(() => {
