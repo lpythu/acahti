@@ -121,6 +121,22 @@ func TestFilterPipes(t *testing.T) {
 	}
 }
 
+func TestWaitChecksEmptyIsDone(t *testing.T) {
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	t.Cleanup(hs.Close)
+	s := &Server{FJ: forgejo.New(hs.URL, "t")}
+	out, err := s.waitChecks("acme", "demo", "abc", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, _ := out.(map[string]any)
+	if m["ok"] != true {
+		t.Fatalf("%v", out)
+	}
+}
+
 func TestWaitChecksLatestPerContext(t *testing.T) {
 	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`[

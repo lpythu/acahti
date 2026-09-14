@@ -715,10 +715,10 @@ func NormalizeRef(ref string) (string, error) {
 	if ref == "" {
 		return "", fmt.Errorf("ref required: %s, heads/%s, or refs/heads/%s", "dev", "dev", "dev")
 	}
-	if !strings.Contains(ref, "/") {
-		ref = "heads/" + ref
+	if strings.HasPrefix(ref, "heads/") || strings.HasPrefix(ref, "tags/") {
+		return ref, nil
 	}
-	return ref, nil
+	return "heads/" + ref, nil
 }
 
 func (c *Client) DeleteRef(owner, name, ref string) error {
@@ -726,7 +726,12 @@ func (c *Client) DeleteRef(owner, name, ref string) error {
 	if err != nil {
 		return err
 	}
-	_, _, err = c.do(http.MethodDelete, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/git/refs/"+norm, "", "", nil)
+	branch, ok := strings.CutPrefix(norm, "heads/")
+	if !ok {
+		_, _, err = c.do(http.MethodDelete, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/git/refs/"+norm, "", "", nil)
+		return err
+	}
+	_, _, err = c.do(http.MethodDelete, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/branches/"+url.PathEscape(branch), "", "", nil)
 	return err
 }
 
@@ -897,9 +902,6 @@ func (c *Client) ChecksGreen(owner, name, sha string) (bool, []Status, error) {
 		return false, nil, err
 	}
 	st = LatestStatuses(st)
-	if len(st) == 0 {
-		return false, st, nil
-	}
 	ok := true
 	for _, s := range st {
 		if strings.ToLower(s.Status) != "success" {

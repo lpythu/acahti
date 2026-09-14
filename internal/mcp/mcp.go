@@ -420,7 +420,7 @@ func (s *Server) waitChecks(owner, name, sha string, timeout int64) (any, error)
 		if failed {
 			return map[string]any{"ok": false, "statuses": st}, true, nil
 		}
-		if ok && !pending && len(st) > 0 {
+		if ok && !pending {
 			return map[string]any{"ok": true, "statuses": st}, true, nil
 		}
 		return map[string]any{"ok": false, "statuses": st}, false, nil

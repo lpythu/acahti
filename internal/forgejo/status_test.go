@@ -1,6 +1,8 @@
 package forgejo
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -42,7 +44,22 @@ func TestNormalizeRef(t *testing.T) {
 			t.Fatalf("%s -> %s %v", in, got, err)
 		}
 	}
+	got, err := NormalizeRef("feat/cd-smoke")
+	if err != nil || got != "heads/feat/cd-smoke" {
+		t.Fatalf("nested -> %s %v", got, err)
+	}
 	if _, err := NormalizeRef("  "); err == nil {
 		t.Fatal("empty")
+	}
+}
+
+func TestChecksGreenEmptyIsGreen(t *testing.T) {
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	t.Cleanup(hs.Close)
+	ok, st, err := New(hs.URL, "t").ChecksGreen("acme", "demo", "abc")
+	if err != nil || !ok || len(st) != 0 {
+		t.Fatalf("ok=%v st=%+v err=%v", ok, st, err)
 	}
 }
