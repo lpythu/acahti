@@ -448,6 +448,31 @@ func (c *Client) LatestPipeline(fullName string) (Pipeline, error) {
 	return c.latestPipe(fullName, true)
 }
 
+func (c *Client) EnrichJobs(fullName string, pipes []Pipeline) []Pipeline {
+	out := append([]Pipeline(nil), pipes...)
+	sem := make(chan struct{}, fanout)
+	var wg sync.WaitGroup
+	for i := range out {
+		if len(out[i].Jobs) > 0 || out[i].Number == 0 {
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			d, err := c.GetPipeline(fullName, out[i].Number)
+			if err != nil {
+				return
+			}
+			d.Repo = fullName
+			out[i] = d
+		}(i)
+	}
+	wg.Wait()
+	return out
+}
+
 func (c *Client) LatestPipelines(names []string, jobs bool) []Pipeline {
 	got := make([]Pipeline, len(names))
 	ok := make([]bool, len(names))

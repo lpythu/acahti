@@ -422,14 +422,19 @@ func (c *Catalog) ListPipelines(user, repo, group string, q page.Query) (page.Re
 		if _, err := c.seeRepo(user, owner, name); err != nil {
 			return page.Result[woodpecker.Pipeline]{}, err
 		}
-		return c.WP.ListPipelines(repo, q)
+		res, err := c.WP.ListPipelines(repo, q)
+		if err != nil {
+			return page.Result[woodpecker.Pipeline]{}, err
+		}
+		res.Items = c.WP.EnrichJobs(repo, res.Items)
+		return res, nil
 	}
 	names, err := c.pipelineNames(user, group)
 	if err != nil {
 		return page.Result[woodpecker.Pipeline]{}, err
 	}
 	slice := page.Take(names, q)
-	return page.Of(c.WP.LatestPipelines(slice.Items, false), q, slice.HasMore), nil
+	return page.Of(c.WP.LatestPipelines(slice.Items, true), q, slice.HasMore), nil
 }
 
 func (c *Catalog) CommitDetail(user, owner, name, sha string, q page.Query) (CommitDetail, error) {
