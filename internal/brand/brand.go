@@ -26,9 +26,9 @@ func PNGURL(rootURL string) string {
 }
 
 func Icons(rootURL string) []map[string]any {
+	// Cursor cannot decode this 333-byte SVG; send the PNG mark only.
 	return []map[string]any{
 		{"src": "data:image/png;base64," + base64.StdEncoding.EncodeToString(PNG), "mimeType": "image/png"},
-		{"src": SVGURL(rootURL), "mimeType": "image/svg+xml"},
 		{"src": PNGURL(rootURL), "mimeType": "image/png"},
 	}
 }
@@ -39,12 +39,12 @@ func Link(rootURL string) string {
 
 func ServeSVG(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "image/svg+xml")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
 	_, _ = w.Write(SVG)
 }
 
 func ServePNG(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "image/png")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
 	_, _ = w.Write(PNG)
 }
