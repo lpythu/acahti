@@ -97,21 +97,16 @@ if [[ ! -x "${bindir}/plugin-git" ]]; then
   fi
 fi
 
+runner_dst=/usr/local/lib/acahti/runner
+runner_src="$(cd "$(dirname "$0")/../runner" && pwd)"
+if [[ -f "${runner_src}/run.sh" ]]; then
+  install -d -m 0755 "${runner_dst}"
+  cp -a "${runner_src}/." "${runner_dst}/"
+  ACAHTI_RUNNER="${runner_dst}"
+fi
 ACAHTI_RUNNER="${ACAHTI_RUNNER:-}"
 if [[ -z "$ACAHTI_RUNNER" || ! -f "${ACAHTI_RUNNER}/run.sh" ]]; then
-  for cand in \
-    /root/saidc-ws/acahti/runner \
-    /home/saidc/saidc-ws/acahti/runner \
-    "${run_home}/saidc-ws/acahti/runner" \
-    "${run_home}/Projects/saidc-ws/acahti/runner"; do
-    if [[ -f "${cand}/run.sh" ]]; then
-      ACAHTI_RUNNER="$cand"
-      break
-    fi
-  done
-fi
-if [[ -z "${ACAHTI_RUNNER:-}" || ! -f "${ACAHTI_RUNNER}/run.sh" ]]; then
-  echo "error: set ACAHTI_RUNNER to acahti/runner on this host" >&2
+  echo "error: run agent.sh from an acahti tree so it can install runner/" >&2
   exit 1
 fi
 
