@@ -45,5 +45,8 @@ export function useLoad<T>(
   }, [enabled, ...deps])
 
   const reload = useCallback(() => run(true), [run])
-  return { data, error, loading, reload }
+  const apply = useCallback((fn: (cur: T | null) => T | null) => {
+    setData((cur) => fn(cur))
+  }, [])
+  return { data, error, loading, reload, apply }
 }

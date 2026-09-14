@@ -5,6 +5,26 @@ import (
 	"testing"
 )
 
+func TestJobNameFromFileEmptyIsNotDot(t *testing.T) {
+	if got := jobNameFromFile(""); got != "" {
+		t.Fatalf("%q", got)
+	}
+	if got := jobNameFromFile("."); got != "" {
+		t.Fatalf("%q", got)
+	}
+	if got := jobNameFromFile(".acahti/pipelines/ci.yaml"); got != "ci" {
+		t.Fatalf("%q", got)
+	}
+}
+
+func TestHydrateJobsSkipsErrorWithoutFile(t *testing.T) {
+	p := Pipeline{Status: "error", Errors: []PipeError{{Type: "generic", Message: "pipeline definition not found"}}}
+	p.HydrateJobs()
+	if len(p.Jobs) != 0 {
+		t.Fatalf("jobs=%+v", p.Jobs)
+	}
+}
+
 func TestPipelineErrorsBecomeJobs(t *testing.T) {
 	var p Pipeline
 	raw := `{"number":4,"status":"error","title":"","errors":[{"type":"linter","message":"invalid depends_on","data":{"file":".acahti/pipelines/ci.yaml"}}]}`
@@ -46,6 +66,21 @@ func TestMergeDeclaredKeepsFailureAndSkipsRest(t *testing.T) {
 	}
 	if got.Jobs[2].Name != "cd.hk" || got.Jobs[2].State != "skipped" {
 		t.Fatalf("hk=%+v", got.Jobs[2])
+	}
+}
+
+func TestMergeDeclaredIgnoresDotJob(t *testing.T) {
+	p := Pipeline{
+		Status: "error",
+		Error:  "pipeline definition not found",
+		Jobs:   []Job{{Name: ".", State: "error"}},
+	}
+	got := MergeDeclaredJobs(p, []string{"ci", "cd.office"})
+	if len(got.Jobs) != 2 || got.Jobs[0].Name != "ci" || got.Jobs[0].State != "error" {
+		t.Fatalf("%+v", got.Jobs)
+	}
+	if got.Jobs[1].Name != "cd.office" || got.Jobs[1].State != "skipped" {
+		t.Fatalf("%+v", got.Jobs)
 	}
 }
 

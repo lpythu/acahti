@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"acahti/internal/page"
 )
@@ -47,7 +46,6 @@ func TestListReposOmitsAllTrue(t *testing.T) {
 func TestRepoKeyUsesCache(t *testing.T) {
 	c := New("http://127.0.0.1", "t")
 	c.ids["acme/demo"] = 42
-	c.reposAt = time.Now()
 	key, err := c.repoKey("acme/demo")
 	if err != nil || key != "42" {
 		t.Fatalf("%q %v", key, err)
@@ -127,7 +125,6 @@ func TestCancelPostsPath(t *testing.T) {
 	t.Cleanup(s.Close)
 	c := New(s.URL, "t")
 	c.ids["acme/demo"] = 7
-	c.reposAt = time.Now()
 	if err := c.Cancel("acme/demo", 12); err != nil {
 		t.Fatal(err)
 	}
@@ -136,14 +133,4 @@ func TestCancelPostsPath(t *testing.T) {
 	}
 }
 
-func TestLatestPipelinesPreservesOrder(t *testing.T) {
-	c := New("http://127.0.0.1", "t")
-	c.storeLatest("a/one", Pipeline{Number: 1, Repo: "a/one", Status: "success"})
-	c.storeLatest("a/two", Pipeline{Number: 2, Repo: "a/two", Status: "failure"})
-	c.storeLatest("a/skip", Pipeline{Number: 3, Repo: "a/skip"})
-	got := c.LatestPipelines([]string{"a/two", "a/one"}, false)
-	if len(got) != 2 || got[0].Repo != "a/two" || got[1].Repo != "a/one" {
-		t.Fatalf("%+v", got)
-	}
-}
 

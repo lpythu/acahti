@@ -4,9 +4,11 @@ import { useNavigate } from "react-router-dom"
 import { PagedList } from "@/components/paged-list"
 import { PipelineRunRow } from "@/components/pipeline-run-row"
 import { Button } from "@/components/ui/button"
+import { useEvents } from "@/hooks/use-events"
 import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api } from "@/lib/api"
+import { asPipeline, upsertRun } from "@/lib/pipeline"
 import { useRepo } from "@/pages/repo-layout"
 
 export function RepoPipelinesPage() {
@@ -14,6 +16,12 @@ export function RepoPipelinesPage() {
   const nav = useNavigate()
   const { owner, name, data } = useRepo()
   const list = usePage((q) => api.pipelines({ ...q, repo: `${owner}/${name}` }), [owner, name])
+  useEvents((ev) => {
+    if (ev.type !== "pipeline.updated") return
+    const next = asPipeline(ev.data)
+    if (!next || next.repo !== `${owner}/${name}`) return
+    list.apply((page) => upsertRun(page, next, list.page))
+  })
   const [busy, setBusy] = useState(false)
   const [actionErr, setActionErr] = useState("")
 

@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react"
 import { CalendarIcon, ClockIcon, GitBranchIcon, PlayIcon } from "lucide-react"
 import { Link } from "react-router-dom"
 
@@ -7,11 +6,11 @@ import { RunStatusIcon } from "@/components/run-status-icon"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useLocale, useT } from "@/i18n/i18n"
-import { api, splitRepo, type Pipeline } from "@/lib/api"
+import { splitRepo, type Pipeline } from "@/lib/api"
 import { formatDuration, formatUnix, formatUnixWhen } from "@/lib/format"
 import { shortSha } from "@/lib/git"
 import { pipelineHref } from "@/lib/nav"
-import { jobDotsOf, loadDeclaredJobNames, runEventKey, runRef, runTitle, triggerVars } from "@/lib/pipeline"
+import { jobDotsOf, runEventKey, runRef, runTitle, triggerVars } from "@/lib/pipeline"
 
 export function PipelineRunRow({
   pipe,
@@ -41,25 +40,7 @@ export function PipelineRunRow({
   const when = formatUnixWhen(pipe.started || pipe.created, locale)
   const exact = formatUnix(pipe.started || pipe.created)
   const duration = formatDuration(pipe.started, pipe.finished, pipe.status)
-  const [jobs, setJobs] = useState(() => jobDotsOf(pipe))
-
-  useEffect(() => {
-    setJobs(jobDotsOf(pipe))
-    let live = true
-    const ref = pipe.commit || pipe.branch || ""
-    void Promise.all([
-      api.pipeline(owner, name, pipe.number).catch(() => ({ pipeline: pipe, steps: pipe.steps || [] })),
-      loadDeclaredJobNames(owner, name, ref),
-    ])
-      .then(([d, declared]) => {
-        if (!live) return
-        setJobs(jobDotsOf({ ...pipe, jobs: d.pipeline.jobs, error: d.pipeline.error }, d.steps, declared))
-      })
-      .catch(() => {})
-    return () => {
-      live = false
-    }
-  }, [name, owner, pipe])
+  const jobs = jobDotsOf(pipe)
 
   return (
     <li className="flex items-center gap-3 px-3 py-3 hover:bg-muted/50">

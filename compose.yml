@@ -1,4 +1,4 @@
-# Acahti: gateway + Forgejo + Woodpecker + one Postgres (two databases).
+# Acahti: gateway + Forgejo + Woodpecker + one Postgres (three databases).
 # Persist only via host bind mounts under ${ACAHTI_DATA}. Never `compose down -v`.
 name: acahti
 
@@ -11,12 +11,15 @@ services:
     image: acahti-gateway:local
     restart: unless-stopped
     depends_on:
+      postgres:
+        condition: service_healthy
       forgejo:
         condition: service_started
       woodpecker:
         condition: service_started
     environment:
       ACAHTI_LISTEN: ":8080"
+      ACAHTI_DATABASE_URL: postgres://acahti:${POSTGRES_PASSWORD}@postgres:5432/acahti?sslmode=disable
       ROOT_URL: ${ROOT_URL:-https://acahti.example.com}
       DOMAIN: ${DOMAIN:-acahti.example.com}
       ACAHTI_ORG: ${ACAHTI_ORG:-acme}

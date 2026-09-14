@@ -14,6 +14,7 @@ export type UsePage<T, P extends Page<T> = Page<T>> = {
   loading: boolean
   error: string
   reload: () => void
+  apply: (fn: (cur: P | null) => P | null) => void
   setPage: (n: number) => void
 }
 
@@ -46,6 +47,7 @@ export function usePage<P extends Page<unknown>>(
   const items = (load.data?.items || []) as P["items"]
   return {
     ...load,
+    apply: load.apply as UsePage<P["items"][number], P>["apply"],
     items,
     page,
     pageSize,

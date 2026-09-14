@@ -15,9 +15,19 @@ func (e PipeError) File() string {
 }
 
 func jobNameFromFile(file string) string {
-	base := path.Base(strings.TrimSpace(file))
+	file = strings.TrimSpace(file)
+	if file == "" || file == "." {
+		return ""
+	}
+	base := path.Base(file)
+	if base == "." || base == "/" || base == "" {
+		return ""
+	}
 	base = strings.TrimSuffix(base, ".yaml")
 	base = strings.TrimSuffix(base, ".yml")
+	if base == "" || base == "." {
+		return ""
+	}
 	return base
 }
 
@@ -99,7 +109,7 @@ func MergeDeclaredJobs(p Pipeline, declared []string) Pipeline {
 	}
 	real := 0
 	for _, j := range p.Jobs {
-		if j.Name == "" || j.Name == "pipeline" {
+		if j.Name == "" || j.Name == "pipeline" || j.Name == "." {
 			continue
 		}
 		real++

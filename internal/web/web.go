@@ -31,13 +31,13 @@ type Pages struct {
 	files       fs.FS
 }
 
-func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, a *auth.Service, inv *invite.Store, oa *oauth.Server, hub *events.Hub) *Pages {
+func New(cfg config.Config, cat *catalog.Catalog, fj *forgejo.Client, wp *woodpecker.Client, a *auth.Service, inv *invite.Store, oa *oauth.Server, hub *events.Hub) *Pages {
 	sub, err := fs.Sub(distFS, "dist")
 	if err != nil {
 		sub = distFS
 	}
 	return &Pages{
-		Cfg: cfg, Cat: catalog.New(cfg, fj, wp), FJ: fj, WP: wp, Hub: hub,
+		Cfg: cfg, Cat: cat, FJ: fj, WP: wp, Hub: hub,
 		Auth: a, InviteStore: inv, OAuth: oa, files: sub,
 	}
 }

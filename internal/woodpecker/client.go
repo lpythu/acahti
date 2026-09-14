@@ -17,45 +17,20 @@ import (
 	"acahti/internal/page"
 )
 
-const (
-	reposTTL  = 60 * time.Second
-	latestTTL = 20 * time.Second
-	fanout    = 16
-)
-
-type latestEnt struct {
-	at time.Time
-	p  Pipeline
-}
-
-type latestCall struct {
-	done chan struct{}
-	p    Pipeline
-	err  error
-}
-
 type Client struct {
-	base      string
-	token     string
-	http      *http.Client
-	mu        sync.Mutex
-	loadMu    sync.Mutex
-	ids       map[string]int64
-	repos     []Repo
-	reposAt   time.Time
-	latest    map[string]latestEnt
-	flight    sync.Map
-	loadErr   error
-	loadErrAt time.Time
+	base  string
+	token string
+	http  *http.Client
+	mu    sync.Mutex
+	ids   map[string]int64
 }
 
 func New(base, token string) *Client {
 	return &Client{
-		base:   strings.TrimRight(base, "/"),
-		token:  token,
-		http:   &http.Client{Timeout: 45 * time.Second},
-		ids:    map[string]int64{},
-		latest: map[string]latestEnt{},
+		base:  strings.TrimRight(base, "/"),
+		token: token,
+		http:  &http.Client{Timeout: 45 * time.Second},
+		ids:   map[string]int64{},
 	}
 }
 
@@ -288,13 +263,16 @@ func (c *Client) Activate(fullName, forgeRemoteID string) error {
 	} else if status != http.StatusConflict {
 		return err
 	}
-	c.forgetIDs()
+	if id > 0 {
+		c.rememberID(fullName, id)
+	}
 	if id == 0 {
 		looked, lerr := c.lookup(fullName)
 		if lerr != nil {
 			return lerr
 		}
 		id = looked.ID
+		c.rememberID(fullName, id)
 	}
 	if id == 0 {
 		return fmt.Errorf("woodpecker repo %s has no id", fullName)
@@ -321,87 +299,13 @@ func (c *Client) lookup(fullName string) (Repo, error) {
 	return repo, nil
 }
 
-func (c *Client) forgetIDs() {
+func (c *Client) rememberID(fullName string, id int64) {
+	if fullName == "" || id == 0 {
+		return
+	}
 	c.mu.Lock()
-	c.ids = map[string]int64{}
-	c.repos = nil
-	c.reposAt = time.Time{}
-	c.latest = map[string]latestEnt{}
-	c.loadErr = nil
-	c.loadErrAt = time.Time{}
+	c.ids[fullName] = id
 	c.mu.Unlock()
-}
-
-func (c *Client) lookupID(fullName string) (int64, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.reposAt.IsZero() || time.Since(c.reposAt) > reposTTL {
-		return 0, false
-	}
-	id, ok := c.ids[fullName]
-	return id, ok
-}
-
-func (c *Client) loadIDs() error {
-	repos, err := page.Walk(func(q page.Query) (page.Result[Repo], error) {
-		return c.ListRepos(q)
-	})
-	if err != nil {
-		return err
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.ids = make(map[string]int64, len(repos)*2)
-	c.repos = append([]Repo{}, repos...)
-	c.reposAt = time.Now()
-	for _, r := range repos {
-		if r.FullName != "" {
-			c.ids[r.FullName] = r.ID
-		}
-		if r.Name != "" {
-			c.ids[r.Name] = r.ID
-		}
-	}
-	return nil
-}
-
-func (c *Client) reposFresh() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return !c.reposAt.IsZero() && time.Since(c.reposAt) <= reposTTL
-}
-
-func (c *Client) ensureRepos() error {
-	if c.reposFresh() {
-		return nil
-	}
-	c.loadMu.Lock()
-	defer c.loadMu.Unlock()
-	if c.reposFresh() {
-		return nil
-	}
-	c.mu.Lock()
-	if c.loadErr != nil && time.Since(c.loadErrAt) < 5*time.Second {
-		err := c.loadErr
-		c.mu.Unlock()
-		return err
-	}
-	c.mu.Unlock()
-	err := c.loadIDs()
-	c.mu.Lock()
-	c.loadErr = err
-	c.loadErrAt = time.Now()
-	c.mu.Unlock()
-	return err
-}
-
-func (c *Client) CachedRepos() ([]Repo, error) {
-	if err := c.ensureRepos(); err != nil {
-		return nil, err
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return append([]Repo{}, c.repos...), nil
 }
 
 func (c *Client) repoKey(fullName string) (string, error) {
@@ -411,138 +315,24 @@ func (c *Client) repoKey(fullName string) (string, error) {
 	if _, err := strconv.ParseInt(fullName, 10, 64); err == nil {
 		return fullName, nil
 	}
-	if err := c.ensureRepos(); err != nil {
-		return "", err
-	}
-	if id, ok := c.lookupID(fullName); ok {
+	c.mu.Lock()
+	id, ok := c.ids[fullName]
+	c.mu.Unlock()
+	if ok {
 		return strconv.FormatInt(id, 10), nil
 	}
-	return "", fmt.Errorf("woodpecker repo %s not found", fullName)
-}
-
-func (c *Client) cachedLatest(fullName string) (Pipeline, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	e, ok := c.latest[fullName]
-	if !ok || time.Since(e.at) > latestTTL {
-		return Pipeline{}, false
-	}
-	return e.p, true
-}
-
-func (c *Client) storeLatest(fullName string, p Pipeline) {
-	c.mu.Lock()
-	c.latest[fullName] = latestEnt{at: time.Now(), p: p}
-	c.mu.Unlock()
-}
-
-func (c *Client) forgetLatest(fullName string) {
-	c.mu.Lock()
-	delete(c.latest, fullName)
-	c.mu.Unlock()
-}
-
-func (c *Client) latestListed(fullName string) (Pipeline, error) {
-	if p, ok := c.cachedLatest(fullName); ok {
-		return p, nil
-	}
-	call := &latestCall{done: make(chan struct{})}
-	if actual, loaded := c.flight.LoadOrStore(fullName, call); loaded {
-		wait := actual.(*latestCall)
-		<-wait.done
-		return wait.p, wait.err
-	}
-	defer func() {
-		close(call.done)
-		c.flight.Delete(fullName)
-	}()
-	res, err := c.ListPipelines(fullName, page.Query{Page: 1, Size: 1})
+	repo, err := c.lookup(fullName)
 	if err != nil {
-		call.err = err
-		return Pipeline{}, err
+		return "", err
 	}
-	if len(res.Items) == 0 {
-		call.err = fmt.Errorf("no pipelines")
-		return Pipeline{}, call.err
+	if repo.ID == 0 {
+		return "", fmt.Errorf("woodpecker repo %s not found", fullName)
 	}
-	p := res.Items[0]
-	c.storeLatest(fullName, p)
-	call.p = p
-	return p, nil
-}
-
-func (c *Client) latestPipe(fullName string, jobs bool) (Pipeline, error) {
-	p, err := c.latestListed(fullName)
-	if err != nil {
-		return Pipeline{}, err
+	c.rememberID(fullName, repo.ID)
+	if repo.FullName != "" {
+		c.rememberID(repo.FullName, repo.ID)
 	}
-	if !jobs || len(p.Jobs) > 0 {
-		return p, nil
-	}
-	detail, err := c.GetPipeline(fullName, p.Number)
-	if err != nil {
-		return p, nil
-	}
-	detail.Repo = fullName
-	c.storeLatest(fullName, detail)
-	return detail, nil
-}
-
-func (c *Client) EnrichJobs(fullName string, pipes []Pipeline) []Pipeline {
-	out := append([]Pipeline(nil), pipes...)
-	sem := make(chan struct{}, fanout)
-	var wg sync.WaitGroup
-	for i := range out {
-		if len(out[i].Jobs) > 0 || out[i].Number == 0 {
-			continue
-		}
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(i int) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			d, err := c.GetPipeline(fullName, out[i].Number)
-			if err != nil {
-				return
-			}
-			d.Repo = fullName
-			out[i] = d
-		}(i)
-	}
-	wg.Wait()
-	return out
-}
-
-func (c *Client) LatestPipelines(names []string, jobs bool) []Pipeline {
-	got := make([]Pipeline, len(names))
-	ok := make([]bool, len(names))
-	sem := make(chan struct{}, fanout)
-	var wg sync.WaitGroup
-	for i, name := range names {
-		if name == "" {
-			continue
-		}
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(i int, name string) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			p, err := c.latestPipe(name, jobs)
-			if err != nil {
-				return
-			}
-			got[i] = p
-			ok[i] = true
-		}(i, name)
-	}
-	wg.Wait()
-	out := make([]Pipeline, 0, len(names))
-	for i, p := range got {
-		if ok[i] {
-			out = append(out, p)
-		}
-	}
-	return out
+	return strconv.FormatInt(repo.ID, 10), nil
 }
 
 func (c *Client) ListPipelines(fullName string, q page.Query) (page.Result[Pipeline], error) {
@@ -631,7 +421,6 @@ func (c *Client) Trigger(fullName, branch string) (Pipeline, error) {
 	if err != nil {
 		return Pipeline{}, err
 	}
-	c.forgetLatest(fullName)
 	var p Pipeline
 	p.Repo = fullName
 	return p, json.Unmarshal(b, &p)
@@ -646,7 +435,6 @@ func (c *Client) Rerun(fullName string, number int64) (Pipeline, error) {
 	if err != nil {
 		return Pipeline{}, err
 	}
-	c.forgetLatest(fullName)
 	var p Pipeline
 	p.Repo = fullName
 	return p, json.Unmarshal(b, &p)
@@ -658,9 +446,6 @@ func (c *Client) Approve(fullName string, number int64) error {
 		return err
 	}
 	_, _, err = c.do(http.MethodPost, fmt.Sprintf("/api/repos/%s/pipelines/%d/approve", key, number), nil)
-	if err == nil {
-		c.forgetLatest(fullName)
-	}
 	return err
 }
 
@@ -670,9 +455,6 @@ func (c *Client) Cancel(fullName string, number int64) error {
 		return err
 	}
 	_, _, err = c.do(http.MethodPost, fmt.Sprintf("/api/repos/%s/pipelines/%d/cancel", key, number), nil)
-	if err == nil {
-		c.forgetLatest(fullName)
-	}
 	return err
 }
 

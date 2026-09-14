@@ -8,10 +8,9 @@ import { useT } from "@/i18n/i18n"
 export function CloneMenu({ url }: { url: string }) {
   const t = useT()
   const [done, setDone] = useState(false)
-  const command = `git clone ${url}`
 
   async function copy() {
-    await navigator.clipboard.writeText(command)
+    await navigator.clipboard.writeText(url)
     setDone(true)
     window.setTimeout(() => setDone(false), 1500)
   }
@@ -23,7 +22,7 @@ export function CloneMenu({ url }: { url: string }) {
       </PopoverTrigger>
       <PopoverContent className="flex w-96 flex-col gap-3">
         <div className="flex gap-2">
-          <Input readOnly value={command} className="h-8 font-mono text-xs" />
+          <Input readOnly value={url} className="h-8 font-mono text-xs" />
           <Button type="button" size="sm" variant="outline" onClick={() => void copy()}>
             {done ? t("copied") : t("copy")}
           </Button>

@@ -11,8 +11,10 @@ export function PipelineStages({ stages }: { stages: Stage[] }) {
   const t = useT()
   if (!stages.length) return null
 
-  const shown = stages.slice(0, VISIBLE)
-  const extra = stages.slice(VISIBLE)
+  const named = stages.filter((s) => s.name.trim() && s.name !== ".")
+  if (!named.length) return null
+  const shown = named.slice(0, VISIBLE)
+  const extra = named.slice(VISIBLE)
 
   return (
     <ol className="flex max-w-64 shrink-0 flex-wrap items-center justify-end gap-1" aria-label={t("jobs")}>

@@ -19,12 +19,14 @@ type memo struct {
 	admin map[string]stamp[bool]
 	repos map[string]stamp[[]forgejo.Repo]
 	teams stamp[[]forgejo.Team]
+	files map[string][]FileBlob
 }
 
 func newMemo() *memo {
 	return &memo{
 		admin: map[string]stamp[bool]{},
 		repos: map[string]stamp[[]forgejo.Repo]{},
+		files: map[string][]FileBlob{},
 	}
 }
 
@@ -77,6 +79,32 @@ func (m *memo) teamsOf() ([]forgejo.Team, bool) {
 func (m *memo) setTeams(teams []forgejo.Team) {
 	m.mu.Lock()
 	m.teams = stamp[[]forgejo.Team]{at: time.Now(), v: append([]forgejo.Team{}, teams...)}
+	m.mu.Unlock()
+}
+
+func fileKey(repo, ref string) string {
+	return repo + "@" + ref
+}
+
+func (m *memo) filesOf(repo, ref string) ([]FileBlob, bool) {
+	if m == nil || repo == "" || ref == "" {
+		return nil, false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	files, ok := m.files[fileKey(repo, ref)]
+	if !ok {
+		return nil, false
+	}
+	return append([]FileBlob{}, files...), true
+}
+
+func (m *memo) setFiles(repo, ref string, files []FileBlob) {
+	if m == nil || repo == "" || ref == "" {
+		return
+	}
+	m.mu.Lock()
+	m.files[fileKey(repo, ref)] = append([]FileBlob{}, files...)
 	m.mu.Unlock()
 }
 

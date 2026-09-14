@@ -9,7 +9,7 @@ RUN npm run build
 FROM golang:1.25-bookworm AS build
 WORKDIR /src
 ARG ACAHTI_VERSION=0.1.0
-COPY go.mod ./
+COPY go.mod go.sum ./
 COPY cmd ./cmd
 COPY internal ./internal
 COPY skills ./skills

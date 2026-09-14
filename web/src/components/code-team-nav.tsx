@@ -3,7 +3,6 @@ import { Link, useLocation, useSearchParams } from "react-router-dom"
 import { BookMarkedIcon, ChevronRightIcon, FolderIcon, WorkflowIcon } from "lucide-react"
 import { cn } from "cn"
 
-import { MoreButton } from "@/components/paged-list"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   SidebarGroup,
@@ -16,10 +15,10 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
+import { useEvents } from "@/hooks/use-events"
 import { useLoad } from "@/hooks/use-load"
-import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
-import { api, splitRepo } from "@/lib/api"
+import { api, splitRepo, type Repo } from "@/lib/api"
 import { parsePipelinePath, repoBase } from "@/lib/nav"
 
 export type CodeTeamSection = "repos" | "pipelines"
@@ -39,34 +38,30 @@ function itemHref(section: CodeTeamSection, owner: string, name: string) {
 function TeamNode({
   section,
   team,
+  repos,
   pathname,
   filterTeam,
   filterRepo,
-  defaultOpen,
   itemIcon,
 }: {
   section: CodeTeamSection
   team: string
+  repos: Repo[]
   pathname: string
   filterTeam: string
   filterRepo: string
-  defaultOpen: boolean
   itemIcon: ReactNode
 }) {
   const pipe = parsePipelinePath(pathname)
   const teamActive = !filterRepo && !pipe && filterTeam === team && !repoBase(pathname)
-  const [open, setOpen] = useState(defaultOpen || teamActive)
-  const repos = usePage((q) => api.repos(q, team), [team], {
-    url: false,
-    enabled: open,
-  })
-  const inTeam = repos.items.some((r) => {
+  const inTeam = repos.some((r) => {
     const { owner, name } = splitRepo(r.full_name || r.name)
     if (filterRepo === `${owner}/${name}`) return true
     if (pipe?.owner === owner && pipe.name === name) return true
     const base = `/repos/${owner}/${name}`
     return pathname === base || pathname.startsWith(`${base}/`)
   })
+  const [open, setOpen] = useState(true)
 
   useEffect(() => {
     if (inTeam || teamActive) setOpen(true)
@@ -96,7 +91,7 @@ function TeamNode({
         </div>
         <CollapsibleContent>
           <SidebarMenuSub>
-            {repos.items.map((r) => {
+            {repos.map((r) => {
               const { owner, name } = splitRepo(r.full_name || r.name)
               const url = itemHref(section, owner, name)
               const active =
@@ -113,7 +108,6 @@ function TeamNode({
                 </SidebarMenuSubItem>
               )
             })}
-            <MoreButton page={repos.page} hasMore={repos.hasMore} onPage={repos.setPage} />
           </SidebarMenuSub>
         </CollapsibleContent>
       </Collapsible>
@@ -127,20 +121,12 @@ export function CodeTeamNav({ section }: { section: CodeTeamSection }) {
   const [sp] = useSearchParams()
   const filterTeam = sp.get("team") || ""
   const filterRepo = sp.get("repo") || ""
-  const teams = usePage((q) => api.repoTeams(q), [], { url: false })
-  const pipe = parsePipelinePath(pathname)
-  const current = repoBase(pathname)
-  const headOwner = pipe?.owner || (current ? current.split("/")[2] : splitRepo(filterRepo).owner)
-  const headName = pipe?.name || (current ? current.split("/")[3] : splitRepo(filterRepo).name)
-  const head = useLoad(
-    () => api.repo(headOwner, headName),
-    [headOwner, headName],
-    Boolean(headOwner && headName),
-  )
-  const currentTeam = filterTeam || head.data?.repo.team || ""
-  const openAll = teams.items.length <= 1 && !filterTeam && !currentTeam
+  const tree = useLoad(() => api.navTree(), [])
+  useEvents((ev) => {
+    if (ev.type === "forgejo") void tree.reload()
+  })
 
-  if (!teams.items.length) return null
+  if (!tree.data?.length) return null
 
   const itemIcon = section === "pipelines" ? <WorkflowIcon /> : <BookMarkedIcon />
 
@@ -149,19 +135,18 @@ export function CodeTeamNav({ section }: { section: CodeTeamSection }) {
       <SidebarGroupLabel>{t("teams")}</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
-          {teams.items.map((row) => (
+          {tree.data.map((row) => (
             <TeamNode
               key={row.team}
               section={section}
               team={row.team}
+              repos={row.repos}
               pathname={pathname}
               filterTeam={filterTeam}
               filterRepo={filterRepo}
-              defaultOpen={openAll || row.team === currentTeam}
               itemIcon={itemIcon}
             />
           ))}
-          <MoreButton page={teams.page} hasMore={teams.hasMore} onPage={teams.setPage} />
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>

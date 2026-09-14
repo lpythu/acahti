@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -11,12 +12,14 @@ import (
 	"acahti/internal/api"
 	"acahti/internal/auth"
 	"acahti/internal/brand"
+	"acahti/internal/catalog"
 	"acahti/internal/config"
 	"acahti/internal/events"
 	"acahti/internal/forgejo"
 	"acahti/internal/invite"
 	"acahti/internal/mcp"
 	"acahti/internal/oauth"
+	"acahti/internal/store"
 	"acahti/internal/web"
 	"acahti/internal/woodpecker"
 )
@@ -28,8 +31,14 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 		log.Fatalf("invite store: %v", err)
 	}
 	oa, _ := oauth.Open(cfg.DataDir, cfg.RootURL, a)
-	pages := web.New(cfg, fj, wp, a, inv, oa, hub)
-	mc := mcp.New(cfg, a, fj, wp)
+	idx, err := store.Open(cfg.DatabaseURL)
+	if err != nil {
+		log.Printf("pipeline index: %v", err)
+	}
+	cat := catalog.New(cfg, fj, wp, idx)
+	go cat.Backfill()
+	pages := web.New(cfg, cat, fj, wp, a, inv, oa, hub)
+	mc := mcp.New(cfg, a, fj, wp, cat)
 	rest := &api.API{Cfg: cfg, Auth: a, Hub: hub, MCP: mc}
 	fjProxy := reverse(cfg.ForgejoURL)
 
@@ -55,6 +64,7 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 	mux.HandleFunc("POST /ui/oauth/approve", pages.OAuthApprove)
 	mux.HandleFunc("GET /ui/board", pages.Board)
 	mux.HandleFunc("GET /ui/events", pages.Events)
+	mux.HandleFunc("GET /ui/nav/tree", pages.NavTree)
 	mux.HandleFunc("GET /ui/repos", pages.Repos)
 	mux.HandleFunc("GET /ui/teams/{team}", pages.Teams)
 	mux.HandleFunc("POST /ui/teams", pages.Teams)
@@ -106,10 +116,21 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 		}
 		pages.Index(w, r)
 	})
+	mux.HandleFunc("POST /hooks/woodpecker", func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		if p, ok := cat.IngestWoodpecker(raw); ok {
+			hub.Publish("pipeline.updated", p)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("POST /hooks/forgejo", func(w http.ResponseWriter, r *http.Request) {
 		var payload map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&payload)
-		hub.Publish("forgejo", payload)
+		if p, ok := cat.IngestForgejo(payload); ok {
+			hub.Publish("pipeline.updated", p)
+		} else {
+			hub.Publish("forgejo", payload)
+		}
 		w.WriteHeader(http.StatusNoContent)
 	})
 

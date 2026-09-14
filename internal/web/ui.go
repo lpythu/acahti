@@ -13,6 +13,26 @@ func writeErr(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, code, map[string]string{"error": msg})
 }
 
+func (p *Pages) publishPipe(pipe any) {
+	if p.Hub == nil {
+		return
+	}
+	p.Hub.Publish("pipeline.updated", pipe)
+}
+
+func (p *Pages) NavTree(w http.ResponseWriter, r *http.Request) {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
+		return
+	}
+	out, err := p.Cat.NavTree(user)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (p *Pages) Events(w http.ResponseWriter, r *http.Request) {
 	if _, _, ok := p.requireJSON(w, r); !ok {
 		return
@@ -216,6 +236,8 @@ func (p *Pages) TriggerPipeline(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
+	pipe = p.Cat.Remember(pipe)
+	p.publishPipe(pipe)
 	writeJSON(w, http.StatusOK, pipe)
 }
 
@@ -250,6 +272,8 @@ func (p *Pages) Pipeline(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadGateway, err.Error())
 			return
 		}
+		pipe = p.Cat.Remember(pipe)
+		p.publishPipe(pipe)
 		writeJSON(w, http.StatusOK, pipe)
 	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/cancel"):
 		if _, err := p.Cat.RepoHeader(user, owner, name, ""); err != nil {
@@ -260,6 +284,9 @@ func (p *Pages) Pipeline(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadGateway, err.Error())
 			return
 		}
+		if pipe, err := p.Cat.Refresh(repo, n); err == nil {
+			p.publishPipe(pipe)
+		}
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/approve"):
 		if _, err := p.Cat.RepoHeader(user, owner, name, ""); err != nil {
@@ -269,6 +296,9 @@ func (p *Pages) Pipeline(w http.ResponseWriter, r *http.Request) {
 		if err := p.WP.Approve(repo, n); err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())
 			return
+		}
+		if pipe, err := p.Cat.Refresh(repo, n); err == nil {
+			p.publishPipe(pipe)
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	default:

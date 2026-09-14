@@ -156,13 +156,22 @@ printf '%s\n' "${WOODPECKER_AGENT_SECRET}" | sudo tee "${ACAHTI_DATA}/agent.secr
 sudo chmod 600 "${ACAHTI_DATA}/agent.secret"
 
 existing="$(api GET "/api/v1/orgs/${ACAHTI_ORG}/hooks" || echo '[]')"
-if ! python3 -c "import json,sys; hooks=json.loads(sys.argv[1]); sys.exit(0 if any('/hooks/forgejo' in (h.get('config') or {}).get('url','') for h in hooks) else 1)" "${existing}"; then
-  api POST "/api/v1/orgs/${ACAHTI_ORG}/hooks" "$(python3 -c "import json; print(json.dumps({
-    'type': 'gitea',
-    'active': True,
-    'events': ['create','delete','push','pull_request','pull_request_assign','pull_request_review','pull_request_review_request','pull_request_comment','pull_request_reject','release'],
-    'config': {'url': 'http://gateway:8080/hooks/forgejo', 'content_type': 'json', 'http_method': 'post'},
-  }))")" >/dev/null || true
+hook_body="$(python3 -c "import json; print(json.dumps({
+  'type': 'gitea',
+  'active': True,
+  'events': ['create','delete','push','pull_request','pull_request_assign','pull_request_review','pull_request_review_request','pull_request_comment','pull_request_reject','release','status'],
+  'config': {'url': 'http://gateway:8080/hooks/forgejo', 'content_type': 'json', 'http_method': 'post'},
+}))")"
+hook_id="$(python3 -c "import json,sys
+hooks=json.loads(sys.argv[1])
+for h in hooks:
+  if '/hooks/forgejo' in (h.get('config') or {}).get('url',''):
+    print(h.get('id','')); break
+" "${existing}")"
+if [[ -n "${hook_id}" ]]; then
+  api PATCH "/api/v1/orgs/${ACAHTI_ORG}/hooks/${hook_id}" "${hook_body}" >/dev/null || true
+else
+  api POST "/api/v1/orgs/${ACAHTI_ORG}/hooks" "${hook_body}" >/dev/null || true
 fi
 
 "${COMPOSE[@]}" up -d gateway

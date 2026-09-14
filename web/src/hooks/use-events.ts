@@ -1,17 +1,23 @@
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 
-export function useEvents(onEvent: () => void) {
+export type HubEvent = {
+  type: string
+  at: number
+  data?: unknown
+}
+
+export function useEvents(onEvent: (ev: HubEvent) => void) {
+  const ref = useRef(onEvent)
+  ref.current = onEvent
   useEffect(() => {
     const es = new EventSource("/ui/events", { withCredentials: true })
-    let timer = 0
-    const bump = () => {
-      window.clearTimeout(timer)
-      timer = window.setTimeout(onEvent, 400)
+    es.onmessage = (e) => {
+      try {
+        ref.current(JSON.parse(e.data) as HubEvent)
+      } catch {
+        /* ignore */
+      }
     }
-    es.onmessage = bump
-    return () => {
-      window.clearTimeout(timer)
-      es.close()
-    }
-  }, [onEvent])
+    return () => es.close()
+  }, [])
 }

@@ -35,13 +35,13 @@ type ConfigView struct {
 	Domain  string
 }
 
-func New(cfg config.Config, a *auth.Service, fj *forgejo.Client, wp *woodpecker.Client) *Server {
+func New(cfg config.Config, a *auth.Service, fj *forgejo.Client, wp *woodpecker.Client, cat *catalog.Catalog) *Server {
 	return &Server{
 		Cfg:  ConfigView{Org: cfg.Org, RootURL: cfg.RootURL, Domain: cfg.Domain},
 		Auth: a,
 		FJ:   fj,
 		WP:   wp,
-		Cat:  catalog.New(cfg, fj, wp),
+		Cat:  cat,
 	}
 }
 
@@ -270,7 +270,11 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 	case "pipeline_log":
 		return s.Cat.PipelineLogs(token, repoArg(str), num("number"), num("step"), num("tail_lines"))
 	case "pipeline_rerun":
-		return s.WP.Rerun(repoArg(str), num("number"))
+		pipe, err := s.WP.Rerun(repoArg(str), num("number"))
+		if err != nil {
+			return nil, err
+		}
+		return s.Cat.Remember(pipe), nil
 	case "pipeline_trigger":
 		repo := repoArg(str)
 		if err := s.seeRepo(token, repo); err != nil {
@@ -280,13 +284,23 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		if ref == "" {
 			ref = "dev"
 		}
-		return s.WP.Trigger(repo, ref)
+		pipe, err := s.WP.Trigger(repo, ref)
+		if err != nil {
+			return nil, err
+		}
+		return s.Cat.Remember(pipe), nil
 	case "pipeline_cancel":
 		repo := repoArg(str)
 		if err := s.seeRepo(token, repo); err != nil {
 			return nil, err
 		}
-		return map[string]any{"ok": true}, s.WP.Cancel(repo, num("number"))
+		if err := s.WP.Cancel(repo, num("number")); err != nil {
+			return nil, err
+		}
+		if pipe, err := s.Cat.Refresh(repo, num("number")); err == nil {
+			return map[string]any{"ok": true, "pipeline": pipe}, nil
+		}
+		return map[string]any{"ok": true}, nil
 	case "inbox":
 		section := str("section")
 		if section == "" {
@@ -307,7 +321,14 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 	case "agent_status":
 		return s.Cat.ListAgents(pq)
 	case "deploy_approve":
-		return map[string]any{"ok": true}, s.WP.Approve(str("repo"), num("number"))
+		repo := str("repo")
+		if err := s.WP.Approve(repo, num("number")); err != nil {
+			return nil, err
+		}
+		if pipe, err := s.Cat.Refresh(repo, num("number")); err == nil {
+			return map[string]any{"ok": true, "pipeline": pipe}, nil
+		}
+		return map[string]any{"ok": true}, nil
 	default:
 		return nil, fmt.Errorf("unknown tool %s", name)
 	}
@@ -437,24 +458,7 @@ func (s *Server) listPipes(token, repo, sha, branch, status string, q page.Query
 	if repo == "" {
 		return nil, fmt.Errorf("repo required")
 	}
-	if sha == "" && branch == "" && status == "" {
-		return s.Cat.ListPipelines(token, repo, "", q)
-	}
-	var matched []woodpecker.Pipeline
-	need := q.Norm().Page*q.Norm().Size + 1
-	pq := page.Query{Page: 1, Size: page.MaxSize}
-	for len(matched) < need && pq.Page <= page.MaxWalk {
-		res, err := s.Cat.ListPipelines(token, repo, "", pq)
-		if err != nil {
-			return nil, err
-		}
-		matched = append(matched, filterPipes(res.Items, sha, branch, status)...)
-		if !res.HasMore {
-			break
-		}
-		pq.Page++
-	}
-	return page.Take(matched, q), nil
+	return s.Cat.ListRepoPipelines(token, repo, sha, branch, status, q)
 }
 
 func filterPipes(items []woodpecker.Pipeline, sha, branch, status string) []woodpecker.Pipeline {

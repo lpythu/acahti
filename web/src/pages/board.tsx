@@ -1,4 +1,3 @@
-import { useCallback } from "react"
 import { Link } from "react-router-dom"
 
 import { Pager } from "@/components/paged-list"
@@ -9,19 +8,34 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useEvents } from "@/hooks/use-events"
 import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
-import { api, splitRepo } from "@/lib/api"
+import { api, splitRepo, type Pipeline } from "@/lib/api"
+import { asPipeline, upsertRun } from "@/lib/pipeline"
 
 export function BoardPage() {
   const t = useT()
   const blocked = usePage((q) => api.boardBlocked(q), [], { param: "blocked" })
   const failed = usePage((q) => api.boardFailed(q), [], { param: "failed" })
   const prs = usePage((q) => api.boardPRs(q), [], { param: "prs" })
-  const reload = useCallback(() => {
-    void blocked.reload()
-    void failed.reload()
-    void prs.reload()
-  }, [blocked.reload, failed.reload, prs.reload])
-  useEvents(reload)
+  useEvents((ev) => {
+    if (ev.type === "forgejo") {
+      void prs.reload()
+      return
+    }
+    if (ev.type !== "pipeline.updated") return
+    const next = asPipeline(ev.data)
+    if (!next) return
+    const failedSet = new Set(["failure", "error", "killed", "declined"])
+    blocked.apply((page) => {
+      if (next.status === "blocked") return upsertRun(page, next, blocked.page)
+      if (!page?.items?.some((p: Pipeline) => p.repo === next.repo && p.number === next.number)) return page
+      return { ...page, items: page.items.filter((p: Pipeline) => !(p.repo === next.repo && p.number === next.number)) }
+    })
+    failed.apply((page) => {
+      if (failedSet.has(next.status)) return upsertRun(page, next, failed.page)
+      if (!page?.items?.some((p: Pipeline) => p.repo === next.repo && p.number === next.number)) return page
+      return { ...page, items: page.items.filter((p: Pipeline) => !(p.repo === next.repo && p.number === next.number)) }
+    })
+  })
 
   const loading = [blocked, failed, prs].every((x) => x.loading && !x.data)
   const empty = blocked.empty && failed.empty && prs.empty

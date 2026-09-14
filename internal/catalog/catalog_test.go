@@ -70,7 +70,7 @@ func TestWriteID(t *testing.T) {
 }
 
 func TestDecoratePipeNeedsDeclaredNames(t *testing.T) {
-	c := New(config.Config{}, nil, nil)
+	c := New(config.Config{}, nil, nil, nil)
 	p := c.decoratePipe(woodpecker.Pipeline{Status: "error", Error: "bad yaml", Repo: "saidc/demo"})
 	if p.Error != "bad yaml" {
 		t.Fatalf("%+v", p)
@@ -94,7 +94,7 @@ func TestStepFailedAndTailLog(t *testing.T) {
 }
 
 func TestPublicRepoCloneHTTPS(t *testing.T) {
-	c := New(config.Config{RootURL: "https://acahti.example.com", Org: "acme"}, nil, nil)
+	c := New(config.Config{RootURL: "https://acahti.example.com", Org: "acme"}, nil, nil, nil)
 	got := c.PublicRepo(forgejo.Repo{FullName: "acme/demo", CloneURL: "http://forgejo:3000/acme/demo.git"})
 	if got.CloneURL != "https://acahti.example.com/acme/demo.git" {
 		t.Fatalf("clone_url=%q", got.CloneURL)
@@ -109,7 +109,7 @@ func TestPublicRepoCloneHTTPS(t *testing.T) {
 }
 
 func TestAcahtiCheckURL(t *testing.T) {
-	c := New(config.Config{RootURL: "https://acahti.example.com"}, nil, nil)
+	c := New(config.Config{RootURL: "https://acahti.example.com"}, nil, nil, nil)
 	cases := []struct {
 		in, want string
 	}{

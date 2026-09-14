@@ -211,6 +211,13 @@ export type PRDetail = {
 export type PipelineDetail = {
   pipeline: Pipeline
   steps: Step[]
+  team?: string
+  files?: FileBlob[]
+}
+
+export type NavTeam = {
+  team: string
+  repos: Repo[]
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -272,6 +279,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ username, password }),
     }),
+  navTree: () => req<NavTeam[]>("/ui/nav/tree"),
   repoTeams: (q?: PageQuery) => req<Page<RepoTeam>>(`/ui/repos${pageQS(q, { teams: "1" })}`),
   repos: (q?: PageQuery, team?: string) => req<Page<Repo>>(`/ui/repos${pageQS(q, { team })}`),
   team: (name: string) => req<TeamAccess>(`/ui/teams/${encodeURIComponent(name)}`),

@@ -1,4 +1,4 @@
-import { api, splitRepo, type FileBlob, type Pipeline, type Step } from "@/lib/api"
+import { splitRepo, type Pipeline, type Step } from "@/lib/api"
 import type { MessageKey } from "@/i18n/messages"
 
 export type Stage = { name: string; state: string }
@@ -36,45 +36,104 @@ function placeholderJob(name: string, state: string, error?: string): Job {
   return { name, state, steps: [{ pid: 0, name, state, error }] }
 }
 
-export function declaredJobNames(files?: { name?: string; path?: string }[]): string[] {
+function usableName(name?: string) {
+  const n = (name || "").trim()
+  if (!n || n === "." || n === "pipeline") return ""
+  return n
+}
+
+function executedJob(j: Job) {
+  return j.steps.some((s) => s.type === "clone" || s.type === "commands")
+}
+
+function yamlScalars(raw: string) {
+  const bracket = raw.match(/\[([^\]]*)\]/)
+  const body = bracket ? bracket[1] : raw
+  return body
+    .split(",")
+    .map((s) => s.trim().replace(/^['"]|['"]$/g, ""))
+    .filter(Boolean)
+}
+
+export function parseWhen(content: string): { events: string[]; branches: string[] }[] {
+  const lines = content.split(/\r?\n/)
+  let start = -1
+  for (let i = 0; i < lines.length; i++) {
+    if (/^when:\s*$/.test(lines[i]) || /^when:\s+\S/.test(lines[i])) {
+      start = i
+      break
+    }
+  }
+  if (start < 0) return [{ events: [], branches: [] }]
+  const block: string[] = []
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^\S/.test(lines[i])) break
+    block.push(lines[i])
+  }
+  const rules: { events: string[]; branches: string[] }[] = []
+  let cur: { events: string[]; branches: string[] } | null = null
+  for (const line of block) {
+    if (/^\s*-\s+/.test(line) || (/^\s*-\s*$/.test(line) && cur)) {
+      cur = { events: [], branches: [] }
+      rules.push(cur)
+    }
+    if (!cur) {
+      cur = { events: [], branches: [] }
+      rules.push(cur)
+    }
+    const ev = line.match(/^\s*-?\s*event:\s*(.*)$/)
+    if (ev) cur.events = yamlScalars(ev[1])
+    const br = line.match(/^\s*-?\s*branch:\s*(.*)$/)
+    if (br) cur.branches = yamlScalars(br[1])
+  }
+  return rules.length ? rules : [{ events: [], branches: [] }]
+}
+
+export function matchesWhen(content: string, event?: string, branch?: string) {
+  const ev = (event || "").toLowerCase()
+  const br = (branch || "").replace(/^refs\/(heads|tags)\//, "")
+  return parseWhen(content).some((rule) => {
+    const events = rule.events.map((e) => e.toLowerCase())
+    const branches = rule.branches
+    const eventOk = !events.length || events.includes(ev) || (ev === "release" && events.includes("tag"))
+    const branchOk = !branches.length || branches.includes(br)
+    return eventOk && branchOk
+  })
+}
+
+export function declaredJobNames(files?: { name?: string; path?: string; content?: string }[], event?: string, branch?: string): string[] {
   const names: string[] = []
   const seen = new Set<string>()
   for (const f of files || []) {
-    const base = (f.name || f.path?.split("/").pop() || "").replace(/\.ya?ml$/i, "")
-    if (!base || base === "pipeline" || seen.has(base)) continue
+    const base = usableName((f.name || f.path?.split("/").pop() || "").replace(/\.ya?ml$/i, ""))
+    if (!base || seen.has(base)) continue
+    if (f.content != null && !matchesWhen(f.content, event, branch)) continue
     seen.add(base)
     names.push(base)
   }
   return names
 }
 
-export async function loadDeclaredJobNames(owner: string, name: string, ref: string): Promise<string[]> {
-  if (!ref) return []
-  try {
-    const dir = await api.contents(owner, name, { ref, path: ".acahti/pipelines" })
-    return declaredJobNames((dir.items || []).filter((e) => e.type === "file" || e.type === "blob"))
-  } catch {
-    return []
-  }
-}
-
 export function jobsOf(p: Pipeline, flat?: Step[], declared?: string[]): Job[] {
   const runtime: Job[] = []
   if (p.jobs?.length) {
     for (const j of p.jobs) {
-      if (!j.name || j.name === "pipeline") continue
-      runtime.push(jobFromRuntime(p, j))
+      const name = usableName(j.name)
+      if (!name) continue
+      runtime.push({ ...jobFromRuntime(p, j), name })
     }
   }
-  const names = (declared || []).filter((n) => n && n !== "pipeline")
+  const ran = runtime.filter(executedJob)
+  const names = (declared || []).map(usableName).filter(Boolean)
+  const source = ran.length ? ran : []
   if (!names.length) {
-    return runtime.sort((a, b) => jobRank(a.name) - jobRank(b.name) || a.name.localeCompare(b.name))
+    return source.sort((a, b) => jobRank(a.name) - jobRank(b.name) || a.name.localeCompare(b.name))
   }
-  const byName = new Map(runtime.map((j) => [j.name, j]))
+  const byName = new Map(source.map((j) => [j.name, j]))
   const skip = pendingStatus(p.status) ? "pending" : "skipped"
-  const steps = flat?.length ? flat : p.steps || []
+  const steps = (flat || p.steps || []).filter((s) => usableName(s.name))
   const failName =
-    runtime.length === 0 && failedStatus(p.status)
+    source.length === 0 && failedStatus(p.status)
       ? names.slice().sort((a, b) => jobRank(a) - jobRank(b) || a.localeCompare(b))[0]
       : ""
   const out: Job[] = []
@@ -89,15 +148,12 @@ export function jobsOf(p: Pipeline, flat?: Step[], declared?: string[]): Job[] {
       out.push({
         name,
         state: p.status,
-        steps: steps.length
-          ? steps.map((s) => ({ ...s, name: s.name || name }))
-          : [{ pid: 0, name, state: p.status, error: p.error }],
+        steps: steps.length ? steps.map((s) => ({ ...s, name: s.name || name })) : [{ pid: 0, name, state: p.status, error: p.error }],
       })
       continue
     }
     out.push(placeholderJob(name, skip))
   }
-  for (const j of byName.values()) out.push(j)
   return out.sort((a, b) => jobRank(a.name) - jobRank(b.name) || a.name.localeCompare(b.name))
 }
 
@@ -105,36 +161,26 @@ export function jobDotsOf(p: Pipeline, flat?: Step[], declared?: string[]): Stag
   return jobsOf(p, flat || p.steps, declared).map((j) => ({ name: j.name, state: j.state }))
 }
 
-export async function loadPipelineFiles(owner: string, name: string, ref: string): Promise<FileBlob[]> {
-  if (!ref) return []
-  const out: FileBlob[] = []
-  const seen = new Set<string>()
+export function asPipeline(data: unknown): Pipeline | null {
+  if (!data || typeof data !== "object") return null
+  const p = data as Pipeline
+  if (!p.repo || !p.number) return null
+  return p
+}
 
-  async function add(path: string) {
-    if (!path || seen.has(path)) return
-    seen.add(path)
-    try {
-      const ov = await api.contents(owner, name, { ref, path })
-      if (ov.file) out.push(ov.file)
-    } catch {
-      /* missing */
-    }
+export function upsertRun<T extends { items?: Pipeline[] }>(page: T | null, next: Pipeline, pageNo: number): T | null {
+  if (!page) return page
+  const items = [...(page.items || [])]
+  const i = items.findIndex((p) => p.repo === next.repo && p.number === next.number)
+  if (i >= 0) {
+    items[i] = next
+    return { ...page, items }
   }
-
-  let dirEntries: { path?: string; name: string; type: string }[] = []
-  try {
-    const dir = await api.contents(owner, name, { ref, path: ".acahti/pipelines" })
-    dirEntries = dir.items || []
-  } catch {
-    dirEntries = []
+  if (pageNo <= 1) {
+    items.unshift(next)
+    return { ...page, items }
   }
-
-  const paths = dirEntries
-    .filter((e) => e.type === "file" || e.type === "blob")
-    .filter((e) => /\.ya?ml$/i.test(e.name))
-    .map((e) => e.path || `.acahti/pipelines/${e.name}`)
-  await Promise.all(paths.map(add))
-  return out.sort((a, b) => a.path.localeCompare(b.path))
+  return page
 }
 
 function shortRef(ref?: string) {

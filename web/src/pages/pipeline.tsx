@@ -20,33 +20,36 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useEvents } from "@/hooks/use-events"
 import { useLoad } from "@/hooks/use-load"
 import { useT } from "@/i18n/i18n"
-import type { FileBlob, Step } from "@/lib/api"
+import type { FileBlob, PipelineDetail, Step } from "@/lib/api"
 import { api } from "@/lib/api"
 import { formatUnix } from "@/lib/format"
 import { langOf } from "@/lib/lang"
-import { declaredJobNames, jobsOf, loadPipelineFiles, triggerKey, triggerVars } from "@/lib/pipeline"
+import { asPipeline, declaredJobNames, jobsOf, triggerKey, triggerVars } from "@/lib/pipeline"
 
 export function PipelinePage() {
   const t = useT()
   const nav = useNavigate()
   const { owner = "", name = "", number = "" } = useParams()
   const n = Number(number)
-  const { data, error, loading, reload } = useLoad(() => api.pipeline(owner, name, n), [owner, name, n])
-  const head = useLoad(() => api.repo(owner, name), [owner, name])
-  const team = head.data?.repo.team || ""
+  const { data, error, loading, reload, apply } = useLoad(() => api.pipeline(owner, name, n), [owner, name, n])
+  const team = data?.team || ""
+  const files = data?.files
   const p = data?.pipeline
-  const ref = p?.commit || p?.branch || ""
-  const files = useLoad(() => loadPipelineFiles(owner, name, ref), [owner, name, ref], Boolean(ref))
   const [step, setStep] = useState<Step | null>(null)
   const [file, setFile] = useState<FileBlob | null>(null)
   const [log, setLog] = useState("")
   const [logLoading, setLogLoading] = useState(false)
   const [busy, setBusy] = useState(false)
-  useEvents(reload)
+  useEvents((ev) => {
+    if (ev.type !== "pipeline.updated") return
+    const next = asPipeline(ev.data)
+    if (!next || next.repo !== `${owner}/${name}` || next.number !== n) return
+    apply((cur) => (cur ? ({ ...cur, pipeline: next, steps: next.steps || cur.steps } satisfies PipelineDetail) : cur))
+  })
 
   const jobs = useMemo(
-    () => (p ? jobsOf(p, data?.steps, declaredJobNames(files.data ?? undefined)) : []),
-    [p, data?.steps, files.data],
+    () => (p ? jobsOf(p, data?.steps, declaredJobNames(files, p.event, p.branch || p.ref)) : []),
+    [p, data?.steps, files],
   )
 
   useEffect(() => {
@@ -185,7 +188,7 @@ export function PipelinePage() {
           <AutoHideScroll className="min-h-0 flex-1">
             <PipelineJobs
               jobs={jobs}
-              files={files.data || []}
+              files={files ?? []}
               activeStep={step}
               activeFile={file}
               onStep={(s) => {

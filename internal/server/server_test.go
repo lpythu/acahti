@@ -28,6 +28,20 @@ func testHandler(t *testing.T, fjURL string) http.Handler {
 		events.New())
 }
 
+func TestHooksAndNavTree(t *testing.T) {
+	h := testHandler(t, "http://127.0.0.1:9")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/hooks/woodpecker", strings.NewReader(`{"repo":{"full_name":"a/b"},"pipeline":{"number":1,"status":"success"}}`)))
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("woodpecker hook %d", rr.Code)
+	}
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/ui/nav/tree", nil))
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("nav tree %d", rr.Code)
+	}
+}
+
 func TestMuxRegisters(t *testing.T) {
 	h := testHandler(t, "http://127.0.0.1:9")
 	rr := httptest.NewRecorder()
