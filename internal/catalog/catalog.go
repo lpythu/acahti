@@ -16,10 +16,11 @@ type Catalog struct {
 	Cfg config.Config
 	FJ  *forgejo.Client
 	WP  *woodpecker.Client
+	mem *memo
 }
 
 func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client) *Catalog {
-	return &Catalog{Cfg: cfg, FJ: fj, WP: wp}
+	return &Catalog{Cfg: cfg, FJ: fj, WP: wp, mem: newMemo()}
 }
 
 type BranchInfo struct {
@@ -396,15 +397,11 @@ func (c *Catalog) ListPipelines(user, repo, group string, q page.Query) (page.Re
 	}
 	repos := flattenGroups(grouped, group)
 	slice := page.Take(repos, q)
-	out := make([]woodpecker.Pipeline, 0, len(slice.Items))
-	for _, r := range slice.Items {
-		ps, err := c.WP.ListPipelines(r.FullName, page.Query{Page: 1, Size: 1})
-		if err != nil || len(ps.Items) == 0 {
-			continue
-		}
-		out = append(out, ps.Items[0])
+	names := make([]string, len(slice.Items))
+	for i, r := range slice.Items {
+		names[i] = r.FullName
 	}
-	return page.Of(out, q, slice.HasMore), nil
+	return page.Of(c.WP.LatestPipelines(names, true), q, slice.HasMore), nil
 }
 
 func (c *Catalog) CommitDetail(user, owner, name, sha string, q page.Query) (CommitDetail, error) {
@@ -544,30 +541,21 @@ func (c *Catalog) BoardPipes(user, kind string, q page.Query) (page.Result[woodp
 		want["killed"] = true
 		want["declined"] = true
 	}
+	repos, err := c.WP.CachedRepos()
+	if err != nil {
+		return page.Result[woodpecker.Pipeline]{}, err
+	}
+	var names []string
+	for _, r := range repos {
+		if r.IsActive && allow[r.FullName] {
+			names = append(names, r.FullName)
+		}
+	}
 	var matched []woodpecker.Pipeline
-	need := q.Norm().Page*q.Norm().Size + 1
-	rq := page.Query{Page: 1, Size: page.MaxSize}
-	for len(matched) < need && rq.Page <= page.MaxWalk {
-		repos, err := c.WP.ListRepos(rq)
-		if err != nil {
-			return page.Result[woodpecker.Pipeline]{}, err
+	for _, p := range c.WP.LatestPipelines(names, false) {
+		if want[strings.ToLower(p.Status)] {
+			matched = append(matched, p)
 		}
-		for _, r := range repos.Items {
-			if !r.IsActive || !allow[r.FullName] {
-				continue
-			}
-			ps, err := c.WP.ListPipelines(r.FullName, page.Query{Page: 1, Size: 1})
-			if err != nil || len(ps.Items) == 0 {
-				continue
-			}
-			if want[strings.ToLower(ps.Items[0].Status)] {
-				matched = append(matched, ps.Items[0])
-			}
-		}
-		if !repos.HasMore {
-			break
-		}
-		rq.Page++
 	}
 	return page.Take(matched, q), nil
 }

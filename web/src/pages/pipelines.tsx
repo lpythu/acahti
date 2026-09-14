@@ -13,7 +13,7 @@ import { useT } from "@/i18n/i18n"
 import { api, splitRepo, type Pipeline } from "@/lib/api"
 import { formatUnix } from "@/lib/format"
 import { pipelineHref } from "@/lib/nav"
-import { jobDotsOf, triggerKey, triggerVars, withJobs } from "@/lib/pipeline"
+import { jobDotsOf, triggerKey, triggerVars } from "@/lib/pipeline"
 
 function RunStatus({ pipe }: { pipe: Pipeline }) {
   return (
@@ -30,10 +30,7 @@ export function PipelinesPage() {
   const [sp] = useSearchParams()
   const group = sp.get("group") || ""
   const repo = sp.get("repo") || ""
-  const list = usePage(async (q) => {
-    const page = await api.pipelines({ ...q, repo, group })
-    return { ...page, items: await withJobs(page.items) }
-  }, [repo, group])
+  const list = usePage((q) => api.pipelines({ ...q, repo, group }), [repo, group])
   const [busy, setBusy] = useState("")
   const [actionErr, setActionErr] = useState("")
 

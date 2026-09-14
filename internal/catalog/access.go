@@ -187,6 +187,7 @@ func (c *Catalog) CreateGroup(user, name string) (GroupAccess, error) {
 		return GroupAccess{}, err
 	}
 	_ = c.SetGroupMember(user, name, user, permAdmin)
+	c.forget()
 	return c.GroupAccess(user, name)
 }
 
@@ -203,6 +204,7 @@ func (c *Catalog) DeleteGroup(user, name string) error {
 			return err
 		}
 	}
+	c.forget()
 	return nil
 }
 
@@ -232,6 +234,7 @@ func (c *Catalog) SetGroupMember(user, group, login, perm string) error {
 		}
 		_ = c.FJ.RemoveTeamMember(t.ID, login)
 	}
+	c.forget()
 	return nil
 }
 
@@ -246,6 +249,7 @@ func (c *Catalog) RemoveGroupMember(user, group, login string) error {
 	for _, t := range g.teams {
 		_ = c.FJ.RemoveTeamMember(t.ID, login)
 	}
+	c.forget()
 	return nil
 }
 
@@ -278,6 +282,7 @@ func (c *Catalog) AttachRepo(group, repo string) error {
 			return err
 		}
 	}
+	c.forget()
 	return nil
 }
 
@@ -302,6 +307,7 @@ func (c *Catalog) RemoveGroupRepo(user, group, repo string) error {
 	for _, t := range g.teams {
 		_ = c.FJ.RemoveTeamRepo(t.ID, c.Cfg.Org, repo)
 	}
+	c.forget()
 	return nil
 }
 
@@ -357,12 +363,20 @@ func (c *Catalog) SetCollaborator(user, owner, name, login, perm string) error {
 	if login == "" {
 		return fmt.Errorf("%w login", ErrInvalid)
 	}
-	return c.FJ.AddCollaborator(owner, name, login, perm)
+	if err := c.FJ.AddCollaborator(owner, name, login, perm); err != nil {
+		return err
+	}
+	c.forget()
+	return nil
 }
 
 func (c *Catalog) RemoveCollaborator(user, owner, name, login string) error {
 	if _, err := c.requireRepoAdmin(user, owner, name); err != nil {
 		return err
 	}
-	return c.FJ.RemoveCollaborator(owner, name, login)
+	if err := c.FJ.RemoveCollaborator(owner, name, login); err != nil {
+		return err
+	}
+	c.forget()
+	return nil
 }

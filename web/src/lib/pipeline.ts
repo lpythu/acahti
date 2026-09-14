@@ -36,22 +36,6 @@ export function jobDotsOf(p: Pipeline, flat?: Step[]): Stage[] {
   return jobsOf(p, flat || p.steps).map((j) => ({ name: j.name, state: j.state }))
 }
 
-export async function withJobs(pipes: Pipeline[]): Promise<Pipeline[]> {
-  return Promise.all(
-    pipes.map(async (p) => {
-      if (p.jobs?.length) return p
-      const { owner, name } = splitRepo(p.repo)
-      if (!owner || !name || !p.number) return p
-      try {
-        const d = await api.pipeline(owner, name, p.number)
-        return { ...p, ...d.pipeline, jobs: d.pipeline.jobs, steps: d.steps }
-      } catch {
-        return p
-      }
-    }),
-  )
-}
-
 export async function loadPipelineFiles(owner: string, name: string, ref: string): Promise<FileBlob[]> {
   if (!ref) return []
   const out: FileBlob[] = []
