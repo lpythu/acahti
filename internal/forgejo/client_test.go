@@ -22,8 +22,8 @@ func TestSetPasswordSendsAuthSource(t *testing.T) {
 	var patch map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/admin/users/gaowenrong":
-			_ = json.NewEncoder(w).Encode(User{Login: "gaowenrong", LoginName: "gaowenrong", SourceID: 0})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/admin/users":
+			_ = json.NewEncoder(w).Encode([]User{{Login: "gaowenrong", LoginName: "gaowenrong", SourceID: 0}})
 		case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/admin/users/gaowenrong":
 			b, _ := io.ReadAll(r.Body)
 			if err := json.Unmarshal(b, &patch); err != nil {

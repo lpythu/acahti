@@ -283,15 +283,6 @@ func (c *Client) AllUsers() ([]User, error) {
 	return users, nil
 }
 
-func (c *Client) AdminUser(login string) (User, error) {
-	b, _, err := c.do(http.MethodGet, "/api/v1/admin/users/"+url.PathEscape(login), "", "", nil)
-	if err != nil {
-		return User{}, err
-	}
-	var u User
-	return u, json.Unmarshal(b, &u)
-}
-
 func (c *Client) SetPassword(login, password string) error {
 	return c.EditUser(login, map[string]any{
 		"password":             password,
@@ -300,9 +291,16 @@ func (c *Client) SetPassword(login, password string) error {
 }
 
 func (c *Client) EditUser(login string, fields map[string]any) error {
-	u, err := c.AdminUser(login)
+	u := User{Login: login, LoginName: login, SourceID: 0}
+	users, err := c.AllUsers()
 	if err != nil {
 		return err
+	}
+	for _, x := range users {
+		if x.Login == login {
+			u = x
+			break
+		}
 	}
 	return c.patchAdminUser(u, fields)
 }

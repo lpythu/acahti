@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react"
-import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
@@ -18,7 +18,6 @@ import { useSession } from "@/lib/session"
 
 export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
   const t = useT()
-  const nav = useNavigate()
   const [params] = useSearchParams()
   const { refresh } = useSession()
   const [error, setError] = useState("")
@@ -33,7 +32,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
       await api.login(String(fd.get("username") || ""), String(fd.get("password") || ""))
       await refresh()
       const next = params.get("next") || "/board"
-      nav(next.startsWith("/") ? next : "/board", { replace: true })
+      window.location.replace(next.startsWith("/") ? next : "/board")
     } catch {
       setError(t("loginError"))
     } finally {

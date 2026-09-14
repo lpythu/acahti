@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from "react"
-import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 
 import { AcahtiMark } from "@/components/logo"
 import { Button } from "@/components/ui/button"
@@ -12,7 +12,6 @@ import { useSession } from "@/lib/session"
 
 export function JoinPage() {
   const t = useT()
-  const nav = useNavigate()
   const [params] = useSearchParams()
   const { refresh } = useSession()
   const [error, setError] = useState("")
@@ -27,7 +26,7 @@ export function JoinPage() {
       await api.join(String(fd.get("username") || ""), String(fd.get("password") || ""), String(fd.get("code") || ""))
       await refresh()
       const next = params.get("next") || "/board"
-      nav(next.startsWith("/") ? next : "/board", { replace: true })
+      window.location.replace(next.startsWith("/") ? next : "/board")
     } catch (err) {
       setError(err instanceof Error ? err.message : t("joinError"))
     } finally {

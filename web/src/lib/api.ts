@@ -107,10 +107,9 @@ export type GroupAccess = {
 
 export type RepoAccess = {
   group: string
-  permission: string
   can_manage: boolean
-  groups: { name: string; permission: string }[]
-  collaborators: AccessPerson[]
+  inherited: AccessPerson[]
+  direct: AccessPerson[]
 }
 
 export type Package = { id: number; name: string; version: string; type: string; created_at?: string }

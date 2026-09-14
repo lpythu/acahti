@@ -21,17 +21,11 @@ type GroupAccess struct {
 	Repos     []forgejo.Repo `json:"repos"`
 }
 
-type RepoAccessGroup struct {
-	Name       string `json:"name"`
-	Permission string `json:"permission"`
-}
-
 type RepoAccess struct {
-	Group         string            `json:"group"`
-	Permission    string            `json:"permission"`
-	CanManage     bool              `json:"can_manage"`
-	Groups        []RepoAccessGroup `json:"groups"`
-	Collaborators []AccessPerson    `json:"collaborators"`
+	Group     string         `json:"group"`
+	CanManage bool           `json:"can_manage"`
+	Inherited []AccessPerson `json:"inherited"`
+	Direct    []AccessPerson `json:"direct"`
 }
 
 func (c *Catalog) requireAdmin(user string) error {
@@ -316,30 +310,18 @@ func (c *Catalog) RepoAccess(user, owner, name string) (RepoAccess, error) {
 	if err != nil {
 		return RepoAccess{}, err
 	}
-	admin := c.IsOrgAdmin(user) || repo.Permissions.Admin
-	teams, err := page.Walk(func(q page.Query) (page.Result[forgejo.Team], error) {
-		return c.FJ.ListRepoTeams(owner, name, q)
-	})
-	if err != nil {
-		return RepoAccess{}, err
-	}
-	byGroup := map[string]string{}
-	order := []string{}
-	for _, t := range teams {
-		g, perm, ok := parseRoleTeam(t.Name)
-		if !ok {
-			continue
+	inherited := []AccessPerson{}
+	if repo.Group != "" {
+		if g, err := c.findGroup(repo.Group); err == nil {
+			inherited, err = c.groupMembers(g)
+			if err != nil {
+				return RepoAccess{}, err
+			}
 		}
-		prev, seen := byGroup[g]
-		if !seen {
-			order = append(order, g)
-		}
-		byGroup[g] = strongerPerm(prev, perm)
 	}
-	sort.Strings(order)
-	groups := make([]RepoAccessGroup, 0, len(order))
-	for _, g := range order {
-		groups = append(groups, RepoAccessGroup{Name: g, Permission: byGroup[g]})
+	inGroup := map[string]bool{}
+	for _, p := range inherited {
+		inGroup[p.Login] = true
 	}
 	cols, err := page.Walk(func(q page.Query) (page.Result[forgejo.User], error) {
 		return c.FJ.ListCollaborators(owner, name, q)
@@ -347,21 +329,23 @@ func (c *Catalog) RepoAccess(user, owner, name string) (RepoAccess, error) {
 	if err != nil {
 		cols = nil
 	}
-	people := make([]AccessPerson, 0, len(cols))
+	direct := make([]AccessPerson, 0, len(cols))
 	for _, u := range cols {
+		if inGroup[u.Login] {
+			continue
+		}
 		perm := u.Permissions.Level()
 		if p, err := c.FJ.CollaboratorPerm(owner, name, u.Login); err == nil && p != "" {
 			perm = p
 		}
-		people = append(people, AccessPerson{Login: u.Login, Permission: perm})
+		direct = append(direct, AccessPerson{Login: u.Login, Permission: perm})
 	}
-	sort.Slice(people, func(i, j int) bool { return people[i].Login < people[j].Login })
+	sort.Slice(direct, func(i, j int) bool { return direct[i].Login < direct[j].Login })
 	return RepoAccess{
-		Group:         repo.Group,
-		Permission:    repo.Permissions.Level(),
-		CanManage:     admin,
-		Groups:        groups,
-		Collaborators: people,
+		Group:     repo.Group,
+		CanManage: c.IsOrgAdmin(user) || repo.Permissions.Admin,
+		Inherited: inherited,
+		Direct:    direct,
 	}, nil
 }
 
