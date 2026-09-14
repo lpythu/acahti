@@ -382,7 +382,7 @@ export function UsersPage() {
               <TableRow key={u.login}>
                 <TableCell>{u.login}</TableCell>
                 <TableCell>
-                  <AuthorInput login={u.login} value={u.full_name || u.login} onSaved={() => usersLoad.reload()} />
+                  <AuthorInput login={u.login} value={u.full_name || u.login} onSaved={async () => { usersLoad.reload() }} />
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1.5">
