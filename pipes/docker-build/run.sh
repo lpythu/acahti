@@ -35,9 +35,7 @@ add_bk_secret() {
 add_bk_secret npm_token "${NPM_TOKEN:-}"
 add_bk_secret codeup_netrc "${CODEUP_NETRC:-}"
 
-if [[ -n "${HARBOR_PASSWORD:-}" ]]; then
-	printf '%s\n' "$HARBOR_PASSWORD" | docker login harbor.saidc -u 'robot$saidc' --password-stdin >/dev/null
-fi
+ensure_harbor_login
 
 build_one() {
 	local primary="$1"

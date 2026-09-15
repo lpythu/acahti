@@ -13,8 +13,7 @@ if [[ -z "$user" || -z "$pass" ]]; then
 	exit 1
 fi
 printf '%s\n' "$pass" | docker login "$registry" -u "$user" --password-stdin >/dev/null
-# FROM bases live on office Harbor. HK ACR login must not drop that pull.
-if [[ -n "${HARBOR_PASSWORD:-}" ]]; then
-	printf '%s\n' "$HARBOR_PASSWORD" | docker login harbor.saidc -u 'robot$saidc' --password-stdin >/dev/null
+if [[ "$registry" != "harbor.saidc" ]]; then
+	ensure_harbor_login
 fi
 echo "OK docker-login ${registry}"
