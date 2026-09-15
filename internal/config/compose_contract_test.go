@@ -39,7 +39,7 @@ func TestWoodpeckerForgeOAuthIsInternal(t *testing.T) {
 	if !strings.Contains(text, "/hooks/pipeline-config") {
 		t.Fatal("config service must hit gateway /hooks/pipeline-config")
 	}
-	if !strings.Contains(text, "WOODPECKER_EXTENSIONS_ALLOWED_HOSTS: gateway") {
-		t.Fatal("config service host must be on WOODPECKER_EXTENSIONS_ALLOWED_HOSTS")
+	if !strings.Contains(text, "WOODPECKER_EXTENSIONS_ALLOWED_HOSTS: private,gateway") {
+		t.Fatal("config service must allow compose-net (private) and hostname gateway")
 	}
 }
