@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,19 +14,21 @@ import (
 	"acahti/internal/catalog"
 	"acahti/internal/config"
 	"acahti/internal/forgejo"
-	"acahti/internal/httperr"
 	"acahti/internal/identity"
 	"acahti/internal/oauth"
 	"acahti/internal/page"
 	"acahti/internal/woodpecker"
+
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Server struct {
-	Cfg  ConfigView
-	Auth *auth.Service
-	FJ   *forgejo.Client
-	WP   *woodpecker.Client
-	Cat  *catalog.Catalog
+	Cfg     ConfigView
+	Auth    *auth.Service
+	FJ      *forgejo.Client
+	WP      *woodpecker.Client
+	Cat     *catalog.Catalog
+	handler http.Handler
 }
 
 type ConfigView struct {
@@ -36,33 +39,15 @@ type ConfigView struct {
 }
 
 func New(cfg config.Config, a *auth.Service, fj *forgejo.Client, wp *woodpecker.Client, cat *catalog.Catalog) *Server {
-	return &Server{
+	s := &Server{
 		Cfg:  ConfigView{Org: cfg.Org, RootURL: cfg.RootURL, Domain: cfg.Domain, Version: cfg.Version},
 		Auth: a,
 		FJ:   fj,
 		WP:   wp,
 		Cat:  cat,
 	}
-}
-
-type rpcReq struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      any             `json:"id"`
-	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params"`
-}
-
-type rpcRes struct {
-	JSONRPC string  `json:"jsonrpc"`
-	ID      any     `json:"id"`
-	Result  any     `json:"result,omitempty"`
-	Error   *rpcErr `json:"error,omitempty"`
-}
-
-type rpcErr struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-	Data    any    `json:"data,omitempty"`
+	s.handler = s.newHandler()
+	return s
 }
 
 type toolSpec struct {
@@ -130,6 +115,31 @@ func ToolNames() []string {
 	return out
 }
 
+type loginKey struct{}
+
+func (s *Server) newHandler() http.Handler {
+	server := sdk.NewServer(&sdk.Implementation{
+		Name: "acahti", Title: "Acahti", Version: s.version(),
+		WebsiteURL: brand.Root(s.Cfg.RootURL),
+		Icons:      []sdk.Icon{{Source: brand.PNGURL(s.Cfg.RootURL), MIMEType: "image/png"}},
+	}, &sdk.ServerOptions{Instructions: identity.Instructions(s.Cfg.RootURL, s.Cfg.Domain)})
+	for _, tool := range tools() {
+		sdk.AddTool(server, &sdk.Tool{
+			Name: tool.Name, Description: tool.Description, InputSchema: tool.InputSchema,
+		}, func(ctx context.Context, _ *sdk.CallToolRequest, args map[string]any) (*sdk.CallToolResult, any, error) {
+			login, ok := ctx.Value(loginKey{}).(string)
+			if !ok || login == "" {
+				return nil, nil, fmt.Errorf("authentication required")
+			}
+			out, err := s.call(login, tool.Name, args)
+			return nil, out, err
+		})
+	}
+	transport := sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return server },
+		&sdk.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
+	return http.NewCrossOriginProtection().Handler(transport)
+}
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Link", brand.Link(s.Cfg.RootURL))
 	login, ok := s.Auth.Parse(auth.Bearer(r))
@@ -137,72 +147,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		oauth.Challenge(w, s.Cfg.RootURL+"/.well-known/oauth-protected-resource")
 		return
 	}
-	if r.Method == http.MethodGet {
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	if r.Method != http.MethodPost {
-		httperr.Write(w, http.StatusMethodNotAllowed, "bad_request", "POST JSON-RPC to /mcp")
-		return
-	}
-	raw, err := io.ReadAll(r.Body)
-	if err != nil {
-		httperr.Write(w, http.StatusBadRequest, "bad_request", "read body")
-		return
-	}
-	var req rpcReq
-	if err := json.Unmarshal(raw, &req); err != nil {
-		writeRPC(w, nil, nil, &rpcErr{Code: -32700, Message: "parse error"})
-		return
-	}
-	res, rerr := s.dispatch(login, req)
-	writeRPC(w, req.ID, res, rerr)
-}
-
-func (s *Server) dispatch(token string, req rpcReq) (any, *rpcErr) {
-	switch req.Method {
-	case "initialize":
-		return map[string]any{
-			"protocolVersion": "2025-03-26",
-			"capabilities":    map[string]any{"tools": map[string]any{}},
-			"serverInfo": map[string]any{
-				"name":       "acahti",
-				"title":      "Acahti",
-				"version":    s.version(),
-				"websiteUrl": brand.Root(s.Cfg.RootURL),
-				"icons":      brand.Icons(s.Cfg.RootURL),
-			},
-			"instructions": identity.Instructions(s.Cfg.RootURL, s.Cfg.Domain),
-		}, nil
-	case "notifications/initialized", "ping":
-		return map[string]any{}, nil
-	case "tools/list":
-		return map[string]any{"tools": tools()}, nil
-	case "tools/call":
-		var p struct {
-			Name      string         `json:"name"`
-			Arguments map[string]any `json:"arguments"`
-		}
-		if err := json.Unmarshal(req.Params, &p); err != nil {
-			return nil, fail("bad_request", "invalid tools/call")
-		}
-		out, err := s.call(token, p.Name, p.Arguments)
-		if err != nil {
-			return nil, fail("tool_error", err.Error())
-		}
-		b, _ := json.Marshal(out)
-		return map[string]any{
-			"content": []map[string]any{{"type": "text", "text": string(b)}},
-			"isError": false,
-		}, nil
-	default:
-		return nil, &rpcErr{Code: -32601, Message: "method not found", Data: httperr.Info{Code: "not_found", Message: req.Method}}
-	}
-}
-
-func fail(code, msg string) *rpcErr {
-	return &rpcErr{Code: -32000, Message: msg, Data: httperr.Info{Code: code, Message: msg}}
+	s.handler.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), loginKey{}, login)))
 }
 
 func (s *Server) CallForAPI(token, name string, a map[string]any) (any, error) {
@@ -453,10 +398,4 @@ func (s *Server) publish(token, kind, fileURL, filename string) (any, error) {
 		return nil, fmt.Errorf("publish %d: %s", code, strings.TrimSpace(string(raw)))
 	}
 	return map[string]any{"ok": true, "filename": filename}, nil
-}
-
-func writeRPC(w http.ResponseWriter, id, result any, err *rpcErr) {
-	w.Header().Set("Content-Type", "application/json")
-	res := rpcRes{JSONRPC: "2.0", ID: id, Result: result, Error: err}
-	_ = json.NewEncoder(w).Encode(res)
 }

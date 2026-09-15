@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -50,21 +49,6 @@ func TestToolSchemasObjectProperties(t *testing.T) {
 		if _, ok := schema["properties"].(map[string]any); !ok {
 			t.Fatalf("%s properties=%T %v", tool["name"], schema["properties"], schema["properties"])
 		}
-	}
-}
-
-func TestStructuredError(t *testing.T) {
-	err := fail("failed_precondition", "checks not green")
-	b, _ := json.Marshal(err.Data)
-	var info httperr.Info
-	if json.Unmarshal(b, &info) != nil {
-		t.Fatal("data must be httperr.Info")
-	}
-	if info.Code != "failed_precondition" {
-		t.Fatalf("code=%s", info.Code)
-	}
-	if !strings.Contains(info.Message, "checks") {
-		t.Fatalf("message=%s", info.Message)
 	}
 }
 
@@ -143,30 +127,5 @@ func TestWaitChecksSnapshot(t *testing.T) {
 	}
 	if _, ok := m["timeout"]; ok {
 		t.Fatalf("snapshot must not set timeout: %v", out)
-	}
-}
-
-func TestInitializeInstructions(t *testing.T) {
-	s := &Server{Cfg: ConfigView{RootURL: "https://acahti.saidc.ai", Domain: "acahti.saidc.ai", Org: "acme", Version: "0.2.36"}}
-	res, err := s.dispatch("", rpcReq{Method: "initialize"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	m, _ := res.(map[string]any)
-	inst, _ := m["instructions"].(string)
-	if !strings.Contains(inst, "apply_when_remote_host") || !strings.Contains(inst, "acahti.saidc.ai") || !strings.Contains(inst, "/skill.md") {
-		t.Fatalf("instructions=%s", inst)
-	}
-	info, _ := m["serverInfo"].(map[string]any)
-	if info["name"] != "acahti" || info["title"] != "Acahti" || info["version"] != "0.2.36" {
-		t.Fatalf("serverInfo=%v", info)
-	}
-	icons, _ := info["icons"].([]map[string]any)
-	if len(icons) == 0 {
-		t.Fatalf("icons=%v", info["icons"])
-	}
-	src, _ := icons[0]["src"].(string)
-	if !strings.HasPrefix(src, "data:image/png;base64,") {
-		t.Fatalf("icon src=%s", src)
 	}
 }

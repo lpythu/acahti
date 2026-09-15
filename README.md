@@ -94,3 +94,9 @@ Bind-mount `${ACAHTI_DATA:-/var/lib/acahti}` only. After data exists, never `com
 ## Versions
 
 See [versions.env](versions.env). Tag acahti as `v$ACAHTI_VERSION`. Woodpecker server and every host agent must share the same train (gRPC rejects a mix). Gateway is a Go static binary, memory cap 256M.
+
+### MCP transport
+
+The gateway uses the official Go MCP SDK with stateless Streamable HTTP and JSON responses at `/mcp`. Each request authenticates independently using the member's OAuth bearer token. GET streaming and transport sessions are not enabled. Cross-origin browser requests are rejected; native MCP clients do not need an Origin header.
+
+Before release, run `GOWORK=off go test ./...` and `GOWORK=off go test -race ./internal/mcp ./internal/oauth`. Acceptance requires a real client to complete initialization, list tools, and call `whoami` with the expected individual identity; a completed OAuth redirect alone is not a connection check.
