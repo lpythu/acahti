@@ -94,14 +94,13 @@ func (c *Catalog) reapOne(p woodpecker.Pipeline, now time.Time, prev, keep map[s
 	if !cancel {
 		return
 	}
-	if err := c.WP.Cancel(fresh.Repo, fresh.Number); err != nil {
+	done, err := c.CancelPipeline("", fresh.Repo, fresh.Number)
+	if err != nil {
 		log.Printf("pipeline reap: cancel %s #%d: %v", fresh.Repo, fresh.Number, err)
 		return
 	}
 	log.Printf("pipeline reap: cancel %s #%d (silent %s)", fresh.Repo, fresh.Number, staleAfter)
-	if done, err := c.Refresh(fresh.Repo, fresh.Number); err == nil {
-		c.emit(done)
-	}
+	c.emit(done)
 }
 
 func (c *Catalog) emit(p woodpecker.Pipeline) {

@@ -31,18 +31,37 @@ commit_id() {
   export ACR_TAG="${CI_COMMIT_ID}"
 }
 
-npm_token() {
+npm_token_file() {
+  local token="" f
   if [[ -n "${NPM_TOKEN:-}" ]]; then
+    token="${NPM_TOKEN}"
+  else
+    for f in /root/.npm/saidc.token "${HOME}/.npm/saidc.token" /home/saidc/.npm/saidc.token; do
+      if [[ -f "$f" ]]; then
+        token="$(tr -d '\r\n' <"$f")"
+        break
+      fi
+    done
+  fi
+  unset NPM_TOKEN
+  if [[ -z "$token" ]]; then
     return 0
   fi
-  local f
-  for f in /root/.npm/saidc.token "${HOME}/.npm/saidc.token" /home/saidc/.npm/saidc.token; do
-    if [[ -f "$f" ]]; then
-      NPM_TOKEN="$(tr -d '\r\n' <"$f")"
-      export NPM_TOKEN
-      return 0
-    fi
-  done
+  NPM_TOKEN_FILE="$(mktemp)"
+  chmod 0600 "$NPM_TOKEN_FILE"
+  printf '%s' "$token" >"$NPM_TOKEN_FILE"
+  export NPM_TOKEN_FILE
+}
+
+npm_build() {
+  : "${PKG_PATH:?set PKG_PATH (package directory)}"
+  : "${PKG_BUILD:?set PKG_BUILD in .acahti/repo.env}"
+  echo "==> PKG_BUILD"
+  (cd "$ROOT" && eval "${PKG_BUILD}")
+  if [[ ! -d "${ROOT}/${PKG_PATH}/dist" ]] || [[ -z "$(ls -A "${ROOT}/${PKG_PATH}/dist" 2>/dev/null)" ]]; then
+    echo "error: ${PKG_PATH}/dist empty after PKG_BUILD" >&2
+    exit 1
+  fi
 }
 
 harbor_login() {
@@ -82,12 +101,84 @@ deploy_tag() {
   fi
 }
 
-deploy_repo() {
+deploy_registry() {
   if [[ "$ENV" == "office" ]]; then
-    echo "${REGISTRY}/${IMAGE}"
+    echo "${REGISTRY}"
   else
-    echo "${ACR_VPC_REGISTRY}/${IMAGE}"
+    echo "${ACR_VPC_REGISTRY}"
   fi
+}
+
+each_line() {
+  local blob="$1"
+  local line
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    printf '%s\n' "$line"
+  done <<<"$blob"
+}
+
+helm_image_sets() {
+  : "${CD_IMAGES:?set CD_IMAGES in .acahti/repo.env}"
+  local tag reg line key path
+  tag="$(deploy_tag)"
+  reg="$(deploy_registry)"
+  while IFS= read -r line; do
+    # shellcheck disable=SC2086
+    set -- $line
+    key="$1"
+    path="$2"
+    if [[ -z "$key" || -z "$path" || -n "${3:-}" ]]; then
+      echo "error: CD_IMAGES line must be '<workloadKey> <harbor/path>'" >&2
+      exit 1
+    fi
+    printf '%s\n' "--set" "workloads.${key}.image.repository=${reg}/${path}"
+    printf '%s\n' "--set" "workloads.${key}.image.tag=${tag}"
+  done < <(each_line "$CD_IMAGES")
+}
+
+wait_public_urls() {
+  local blob=""
+  case "$ENV" in
+  office) blob="${PUBLIC_WAIT_URLS_office:-${PUBLIC_WAIT_URLS:-}}" ;;
+  hk) blob="${PUBLIC_WAIT_URLS_hk:-${PUBLIC_WAIT_URLS:-}}" ;;
+  esac
+  if [[ -z "$blob" ]]; then
+    echo "error: set PUBLIC_WAIT_URLS or PUBLIC_WAIT_URLS_${ENV} in .acahti/repo.env" >&2
+    exit 1
+  fi
+  if [[ "$blob" == "-" ]]; then
+    echo "==> wait public urls skipped"
+    return 0
+  fi
+  local url deadline code streak
+  deadline=$((SECONDS + 180))
+  IFS=';' read -r -a urls <<<"$blob"
+  for url in "${urls[@]}"; do
+    url="${url#"${url%%[![:space:]]*}"}"
+    url="${url%"${url##*[![:space:]]}"}"
+    [[ -z "$url" ]] && continue
+    echo "==> wait ${url}"
+    streak=0
+    while ((SECONDS < deadline)); do
+      code="$(curl -sS -o /dev/null -w '%{http_code}' -A acahti-cd/1.0 --max-time 10 "$url" || true)"
+      if [[ "$code" != "502" && "$code" != "503" && "$code" != "504" && "$code" != "000" ]]; then
+        streak=$((streak + 1))
+        if ((streak >= 3)); then
+          echo "OK ${url} ${code}"
+          continue 2
+        fi
+        sleep 2
+        continue
+      fi
+      streak=0
+      sleep 3
+    done
+    echo "error: ${url} still ${code:-000} after 3m" >&2
+    exit 1
+  done
 }
 
 acahti_packages_url() {

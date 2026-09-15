@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"acahti/internal/config"
 	"acahti/internal/forgejo"
@@ -114,6 +115,30 @@ func TestPublicRepoCloneHTTPS(t *testing.T) {
 	}
 	if strings.Contains(string(raw), "ssh_url") || strings.Contains(string(raw), "ssh://") {
 		t.Fatalf("ssh leaked: %s", raw)
+	}
+}
+
+func TestLiveAgentsDropsStale(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	got := liveAgents([]woodpecker.Agent{
+		{ID: 1, Name: "live", LastSeen: now.Add(-time.Minute).Unix()},
+		{ID: 2, Name: "dead", LastSeen: now.Add(-10 * time.Minute).Unix()},
+		{ID: 3, Name: "zero", LastSeen: 0},
+	}, now)
+	if len(got) != 1 || got[0].Name != "live" {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestPermFromRole(t *testing.T) {
+	if p := permFromRole("admin"); !p.Admin || !p.Push || !p.Pull {
+		t.Fatalf("%+v", p)
+	}
+	if p := permFromRole("write"); p.Admin || !p.Push || !p.Pull {
+		t.Fatalf("%+v", p)
+	}
+	if p := permFromRole("read"); p.Admin || p.Push || !p.Pull {
+		t.Fatalf("%+v", p)
 	}
 }
 

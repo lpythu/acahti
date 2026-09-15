@@ -148,7 +148,9 @@ func (c *Catalog) userRepos(user string) ([]forgejo.Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return c.asRepos(repos, ""), nil
+	items := c.asRepos(repos, "")
+	c.paintPerms(user, items)
+	return items, nil
 }
 
 func (c *Catalog) seeRepo(user, owner, name string) (forgejo.Repo, error) {

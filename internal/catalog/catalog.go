@@ -170,6 +170,7 @@ func (c *Catalog) ListRepos(user, team string, q page.Query) (page.Result[forgej
 			}
 		}
 	}
+	c.paintPerms(user, items)
 	return page.Result[forgejo.Repo]{Items: items, Page: res.Page, Size: res.Size, HasMore: res.HasMore}, nil
 }
 
@@ -377,13 +378,10 @@ func (c *Catalog) PRDetail(user, owner, name string, number int) (PRDetail, erro
 	pr.Repo = owner + "/" + name
 	out := PRDetail{PR: pr, Checks: []forgejo.Status{}}
 	if pr.Head.SHA != "" {
-		ok, st, err := c.FJ.ChecksGreen(owner, name, pr.Head.SHA)
+		ok, st, err := c.CommitChecks(owner, name, pr.Head.SHA)
 		if err == nil {
 			out.Green = ok
-			if st != nil {
-				c.rewriteChecks(st)
-				out.Checks = st
-			}
+			out.Checks = st
 		}
 	}
 	return out, nil
@@ -397,7 +395,7 @@ func (c *Catalog) MergePR(user, owner, name string, number int) (map[string]any,
 	if err != nil {
 		return nil, err
 	}
-	ok, st, err := c.FJ.ChecksGreen(owner, name, pr.Head.SHA)
+	ok, st, err := c.CommitChecks(owner, name, pr.Head.SHA)
 	if err != nil {
 		return nil, err
 	}
@@ -407,7 +405,6 @@ func (c *Catalog) MergePR(user, owner, name string, number int) (map[string]any,
 	if err := c.FJ.MergePR(owner, name, number, user); err != nil {
 		return nil, err
 	}
-	c.rewriteChecks(st)
 	return map[string]any{"merged": true, "statuses": st}, nil
 }
 
@@ -419,6 +416,15 @@ func (c *Catalog) ClosePR(user, owner, name string, number int) (map[string]any,
 		return nil, err
 	}
 	return map[string]any{"ok": true, "state": "closed"}, nil
+}
+
+func (c *Catalog) CommitChecks(owner, name, sha string) (bool, []forgejo.Status, error) {
+	ok, st, err := c.FJ.ChecksGreen(owner, name, sha)
+	if err != nil {
+		return false, nil, err
+	}
+	c.rewriteChecks(st)
+	return ok, st, nil
 }
 
 func (c *Catalog) rewriteChecks(st []forgejo.Status) {
@@ -460,6 +466,7 @@ func (c *Catalog) ListRepoPipelines(user, repo, sha, branch, status string, q pa
 	if !c.canSeeIndexedRepo(user, repo) {
 		return page.Of([]woodpecker.Pipeline{}, q, false), nil
 	}
+	c.syncRecentPipelines([]string{repo})
 	f := store.Filter{Repos: []string{repo}, SHA: sha, Branch: branch}
 	if status != "" {
 		f.Status = []string{status}
@@ -486,6 +493,7 @@ func (c *Catalog) ListPipelines(user, repo, team string, q page.Query) (page.Res
 		}
 		f.Repos = names
 	}
+	c.syncRecentPipelines(f.Repos)
 	res, err := c.listIndexed(f, q)
 	if err != nil {
 		return page.Result[woodpecker.Pipeline]{}, err
@@ -527,6 +535,62 @@ func (c *Catalog) listIndexed(f store.Filter, q page.Query) (page.Result[woodpec
 		return page.Of([]woodpecker.Pipeline{}, q, false), nil
 	}
 	return c.Idx.List(f, q)
+}
+
+func (c *Catalog) syncRecentPipelines(repos []string) {
+	if c.WP == nil || !c.WP.Ready() {
+		return
+	}
+	for _, repo := range repos {
+		if repo == "" {
+			continue
+		}
+		res, err := c.WP.ListPipelines(repo, page.Query{Page: 1, Size: 20})
+		if err != nil {
+			continue
+		}
+		for _, p := range res.Items {
+			p.Repo = repo
+			if len(p.Jobs) == 0 {
+				if d, err := c.WP.GetPipeline(repo, p.Number); err == nil {
+					p = d
+					p.Repo = repo
+				}
+			}
+			c.Remember(p)
+		}
+	}
+}
+
+func permFromRole(role string) forgejo.Perm {
+	switch role {
+	case "admin":
+		return forgejo.Perm{Admin: true, Push: true, Pull: true}
+	case "write":
+		return forgejo.Perm{Push: true, Pull: true}
+	case "read":
+		return forgejo.Perm{Pull: true}
+	}
+	return forgejo.Perm{}
+}
+
+func (c *Catalog) paintPerms(user string, items []forgejo.Repo) {
+	if c.IsOrgAdmin(user) {
+		for i := range items {
+			items[i].Permissions = forgejo.Perm{Admin: true, Push: true, Pull: true}
+		}
+		return
+	}
+	if c.Idx == nil || user == "" {
+		return
+	}
+	perms, err := c.Idx.UserRepoPerms(user)
+	if err != nil {
+		return
+	}
+	for i := range items {
+		items[i].Permissions = permFromRole(perms[items[i].FullName])
+	}
 }
 
 func (c *Catalog) CommitDetail(user, owner, name, sha string, q page.Query) (CommitDetail, error) {
@@ -683,10 +747,90 @@ func (c *Catalog) Remember(p woodpecker.Pipeline) woodpecker.Pipeline {
 		return p
 	}
 	p = c.decoratePipe(p)
+	p = c.mergeLogTails(p)
+	p = c.captureTerminalLogs(p)
 	if c.Idx != nil {
 		_ = c.Idx.Upsert(p)
 	}
 	return p
+}
+
+func (c *Catalog) mergeLogTails(p woodpecker.Pipeline) woodpecker.Pipeline {
+	if c.Idx == nil {
+		return p
+	}
+	old, ok, err := c.Idx.Get(p.Repo, p.Number)
+	if err != nil || !ok {
+		return p
+	}
+	prev := map[int64]string{}
+	for _, s := range old.Steps() {
+		if s.LogTail != "" {
+			prev[stepID(s)] = s.LogTail
+		}
+	}
+	for i := range p.Jobs {
+		for j := range p.Jobs[i].Children {
+			id := stepID(p.Jobs[i].Children[j])
+			if p.Jobs[i].Children[j].LogTail == "" {
+				p.Jobs[i].Children[j].LogTail = prev[id]
+			}
+		}
+	}
+	return p
+}
+
+func (c *Catalog) captureTerminalLogs(p woodpecker.Pipeline) woodpecker.Pipeline {
+	if c.WP == nil || !c.WP.Ready() {
+		return p
+	}
+	for i := range p.Jobs {
+		for j := range p.Jobs[i].Children {
+			s := &p.Jobs[i].Children[j]
+			if s.LogTail != "" || !stepFailed(s.State) {
+				continue
+			}
+			id := stepID(*s)
+			if id == 0 {
+				continue
+			}
+			raw, err := c.WP.PipelineLog(p.Repo, p.Number, id)
+			if err != nil {
+				if s.Error != "" {
+					s.LogTail = s.Error
+				} else if p.Error != "" {
+					s.LogTail = p.Error
+				}
+				continue
+			}
+			s.LogTail = woodpecker.FormatLog(raw)
+		}
+	}
+	return p
+}
+
+func (c *Catalog) CancelPipeline(user, repo string, number int64) (woodpecker.Pipeline, error) {
+	if user != "" {
+		owner, name, _ := strings.Cut(repo, "/")
+		if _, err := c.seeRepo(user, owner, name); err != nil {
+			return woodpecker.Pipeline{}, err
+		}
+	}
+	fresh, err := c.Refresh(repo, number)
+	if err != nil {
+		return woodpecker.Pipeline{}, err
+	}
+	if !woodpecker.InFlight(fresh.Status) {
+		return fresh, nil
+	}
+	if err := c.WP.Cancel(repo, number); err != nil {
+		again, rerr := c.Refresh(repo, number)
+		if rerr == nil && !woodpecker.InFlight(again.Status) {
+			return again, nil
+		}
+		return woodpecker.Pipeline{}, err
+	}
+	return c.Refresh(repo, number)
 }
 
 func (c *Catalog) Refresh(repo string, number int64) (woodpecker.Pipeline, error) {
@@ -778,7 +922,9 @@ func (c *Catalog) NavTree(user string) ([]NavTeam, error) {
 	}
 	out := make([]NavTeam, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, NavTeam{Team: row.Team, Repos: c.asRepos(row.Repos, row.Team)})
+		repos := c.asRepos(row.Repos, row.Team)
+		c.paintPerms(user, repos)
+		out = append(out, NavTeam{Team: row.Team, Repos: repos})
 	}
 	return out, nil
 }
@@ -819,6 +965,15 @@ func (c *Catalog) StepLog(user, repo string, number, step int64) (string, error)
 	}
 	if step <= 0 {
 		step = 1
+	}
+	if c.Idx != nil {
+		if p, ok, err := c.Idx.Get(repo, number); err == nil && ok {
+			for _, s := range p.Steps() {
+				if stepID(s) == step && s.LogTail != "" {
+					return s.LogTail, nil
+				}
+			}
+		}
 	}
 	raw, err := c.WP.PipelineLog(repo, number, step)
 	if err != nil {
@@ -953,6 +1108,7 @@ func (c *Catalog) BoardPipes(user, kind string, q page.Query) (page.Result[woodp
 	if err != nil {
 		return page.Result[woodpecker.Pipeline]{}, err
 	}
+	c.syncRecentPipelines(names)
 	f := store.Filter{Repos: names}
 	switch kind {
 	case "blocked":
@@ -976,5 +1132,17 @@ func (c *Catalog) ListAgents(q page.Query) (page.Result[woodpecker.Agent], error
 	if err != nil {
 		return page.Result[woodpecker.Agent]{}, err
 	}
-	return page.Take(agents, q), nil
+	return page.Take(liveAgents(agents, time.Now()), q), nil
+}
+
+const agentAlive = 5 * time.Minute
+
+func liveAgents(agents []woodpecker.Agent, now time.Time) []woodpecker.Agent {
+	var out []woodpecker.Agent
+	for _, a := range agents {
+		if a.LastSeen > 0 && now.Sub(time.Unix(a.LastSeen, 0)) <= agentAlive {
+			out = append(out, a)
+		}
+	}
+	return out
 }

@@ -37,10 +37,10 @@ pkg_pypi() {
 
 pkg_npm() {
   local token dest
-  : "${PKG_PATH:?set PKG_PATH (package directory)}"
   token="$(acahti_publish_token)"
   dest="$(mktemp -d)"
   trap 'rm -rf "$dest"' RETURN
+  npm_build
   echo "==> npm pack ${PKG_PATH}"
   npm pack --pack-destination "$dest" --ignore-scripts "${ROOT}/${PKG_PATH}"
   echo "==> npm PUT $(acahti_packages_url)/npm"

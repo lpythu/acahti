@@ -31,7 +31,17 @@ func (c *Catalog) asRepo(r store.OrgRepo, team string) forgejo.Repo {
 		DefaultBranch: r.DefaultBranch,
 		Team:          team,
 		Updated:       r.Updated,
+		Archived:      r.Archived,
 	})
+}
+
+func asOrgRepo(r forgejo.Repo) store.OrgRepo {
+	return store.OrgRepo{
+		FullName:      r.FullName,
+		DefaultBranch: r.DefaultBranch,
+		Updated:       orgUpdated(r),
+		Archived:      r.Archived,
+	}
 }
 
 func orgUpdated(r forgejo.Repo) int64 {
@@ -70,11 +80,7 @@ func (c *Catalog) RememberRepo(r forgejo.Repo) {
 	if !c.indexed() || r.FullName == "" {
 		return
 	}
-	_ = c.Idx.UpsertRepo(store.OrgRepo{
-		FullName:      r.FullName,
-		DefaultBranch: r.DefaultBranch,
-		Updated:       orgUpdated(r),
-	})
+	_ = c.Idx.UpsertRepo(asOrgRepo(r))
 	c.publishCatalog()
 }
 
@@ -148,7 +154,7 @@ func (c *Catalog) BackfillOrg() {
 		if r.FullName == "" {
 			continue
 		}
-		seenRepo[r.FullName] = store.OrgRepo{FullName: r.FullName, DefaultBranch: r.DefaultBranch, Updated: orgUpdated(r)}
+		seenRepo[r.FullName] = asOrgRepo(r)
 	}
 	var links []store.TeamRepoLink
 	var members []store.OrgMember
@@ -199,7 +205,7 @@ func (c *Catalog) BackfillOrg() {
 				continue
 			}
 			if _, ok := seenRepo[r.FullName]; !ok {
-				seenRepo[r.FullName] = store.OrgRepo{FullName: r.FullName, DefaultBranch: r.DefaultBranch, Updated: orgUpdated(r)}
+				seenRepo[r.FullName] = asOrgRepo(r)
 			}
 			links = append(links, store.TeamRepoLink{Team: name, Repo: r.FullName})
 		}

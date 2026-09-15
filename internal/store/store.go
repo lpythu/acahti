@@ -101,7 +101,8 @@ CREATE TABLE IF NOT EXISTS repos (
   full_name text PRIMARY KEY,
   default_branch text NOT NULL DEFAULT '',
   description text NOT NULL DEFAULT '',
-  updated bigint NOT NULL DEFAULT 0
+  updated bigint NOT NULL DEFAULT 0,
+  archived boolean NOT NULL DEFAULT false
 );
 CREATE TABLE IF NOT EXISTS teams (
   name text PRIMARY KEY,
@@ -122,6 +123,7 @@ CREATE TABLE IF NOT EXISTS team_members (
 );
 CREATE INDEX IF NOT EXISTS team_members_login_idx ON team_members (login);
 CREATE INDEX IF NOT EXISTS team_repos_repo_idx ON team_repos (repo);
+ALTER TABLE repos ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT false;
 `)
 	return err
 }

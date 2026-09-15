@@ -276,18 +276,13 @@ func (p *Pages) Pipeline(w http.ResponseWriter, r *http.Request) {
 		p.publishPipe(pipe)
 		writeJSON(w, http.StatusOK, pipe)
 	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/cancel"):
-		if _, err := p.Cat.RepoHeader(user, owner, name, ""); err != nil {
+		pipe, err := p.Cat.CancelPipeline(user, repo, n)
+		if err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())
 			return
 		}
-		if err := p.WP.Cancel(repo, n); err != nil {
-			writeErr(w, http.StatusBadGateway, err.Error())
-			return
-		}
-		if pipe, err := p.Cat.Refresh(repo, n); err == nil {
-			p.publishPipe(pipe)
-		}
-		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		p.publishPipe(pipe)
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "pipeline": pipe})
 	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/approve"):
 		if _, err := p.Cat.RepoHeader(user, owner, name, ""); err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())

@@ -32,7 +32,17 @@ func TestLatestStatusesNewestFirstWhenNoTime(t *testing.T) {
 		{Context: "ci", Status: "success"},
 		{Context: "ci", Status: "pending"},
 	})
-	if len(got) != 1 || got[0].Status != "success" {
+	if len(got) != 1 || got[0].Status != "pending" {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestLatestRoundKeepsMaxPipeline(t *testing.T) {
+	got := LatestRound([]Status{
+		{Context: "ci/woodpecker/push/ci", Status: "failure", TargetURL: "http://localhost:8000/ci/repos/acme/demo/pipeline/7"},
+		{Context: "ci/woodpecker/pr/ci", Status: "success", TargetURL: "http://localhost:8000/ci/repos/acme/demo/pipeline/12"},
+	})
+	if len(got) != 1 || got[0].Context != "ci/woodpecker/pr/ci" {
 		t.Fatalf("%+v", got)
 	}
 }

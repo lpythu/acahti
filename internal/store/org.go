@@ -21,6 +21,7 @@ type OrgRepo struct {
 	DefaultBranch string
 	Description   string
 	Updated       int64
+	Archived      bool
 }
 
 type OrgMember struct {
@@ -49,13 +50,14 @@ func (s *Store) UpsertRepo(r OrgRepo) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, err := s.pool.Exec(ctx, `
-INSERT INTO repos (full_name, default_branch, description, updated)
-VALUES ($1, $2, $3, $4)
+INSERT INTO repos (full_name, default_branch, description, updated, archived)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (full_name) DO UPDATE SET
   default_branch = EXCLUDED.default_branch,
   description = EXCLUDED.description,
-  updated = EXCLUDED.updated
-`, r.FullName, r.DefaultBranch, r.Description, r.Updated)
+  updated = EXCLUDED.updated,
+  archived = EXCLUDED.archived
+`, r.FullName, r.DefaultBranch, r.Description, r.Updated, r.Archived)
 	return err
 }
 
@@ -172,6 +174,46 @@ func (s *Store) HasMember(team, login string) (bool, error) {
 	var ok bool
 	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM team_members WHERE team = $1 AND login = $2)`, team, login).Scan(&ok)
 	return ok, err
+}
+
+func (s *Store) UserRepoPerms(login string) (map[string]string, error) {
+	if !s.ready() || login == "" {
+		return map[string]string{}, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	rows, err := s.pool.Query(ctx, `
+SELECT tr.repo, m.role
+FROM team_members m
+JOIN team_repos tr ON tr.team = m.team
+WHERE m.login = $1
+`, login)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	rank := func(role string) int {
+		switch role {
+		case "admin":
+			return 3
+		case "write":
+			return 2
+		case "read":
+			return 1
+		}
+		return 0
+	}
+	for rows.Next() {
+		var repo, role string
+		if err := rows.Scan(&repo, &role); err != nil {
+			return nil, err
+		}
+		if rank(role) > rank(out[repo]) {
+			out[repo] = role
+		}
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) HasVisibleRepo(login, repo string) (bool, error) {
@@ -331,7 +373,7 @@ func (s *Store) VisibleRepos(login string, admin bool) ([]OrgRepo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	if admin {
-		rows, err := s.pool.Query(ctx, `SELECT full_name, default_branch, description, updated FROM repos ORDER BY updated DESC, full_name`)
+		rows, err := s.pool.Query(ctx, `SELECT full_name, default_branch, description, updated FROM repos WHERE NOT archived ORDER BY updated DESC, full_name`)
 		if err != nil {
 			return nil, err
 		}
@@ -345,6 +387,7 @@ SELECT DISTINCT r.full_name, r.default_branch, r.description, r.updated
 FROM repos r
 JOIN team_repos tr ON tr.repo = r.full_name
 JOIN team_members m ON m.team = tr.team AND m.login = $1
+WHERE NOT r.archived
 ORDER BY r.updated DESC, r.full_name
 `, login)
 	if err != nil {
@@ -419,7 +462,7 @@ func (s *Store) NavTree(login string, admin bool) ([]NavTeam, error) {
 SELECT t.name, r.full_name, COALESCE(r.default_branch, ''), COALESCE(r.description, ''), COALESCE(r.updated, 0)
 FROM teams t
 LEFT JOIN team_repos tr ON tr.team = t.name
-LEFT JOIN repos r ON r.full_name = tr.repo
+LEFT JOIN repos r ON r.full_name = tr.repo AND NOT r.archived
 ORDER BY t.name, r.full_name`
 	} else if login == "" {
 		return nil, nil
@@ -429,7 +472,7 @@ SELECT t.name, r.full_name, COALESCE(r.default_branch, ''), COALESCE(r.descripti
 FROM teams t
 JOIN team_members m ON m.team = t.name AND m.login = $1
 LEFT JOIN team_repos tr ON tr.team = t.name
-LEFT JOIN repos r ON r.full_name = tr.repo
+LEFT JOIN repos r ON r.full_name = tr.repo AND NOT r.archived
 ORDER BY t.name, r.full_name`
 		args = []any{login}
 	}
@@ -474,7 +517,7 @@ func (s *Store) unassignedRepos(ctx context.Context) ([]OrgRepo, error) {
 SELECT r.full_name, r.default_branch, r.description, r.updated
 FROM repos r
 LEFT JOIN team_repos tr ON tr.repo = r.full_name
-WHERE tr.repo IS NULL
+WHERE tr.repo IS NULL AND NOT r.archived
 ORDER BY r.full_name
 `)
 	if err != nil {
@@ -525,13 +568,14 @@ func (s *Store) ReplaceOrg(teams []OrgTeam, repos []OrgRepo, links []TeamRepoLin
 			r.Updated = time.Now().Unix()
 		}
 		if _, err := tx.Exec(ctx, `
-INSERT INTO repos (full_name, default_branch, description, updated)
-VALUES ($1, $2, $3, $4)
+INSERT INTO repos (full_name, default_branch, description, updated, archived)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (full_name) DO UPDATE SET
   default_branch = EXCLUDED.default_branch,
   description = EXCLUDED.description,
-  updated = EXCLUDED.updated
-`, r.FullName, r.DefaultBranch, r.Description, r.Updated); err != nil {
+  updated = EXCLUDED.updated,
+  archived = EXCLUDED.archived
+`, r.FullName, r.DefaultBranch, r.Description, r.Updated, r.Archived); err != nil {
 			return err
 		}
 	}

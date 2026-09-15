@@ -90,6 +90,7 @@ export type Repo = {
   clone_url?: string
   team?: string
   updated?: number
+  archived?: boolean
   permissions?: Perm
 }
 

@@ -290,7 +290,7 @@ func (c *Catalog) AttachRepo(team, repo string) error {
 		if full == "" {
 			full = c.Cfg.Org + "/" + repo
 		}
-		_ = c.Idx.UpsertRepo(store.OrgRepo{FullName: full, DefaultBranch: got.DefaultBranch})
+		_ = c.Idx.UpsertRepo(store.OrgRepo{FullName: full, DefaultBranch: got.DefaultBranch, Archived: got.Archived})
 		_ = c.Idx.SetTeamRepo(team, full)
 	}
 	c.forget()

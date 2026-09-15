@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"acahti/internal/auth"
 	"acahti/internal/brand"
@@ -97,9 +96,9 @@ func tools() []toolSpec {
 		{Name: "pr_get", Description: "Get a pull request with latest commit checks per context", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
 		{Name: "pr_comment", Description: "Comment on a pull request", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num, "body": str}, "owner", "name", "number", "body")},
 		{Name: "pr_comments", Description: "List pull request comments", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num, "page": num, "page_size": num}, "owner", "name", "number")},
-		{Name: "pr_merge", Description: "Merge a PR only when the latest status per check context is success", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
+		{Name: "pr_merge", Description: "Merge a PR when the latest pipeline round on the head SHA is green", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
 		{Name: "pr_close", Description: "Close a pull request", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
-		{Name: "checks_wait", Description: "Wait until commit checks finish or timeout. timeout_sec=0 is a snapshot", InputSchema: obj(map[string]any{"owner": str, "name": str, "sha": str, "timeout_sec": num}, "owner", "name", "sha")},
+		{Name: "checks_wait", Description: "Snapshot of commit checks for the latest pipeline round. Poll this tool; it does not block", InputSchema: obj(map[string]any{"owner": str, "name": str, "sha": str}, "owner", "name", "sha")},
 		{Name: "pipeline_list", Description: "List pipelines for a repo. sha is a commit prefix", InputSchema: obj(map[string]any{"repo": str, "sha": str, "branch": str, "status": str, "page": num, "page_size": num}, "repo")},
 		{Name: "pipeline_get", Description: "Get one pipeline and its steps", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 		{Name: "pipeline_log", Description: "Fetch pipeline logs. Omit step for failed steps only", InputSchema: obj(map[string]any{"repo": str, "number": num, "step": num, "tail_lines": num}, "repo", "number")},
@@ -274,7 +273,7 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 	case "pr_close":
 		return s.Cat.ClosePR(token, str("owner"), str("name"), int(num("number")))
 	case "checks_wait":
-		return s.waitChecks(str("owner"), str("name"), str("sha"), checkTimeout(a))
+		return s.waitChecks(str("owner"), str("name"), str("sha"))
 	case "pipeline_list":
 		return s.listPipes(token, repoArg(str), str("sha"), str("branch"), str("status"), pq)
 	case "pipeline_get":
@@ -302,17 +301,11 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		}
 		return s.Cat.Remember(pipe), nil
 	case "pipeline_cancel":
-		repo := repoArg(str)
-		if err := s.seeRepo(token, repo); err != nil {
+		pipe, err := s.Cat.CancelPipeline(token, repoArg(str), num("number"))
+		if err != nil {
 			return nil, err
 		}
-		if err := s.WP.Cancel(repo, num("number")); err != nil {
-			return nil, err
-		}
-		if pipe, err := s.Cat.Refresh(repo, num("number")); err == nil {
-			return map[string]any{"ok": true, "pipeline": pipe}, nil
-		}
-		return map[string]any{"ok": true}, nil
+		return map[string]any{"ok": true, "pipeline": pipe}, nil
 	case "inbox":
 		section := str("section")
 		if section == "" {
@@ -377,30 +370,6 @@ func repoArg(str func(string) string) string {
 	return ""
 }
 
-func checkTimeout(a map[string]any) int64 {
-	v, ok := a["timeout_sec"]
-	if !ok {
-		return 600
-	}
-	n := int64(0)
-	switch x := v.(type) {
-	case float64:
-		n = int64(x)
-	case json.Number:
-		n, _ = x.Int64()
-	case string:
-		n, _ = strconv.ParseInt(x, 10, 64)
-	case int:
-		n = int64(x)
-	case int64:
-		n = x
-	}
-	if n < 0 {
-		return 600
-	}
-	return n
-}
-
 func (s *Server) seeRepo(token, repo string) error {
 	owner, name, _ := strings.Cut(repo, "/")
 	if owner == "" || name == "" {
@@ -410,60 +379,32 @@ func (s *Server) seeRepo(token, repo string) error {
 	return err
 }
 
-func (s *Server) waitChecks(owner, name, sha string, timeout int64) (any, error) {
-	read := func() (map[string]any, bool, error) {
-		ok, st, err := s.FJ.ChecksGreen(owner, name, sha)
-		if err != nil {
-			return nil, false, err
-		}
-		pending := false
-		failed := false
-		for _, x := range st {
-			switch strings.ToLower(x.Status) {
-			case "pending":
-				pending = true
-			case "failure", "error":
-				failed = true
-			}
-		}
-		if failed {
-			return map[string]any{"ok": false, "statuses": st}, true, nil
-		}
-		if ok && !pending {
-			return map[string]any{"ok": true, "statuses": st}, true, nil
-		}
-		return map[string]any{"ok": false, "statuses": st}, false, nil
+func (s *Server) waitChecks(owner, name, sha string) (any, error) {
+	var (
+		ok  bool
+		st  []forgejo.Status
+		err error
+	)
+	if s.Cat != nil {
+		ok, st, err = s.Cat.CommitChecks(owner, name, sha)
+	} else {
+		ok, st, err = s.FJ.ChecksGreen(owner, name, sha)
 	}
-	if timeout == 0 {
-		out, _, err := read()
-		return out, err
+	if err != nil {
+		return nil, err
 	}
-	deadline := time.Now().Add(time.Duration(timeout) * time.Second)
-	var last any
-	for time.Now().Before(deadline) {
-		out, done, err := read()
-		if err != nil {
-			return nil, err
+	pending := false
+	failed := false
+	for _, x := range st {
+		switch strings.ToLower(x.Status) {
+		case "pending":
+			pending = true
+		case "failure", "error":
+			failed = true
 		}
-		last = out
-		if done {
-			return out, nil
-		}
-		time.Sleep(3 * time.Second)
 	}
-	if last == nil {
-		out, _, err := read()
-		if err != nil {
-			return nil, err
-		}
-		last = out
-	}
-	m, _ := last.(map[string]any)
-	if m == nil {
-		m = map[string]any{"ok": false}
-	}
-	m["timeout"] = true
-	return m, nil
+	done := !pending && (ok || failed)
+	return map[string]any{"ok": ok && done, "done": done, "statuses": st}, nil
 }
 
 func (s *Server) listPipes(token, repo, sha, branch, status string, q page.Query) (any, error) {
@@ -471,25 +412,6 @@ func (s *Server) listPipes(token, repo, sha, branch, status string, q page.Query
 		return nil, fmt.Errorf("repo required")
 	}
 	return s.Cat.ListRepoPipelines(token, repo, sha, branch, status, q)
-}
-
-func filterPipes(items []woodpecker.Pipeline, sha, branch, status string) []woodpecker.Pipeline {
-	sha = strings.ToLower(sha)
-	status = strings.ToLower(status)
-	var out []woodpecker.Pipeline
-	for _, p := range items {
-		if sha != "" && !strings.HasPrefix(strings.ToLower(p.Commit), sha) {
-			continue
-		}
-		if branch != "" && p.Branch != branch {
-			continue
-		}
-		if status != "" && strings.ToLower(p.Status) != status {
-			continue
-		}
-		out = append(out, p)
-	}
-	return out
 }
 
 func (s *Server) publish(token, kind, fileURL, filename string) (any, error) {

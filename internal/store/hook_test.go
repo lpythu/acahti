@@ -63,6 +63,20 @@ func TestParseForgejoRepoEvent(t *testing.T) {
 	if !ok || action != "deleted" || repo.FullName != "saidc/demo" {
 		t.Fatalf("delete %s %+v %v", action, repo, ok)
 	}
+	action, repo, ok = ParseForgejoRepoEvent(map[string]any{
+		"action":     "archived",
+		"repository": map[string]any{"full_name": "saidc/old"},
+	})
+	if !ok || action != "archived" || !repo.Archived {
+		t.Fatalf("archived %s %+v %v", action, repo, ok)
+	}
+	action, repo, ok = ParseForgejoRepoEvent(map[string]any{
+		"action":     "unarchived",
+		"repository": map[string]any{"full_name": "saidc/old", "archived": true},
+	})
+	if !ok || action != "unarchived" || repo.Archived {
+		t.Fatalf("unarchived %s %+v %v", action, repo, ok)
+	}
 }
 
 func TestParseForgejoStatus(t *testing.T) {

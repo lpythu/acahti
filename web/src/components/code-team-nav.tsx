@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import { Link, useLocation, useSearchParams } from "react-router-dom"
-import { BookMarkedIcon, ChevronRightIcon, FolderIcon, WorkflowIcon } from "lucide-react"
+import { BookMarkedIcon, ChevronRightIcon, FolderIcon, SquareMinusIcon, SquarePlusIcon, WorkflowIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   SidebarGroup,
+  SidebarGroupAction,
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarInput,
@@ -40,6 +41,10 @@ function repoName(r: Repo) {
   return splitRepo(r.full_name || r.name).name || r.name
 }
 
+function liveRepos(repos: Repo[] | undefined): Repo[] {
+  return (repos || []).filter((r) => !r.archived)
+}
+
 function filterTree(tree: NavTeam[], q: string, unassignedLabel: string): NavTeam[] {
   const needle = q.trim().toLowerCase()
   if (!needle) return tree
@@ -50,7 +55,7 @@ function filterTree(tree: NavTeam[], q: string, unassignedLabel: string): NavTea
       out.push(row)
       continue
     }
-    const repos = (row.repos || []).filter((r) => {
+    const repos = row.repos.filter((r) => {
       const name = repoName(r).toLowerCase()
       const full = (r.full_name || "").toLowerCase()
       return name.includes(needle) || full.includes(needle)
@@ -60,83 +65,96 @@ function filterTree(tree: NavTeam[], q: string, unassignedLabel: string): NavTea
   return out
 }
 
+function repoActive(pathname: string, filterRepo: string, owner: string, name: string) {
+  const pipe = parsePipelinePath(pathname)
+  return (
+    filterRepo === `${owner}/${name}` ||
+    (pipe?.owner === owner && pipe.name === name) ||
+    pathname === `/repos/${owner}/${name}` ||
+    pathname.startsWith(`/repos/${owner}/${name}/`)
+  )
+}
+
+function RepoLink({
+  section,
+  repo,
+  pathname,
+  filterRepo,
+  itemIcon,
+  nested,
+}: {
+  section: CodeTeamSection
+  repo: Repo
+  pathname: string
+  filterRepo: string
+  itemIcon: ReactNode
+  nested?: boolean
+}) {
+  const { owner, name } = splitRepo(repo.full_name || repo.name)
+  const Comp = nested ? SidebarMenuSubButton : SidebarMenuButton
+  return (
+    <Comp isActive={repoActive(pathname, filterRepo, owner, name)} render={<Link to={itemHref(section, owner, name)} />}>
+      {itemIcon}
+      <span>{name}</span>
+    </Comp>
+  )
+}
+
 function TeamNode({
   section,
   team,
-  label,
   repos,
   pathname,
   filterTeam,
   filterRepo,
   itemIcon,
+  open: openProp,
+  onOpenChange,
   forceOpen,
 }: {
   section: CodeTeamSection
   team: string
-  label: string
   repos: Repo[]
   pathname: string
   filterTeam: string
   filterRepo: string
   itemIcon: ReactNode
+  open?: boolean
+  onOpenChange: (open: boolean) => void
   forceOpen?: boolean
 }) {
   const pipe = parsePipelinePath(pathname)
-  const teamActive = Boolean(team) && !filterRepo && !pipe && filterTeam === team && !repoBase(pathname)
+  const teamActive = !filterRepo && !pipe && filterTeam === team && !repoBase(pathname)
   const inTeam = repos.some((r) => {
     const { owner, name } = splitRepo(r.full_name || r.name)
-    if (filterRepo === `${owner}/${name}`) return true
-    if (pipe?.owner === owner && pipe.name === name) return true
-    const base = `/repos/${owner}/${name}`
-    return pathname === base || pathname.startsWith(`${base}/`)
+    return repoActive(pathname, filterRepo, owner, name)
   })
-  const [open, setOpen] = useState(true)
-
-  useEffect(() => {
-    if (inTeam || teamActive || forceOpen) setOpen(true)
-  }, [inTeam, teamActive, forceOpen])
+  const open = forceOpen || (openProp ?? (inTeam || teamActive))
 
   return (
     <SidebarMenuItem>
-      <Collapsible open={open} onOpenChange={setOpen}>
+      <Collapsible open={open} onOpenChange={onOpenChange}>
         <div className="flex min-w-0 items-center">
-          <SidebarMenuButton
-            tooltip={label}
-            isActive={teamActive}
-            className="flex-1"
-            render={team ? <Link to={teamHref(section, team)} /> : undefined}
-          >
+          <SidebarMenuButton tooltip={team} isActive={teamActive} className="flex-1" render={<Link to={teamHref(section, team)} />}>
             <FolderIcon />
-            <span>{label}</span>
+            <span>{team}</span>
           </SidebarMenuButton>
           <CollapsibleTrigger
             className={cn(
               "flex size-8 shrink-0 items-center justify-center rounded-md text-sidebar-foreground ring-sidebar-ring outline-hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 group-data-[collapsible=icon]:hidden",
             )}
-            aria-label={label}
+            aria-label={team}
           >
             <ChevronRightIcon className={cn("size-4 transition-transform", open && "rotate-90")} />
           </CollapsibleTrigger>
         </div>
         <CollapsibleContent>
           <SidebarMenuSub>
-            {repos.map((r) => {
-              const { owner, name } = splitRepo(r.full_name || r.name)
-              const url = itemHref(section, owner, name)
-              const active =
-                filterRepo === `${owner}/${name}` ||
-                (pipe?.owner === owner && pipe.name === name) ||
-                pathname === `/repos/${owner}/${name}` ||
-                pathname.startsWith(`/repos/${owner}/${name}/`)
-              return (
-                <SidebarMenuSubItem key={r.full_name || r.name}>
-                  <SidebarMenuSubButton isActive={active} render={<Link to={url} />}>
-                    {itemIcon}
-                    <span>{name}</span>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
-              )
-            })}
+            {repos.map((r) => (
+              <SidebarMenuSubItem key={r.full_name || r.name}>
+                <RepoLink section={section} repo={r} pathname={pathname} filterRepo={filterRepo} itemIcon={itemIcon} nested />
+              </SidebarMenuSubItem>
+            ))}
           </SidebarMenuSub>
         </CollapsibleContent>
       </Collapsible>
@@ -158,11 +176,17 @@ export function CodeTeamNav({ section }: { section: CodeTeamSection }) {
 
   const itemIcon = section === "pipelines" ? <WorkflowIcon /> : <BookMarkedIcon />
   const unassignedLabel = t("unassignedRepos")
-  const rows = useMemo(
-    () => filterTree(tree.data ?? [], q, unassignedLabel),
-    [tree.data, q, unassignedLabel],
-  )
+  const rows = useMemo(() => {
+    const src = (tree.data ?? [])
+      .map((row) => ({ ...row, repos: liveRepos(row.repos) }))
+      .filter((row) => row.team || row.repos.length)
+    return filterTree(src, q, unassignedLabel)
+  }, [tree.data, q, unassignedLabel])
+  const teams = rows.filter((row) => row.team)
+  const loose = rows.find((row) => !row.team)?.repos ?? []
   const searching = Boolean(q.trim())
+  const [openByKey, setOpenByKey] = useState<Record<string, boolean>>({})
+  const allOpen = teams.length > 0 && teams.every((row) => openByKey[row.team])
 
   return (
     <>
@@ -176,31 +200,59 @@ export function CodeTeamNav({ section }: { section: CodeTeamSection }) {
           />
         </SidebarGroupContent>
       </SidebarGroup>
-      <SidebarGroup>
-        <SidebarGroupLabel>{t("teams")}</SidebarGroupLabel>
-        <SidebarGroupContent>
-          {searching && !rows.length ? (
-            <p className="px-2 py-1.5 text-xs text-muted-foreground">{t("noMatchingRepos")}</p>
-          ) : (
+      {searching && !teams.length && !loose.length ? (
+        <p className="px-4 py-1.5 text-xs text-muted-foreground">{t("noMatchingRepos")}</p>
+      ) : null}
+      {teams.length ? (
+        <SidebarGroup>
+          <SidebarGroupLabel>{t("teams")}</SidebarGroupLabel>
+          {searching ? null : (
+            <SidebarGroupAction
+              title={allOpen ? t("collapseAll") : t("expandAll")}
+              aria-label={allOpen ? t("collapseAll") : t("expandAll")}
+              onClick={() => {
+                const next = !allOpen
+                setOpenByKey(Object.fromEntries(teams.map((row) => [row.team, next])))
+              }}
+            >
+              {allOpen ? <SquareMinusIcon /> : <SquarePlusIcon />}
+            </SidebarGroupAction>
+          )}
+          <SidebarGroupContent>
             <SidebarMenu>
-              {rows.map((row) => (
+              {teams.map((row) => (
                 <TeamNode
-                  key={row.team || "unassigned"}
+                  key={row.team}
                   section={section}
                   team={row.team}
-                  label={row.team || unassignedLabel}
-                  repos={row.repos || []}
+                  repos={row.repos}
                   pathname={pathname}
                   filterTeam={filterTeam}
                   filterRepo={filterRepo}
                   itemIcon={itemIcon}
+                  open={openByKey[row.team]}
+                  onOpenChange={(open) => setOpenByKey((prev) => ({ ...prev, [row.team]: open }))}
                   forceOpen={searching}
                 />
               ))}
             </SidebarMenu>
-          )}
-        </SidebarGroupContent>
-      </SidebarGroup>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      ) : null}
+      {loose.length ? (
+        <SidebarGroup>
+          <SidebarGroupLabel>{unassignedLabel}</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {loose.map((r) => (
+                <SidebarMenuItem key={r.full_name || r.name}>
+                  <RepoLink section={section} repo={r} pathname={pathname} filterRepo={filterRepo} itemIcon={itemIcon} />
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      ) : null}
     </>
   )
 }

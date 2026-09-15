@@ -101,6 +101,13 @@ func ParseForgejoRepoEvent(payload map[string]any) (action string, repo OrgRepo,
 		repo.DefaultBranch, _ = m["default_branch"].(string)
 		repo.Description, _ = m["description"].(string)
 		repo.Updated = unixFrom(m["updated_unix"])
+		repo.Archived, _ = m["archived"].(bool)
+	}
+	if action == "archived" {
+		repo.Archived = true
+	}
+	if action == "unarchived" {
+		repo.Archived = false
 	}
 	return action, repo, true
 }

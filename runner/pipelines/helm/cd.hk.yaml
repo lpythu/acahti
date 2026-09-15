@@ -1,6 +1,5 @@
 when:
-  - event: [push, manual]
-    branch: [test]
+  - event: [tag, manual]
 
 labels:
   deploy: true

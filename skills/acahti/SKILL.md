@@ -46,13 +46,13 @@ Before any `git commit` in the current repo:
 Trigger CI with `git push`, a tag, or opening a PR. Do not use `pipeline_trigger` as a substitute for official release.
 
 1. `git rev-parse HEAD`
-2. `checks_wait` `{owner, name, sha}`. Snapshot: `timeout_sec=0`
-3. Failed or timeout: `pipeline_list` `{repo: owner/name, sha}` (sha prefix) → `pipeline_get` → `pipeline_log` (omit `step`)
+2. `checks_wait` `{owner, name, sha}` — snapshot of the latest pipeline round. Poll until `done` is true. Do not pass `timeout_sec`
+3. Failed: `pipeline_list` `{repo: owner/name, sha}` (sha prefix) → `pipeline_get` → `pipeline_log` (omit `step`)
 4. Fix and push, or `pipeline_rerun`. `pipeline_cancel` only for a stuck run
-5. Green: `pr_merge`. `blocked`: `deploy_approve`
+5. Green (`ok` and `done`): `pr_merge`. `blocked`: `deploy_approve`
 6. Island triage: `inbox` `{section: prs|blocked|failed}`
 
-`pr_merge` only succeeds when the latest status per check context is success. Close leftover heads with `pr_close` then `ref_delete` (`dev`, `heads/dev`, or `refs/heads/dev`).
+`pr_merge` succeeds when the newest pipeline number on the head SHA is green. Close leftover heads with `pr_close` then `ref_delete` (`dev`, `heads/dev`, or `refs/heads/dev`).
 
 ## Packages
 

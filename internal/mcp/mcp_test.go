@@ -10,7 +10,6 @@ import (
 
 	"acahti/internal/forgejo"
 	"acahti/internal/httperr"
-	"acahti/internal/woodpecker"
 )
 
 func TestToolSet(t *testing.T) {
@@ -84,55 +83,18 @@ func TestAsInt64(t *testing.T) {
 	}
 }
 
-func TestCheckTimeout(t *testing.T) {
-	if checkTimeout(nil) != 600 {
-		t.Fatal("omit")
-	}
-	if checkTimeout(map[string]any{}) != 600 {
-		t.Fatal("empty")
-	}
-	if checkTimeout(map[string]any{"timeout_sec": 0}) != 0 {
-		t.Fatal("zero")
-	}
-	if checkTimeout(map[string]any{"timeout_sec": "0"}) != 0 {
-		t.Fatal("zero string")
-	}
-	if checkTimeout(map[string]any{"timeout_sec": 45.0}) != 45 {
-		t.Fatal("45")
-	}
-	if checkTimeout(map[string]any{"timeout_sec": -1}) != 600 {
-		t.Fatal("neg")
-	}
-}
-
-func TestFilterPipes(t *testing.T) {
-	items := []woodpecker.Pipeline{
-		{Number: 1, Commit: "abcdef", Branch: "dev", Status: "success"},
-		{Number: 2, Commit: "abc999", Branch: "test", Status: "failure"},
-		{Number: 3, Commit: "fff", Branch: "dev", Status: "running"},
-	}
-	got := filterPipes(items, "abc", "", "")
-	if len(got) != 2 || got[0].Number != 1 || got[1].Number != 2 {
-		t.Fatalf("sha=%+v", got)
-	}
-	got = filterPipes(items, "abcdef", "dev", "success")
-	if len(got) != 1 || got[0].Number != 1 {
-		t.Fatalf("all=%+v", got)
-	}
-}
-
 func TestWaitChecksEmptyIsDone(t *testing.T) {
 	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`[]`))
 	}))
 	t.Cleanup(hs.Close)
 	s := &Server{FJ: forgejo.New(hs.URL, "t")}
-	out, err := s.waitChecks("acme", "demo", "abc", 0)
+	out, err := s.waitChecks("acme", "demo", "abc")
 	if err != nil {
 		t.Fatal(err)
 	}
 	m, _ := out.(map[string]any)
-	if m["ok"] != true {
+	if m["ok"] != true || m["done"] != true {
 		t.Fatalf("%v", out)
 	}
 }
@@ -146,12 +108,12 @@ func TestWaitChecksLatestPerContext(t *testing.T) {
 	}))
 	t.Cleanup(hs.Close)
 	s := &Server{FJ: forgejo.New(hs.URL, "t")}
-	out, err := s.waitChecks("acme", "demo", "abc", 0)
+	out, err := s.waitChecks("acme", "demo", "abc")
 	if err != nil {
 		t.Fatal(err)
 	}
 	m, _ := out.(map[string]any)
-	if m["ok"] != true {
+	if m["ok"] != true || m["done"] != true {
 		t.Fatalf("%v", out)
 	}
 }
@@ -165,7 +127,7 @@ func TestWaitChecksSnapshot(t *testing.T) {
 	t.Cleanup(hs.Close)
 	s := &Server{FJ: forgejo.New(hs.URL, "t")}
 	start := time.Now()
-	out, err := s.waitChecks("acme", "demo", "abc", 0)
+	out, err := s.waitChecks("acme", "demo", "abc")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +138,7 @@ func TestWaitChecksSnapshot(t *testing.T) {
 		t.Fatalf("hits=%d", hits)
 	}
 	m, _ := out.(map[string]any)
-	if m["ok"] != false {
+	if m["ok"] != false || m["done"] != false {
 		t.Fatalf("%v", out)
 	}
 	if _, ok := m["timeout"]; ok {

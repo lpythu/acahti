@@ -67,6 +67,7 @@ type Repo struct {
 	Name          string `json:"name"`
 	FullName      string `json:"full_name"`
 	Private       bool   `json:"private"`
+	Archived      bool   `json:"archived,omitempty"`
 	DefaultBranch string `json:"default_branch"`
 	CloneURL      string `json:"clone_url"`
 	HTMLURL       string `json:"html_url"`
@@ -891,7 +892,7 @@ func LatestStatuses(st []Status) []Status {
 			continue
 		}
 		newer := s.CreatedAt.After(cur.s.CreatedAt)
-		sameUnknown := s.CreatedAt.IsZero() && cur.s.CreatedAt.IsZero() && i < cur.idx
+		sameUnknown := s.CreatedAt.IsZero() && cur.s.CreatedAt.IsZero() && i > cur.idx
 		if newer || sameUnknown {
 			best[ctx] = pick{s, i}
 		}
@@ -903,12 +904,53 @@ func LatestStatuses(st []Status) []Status {
 	return out
 }
 
+func PipelineNumber(target string) int64 {
+	u, err := url.Parse(target)
+	if err != nil {
+		return 0
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	for i, part := range parts {
+		if part == "pipeline" && i+1 < len(parts) {
+			n, _ := strconv.ParseInt(parts[i+1], 10, 64)
+			return n
+		}
+	}
+	if len(parts) >= 4 && (parts[0] == "pipelines" || parts[0] == "ci") && parts[1] != "repos" {
+		n, _ := strconv.ParseInt(parts[3], 10, 64)
+		return n
+	}
+	return 0
+}
+
+func LatestRound(st []Status) []Status {
+	var max int64
+	nums := make([]int64, len(st))
+	for i, s := range st {
+		n := PipelineNumber(s.TargetURL)
+		nums[i] = n
+		if n > max {
+			max = n
+		}
+	}
+	if max == 0 {
+		return st
+	}
+	out := make([]Status, 0, len(st))
+	for i, s := range st {
+		if nums[i] == max {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 func (c *Client) ChecksGreen(owner, name, sha string) (bool, []Status, error) {
 	st, err := c.CommitStatuses(owner, name, sha)
 	if err != nil {
 		return false, nil, err
 	}
-	st = LatestStatuses(st)
+	st = LatestStatuses(LatestRound(st))
 	ok := true
 	for _, s := range st {
 		if strings.ToLower(s.Status) != "success" {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# helm the chart, then argos (argospy on PATH; packs from argos-pack).
+# helm the chart, wait for public URLs, then argos.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh
@@ -18,19 +18,21 @@ if [[ ! -f "${chart_path}/Chart.yaml" ]]; then
 fi
 
 if [[ "${KIND:-}" == "helm" ]]; then
-  echo "==> helm ${RELEASE} ENV=${ENV} (no image)"
+  echo "==> helm ${RELEASE} ENV=${ENV}"
   helm_upgrade "$chart_path" "$RELEASE" "$NS"
-  echo "OK helm ${RELEASE} ENV=${ENV}"
 else
   require_repo
   commit_id
-  : "${IMAGE:?set IMAGE in .acahti/repo.env}"
-  repo_img="$(deploy_repo)"
-  tag="$(deploy_tag)"
-  echo "==> helm ${RELEASE} ENV=${ENV} ${repo_img}:${tag}"
-  helm_upgrade "$chart_path" "$RELEASE" "$NS" "$repo_img" "$tag"
-  echo "OK helm ${RELEASE} ENV=${ENV} tag=${tag}"
+  echo "==> helm ${RELEASE} ENV=${ENV}"
+  local_sets=()
+  while IFS= read -r pair; do
+    [[ -n "$pair" ]] && local_sets+=("$pair")
+  done < <(helm_image_sets)
+  helm_upgrade "$chart_path" "$RELEASE" "$NS" "${local_sets[@]}"
+  echo "OK helm ${RELEASE} ENV=${ENV}"
 fi
+
+wait_public_urls
 
 : "${ARGOS_SELECTORS:?set ARGOS_SELECTORS (semicolon-separated argos invocations)}"
 command -v argos >/dev/null || {

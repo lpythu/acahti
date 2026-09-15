@@ -85,13 +85,14 @@ type Job struct {
 }
 
 type Step struct {
-	ID    int64  `json:"id"`
-	PID   int64  `json:"pid"`
-	PPID  int64  `json:"ppid"`
-	Name  string `json:"name"`
-	State string `json:"state"`
-	Error string `json:"error"`
-	Type  string `json:"type"`
+	ID      int64  `json:"id"`
+	PID     int64  `json:"pid"`
+	PPID    int64  `json:"ppid"`
+	Name    string `json:"name"`
+	State   string `json:"state"`
+	Error   string `json:"error"`
+	Type    string `json:"type"`
+	LogTail string `json:"log_tail,omitempty"`
 }
 
 func (p *Pipeline) UnmarshalJSON(data []byte) error {
