@@ -18,7 +18,7 @@ import { useLoad } from "@/hooks/use-load"
 import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api, repoName, splitRepo, type Invite, type UserRepoPerm } from "@/lib/api"
-import { onboardNote, randomPassword } from "@/lib/onboard"
+import { onboardNote } from "@/lib/onboard"
 import { useSession } from "@/lib/session"
 
 async function copyText(text: string) {
@@ -28,8 +28,6 @@ async function copyText(text: string) {
     /* note stays in the menu for a manual copy */
   }
 }
-
-const PASSWORD_MASK = "••••••••"
 
 function AuthorInput({
   login,
@@ -79,14 +77,11 @@ function AuthorInput({
 }
 
 function PasswordInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [focused, setFocused] = useState(false)
   return (
     <Input
       type="password"
       autoComplete="new-password"
-      value={value || (focused ? "" : PASSWORD_MASK)}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      value={value}
       onChange={(e) => onChange(e.target.value)}
     />
   )
@@ -338,12 +333,10 @@ function OnboardMenu({
   login,
   root,
   password,
-  onPassword,
 }: {
   login: string
   root: string
   password: string
-  onPassword: (pw: string) => void
 }) {
   const t = useT()
   const [pw, setPw] = useState("")
@@ -351,18 +344,13 @@ function OnboardMenu({
 
   async function prepare() {
     setErr("")
-    try {
-      let next = password.trim()
-      if (!next) {
-        next = randomPassword()
-        onPassword(next)
-      }
-      await api.setPassword(login, next)
-      setPw(next)
-      await copyText(onboardNote(root, login, next))
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : t("loadError"))
+    const next = password.trim()
+    if (!next) {
+      setErr(t("passwordRequired"))
+      return
     }
+    setPw(next)
+    await copyText(onboardNote(root, login, next))
   }
 
   return (
@@ -517,7 +505,6 @@ export function UsersPage() {
                         login={u.login}
                         root={root}
                         password={resets[u.login] || ""}
-                        onPassword={(pw) => setResets((m) => ({ ...m, [u.login]: pw }))}
                       />
                     </div>
                   </TableCell>

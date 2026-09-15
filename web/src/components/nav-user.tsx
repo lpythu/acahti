@@ -1,5 +1,5 @@
-import { Link, useNavigate } from "react-router-dom"
-import { LogOutIcon, ShieldIcon } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+import { LogOutIcon } from "lucide-react"
 
 import {
   DropdownMenu,
@@ -14,10 +14,8 @@ import { useSession } from "@/lib/session"
 
 export function NavUser({
   user,
-  admin,
 }: {
   user: { name: string; username: string }
-  admin: boolean
 }) {
   const t = useT()
   const nav = useNavigate()
@@ -42,15 +40,6 @@ export function NavUser({
           <p className="truncate text-sm font-medium">{user.name}</p>
           <p className="truncate text-xs text-muted-foreground">{user.username}</p>
         </div>
-        {admin ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem render={<Link to="/admin" target="_blank" rel="noreferrer" />}>
-              <ShieldIcon />
-              {t("admin")}
-            </DropdownMenuItem>
-          </>
-        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => void logout()}>
           <LogOutIcon />

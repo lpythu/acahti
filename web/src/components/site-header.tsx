@@ -64,10 +64,14 @@ export function SiteHeader({
           <TopTab to="/packages" active={section === "packages"}>
             {t("packages")}
           </TopTab>
+          {me.admin ? (
+            <TopTab to="/admin" active={section === "admin"}>
+              {t("admin")}
+            </TopTab>
+          ) : null}
         </nav>
         <div className="ml-auto shrink-0">
           <NavUser
-            admin={me.admin}
             user={{
               name: me.git_name || me.user,
               username: me.user,

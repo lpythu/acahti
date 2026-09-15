@@ -9,9 +9,3 @@ export function onboardNote(rootURL: string, login: string, password: string) {
     `Password ${password}`,
   ].join("\n")
 }
-
-export function randomPassword() {
-  const b = new Uint8Array(12)
-  crypto.getRandomValues(b)
-  return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("")
-}
