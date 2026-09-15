@@ -35,6 +35,33 @@ type TeamRepoLink struct {
 	Repo string
 }
 
+type OrgCollaborator struct {
+	Repo  string
+	Login string
+	Role  string
+}
+
+func strongerRole(a, b string) string {
+	rank := func(role string) int {
+		switch role {
+		case "admin":
+			return 3
+		case "write":
+			return 2
+		case "read":
+			return 1
+		}
+		return 0
+	}
+	if rank(b) > rank(a) {
+		return b
+	}
+	if a == "" {
+		return b
+	}
+	return a
+}
+
 type NavTeam struct {
 	Team  string
 	Repos []OrgRepo
@@ -155,6 +182,32 @@ ON CONFLICT (team, login) DO UPDATE SET role = EXCLUDED.role
 	return err
 }
 
+func (s *Store) SetRepoCollaborator(repo, login, role string) error {
+	if !s.ready() || repo == "" || login == "" {
+		return nil
+	}
+	if role == "" {
+		role = "write"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := s.pool.Exec(ctx, `
+INSERT INTO repo_collaborators (repo, login, role) VALUES ($1, $2, $3)
+ON CONFLICT (repo, login) DO UPDATE SET role = EXCLUDED.role
+`, repo, login, role)
+	return err
+}
+
+func (s *Store) RemoveRepoCollaborator(repo, login string) error {
+	if !s.ready() || repo == "" || login == "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := s.pool.Exec(ctx, `DELETE FROM repo_collaborators WHERE repo = $1 AND login = $2`, repo, login)
+	return err
+}
+
 func (s *Store) RemoveTeamMember(team, login string) error {
 	if !s.ready() || team == "" || login == "" {
 		return nil
@@ -183,35 +236,28 @@ func (s *Store) UserRepoPerms(login string) (map[string]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	rows, err := s.pool.Query(ctx, `
-SELECT tr.repo, m.role
-FROM team_members m
-JOIN team_repos tr ON tr.team = m.team
-WHERE m.login = $1
+SELECT repo, role FROM (
+  SELECT tr.repo, m.role
+  FROM team_members m
+  JOIN team_repos tr ON tr.team = m.team
+  WHERE m.login = $1
+  UNION ALL
+  SELECT c.repo, c.role
+  FROM repo_collaborators c
+  WHERE c.login = $1
+) x
 `, login)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := map[string]string{}
-	rank := func(role string) int {
-		switch role {
-		case "admin":
-			return 3
-		case "write":
-			return 2
-		case "read":
-			return 1
-		}
-		return 0
-	}
 	for rows.Next() {
 		var repo, role string
 		if err := rows.Scan(&repo, &role); err != nil {
 			return nil, err
 		}
-		if rank(role) > rank(out[repo]) {
-			out[repo] = role
-		}
+		out[repo] = strongerRole(out[repo], role)
 	}
 	return out, rows.Err()
 }
@@ -228,6 +274,9 @@ SELECT EXISTS(
   SELECT 1 FROM team_repos tr
   JOIN team_members m ON m.team = tr.team AND m.login = $1
   WHERE tr.repo = $2
+  UNION ALL
+  SELECT 1 FROM repo_collaborators c
+  WHERE c.login = $1 AND c.repo = $2
 )`, login, repo).Scan(&ok)
 	return ok, err
 }
@@ -347,7 +396,12 @@ func (s *Store) VisibleTeams(login string, admin bool) ([]OrgTeam, error) {
 		rows, err = s.pool.Query(ctx, `
 SELECT t.name, t.write_id, t.read_id, t.admin_id
 FROM teams t
-JOIN team_members m ON m.team = t.name AND m.login = $1
+WHERE EXISTS (SELECT 1 FROM team_members m WHERE m.team = t.name AND m.login = $1)
+   OR EXISTS (
+     SELECT 1 FROM team_repos tr
+     JOIN repo_collaborators c ON c.repo = tr.repo AND c.login = $1
+     WHERE tr.team = t.name
+   )
 ORDER BY t.name
 `, login)
 	}
@@ -385,11 +439,47 @@ func (s *Store) VisibleRepos(login string, admin bool) ([]OrgRepo, error) {
 	rows, err := s.pool.Query(ctx, `
 SELECT DISTINCT r.full_name, r.default_branch, r.description, r.updated
 FROM repos r
-JOIN team_repos tr ON tr.repo = r.full_name
-JOIN team_members m ON m.team = tr.team AND m.login = $1
-WHERE NOT r.archived
+WHERE NOT r.archived AND (
+  EXISTS (
+    SELECT 1 FROM team_repos tr
+    JOIN team_members m ON m.team = tr.team AND m.login = $1
+    WHERE tr.repo = r.full_name
+  )
+  OR EXISTS (
+    SELECT 1 FROM repo_collaborators c
+    WHERE c.repo = r.full_name AND c.login = $1
+  )
+)
 ORDER BY r.updated DESC, r.full_name
 `, login)
+	if err != nil {
+		return nil, err
+	}
+	return scanRepos(rows)
+}
+
+func (s *Store) VisibleTeamRepos(login, team string, admin bool) ([]OrgRepo, error) {
+	if !s.ready() || team == "" {
+		return nil, nil
+	}
+	if admin {
+		return s.TeamRepos(team)
+	}
+	if login == "" {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	rows, err := s.pool.Query(ctx, `
+SELECT r.full_name, r.default_branch, r.description, r.updated
+FROM team_repos tr
+JOIN repos r ON r.full_name = tr.repo AND NOT r.archived
+WHERE tr.team = $2 AND (
+  EXISTS (SELECT 1 FROM team_members m WHERE m.team = $2 AND m.login = $1)
+  OR EXISTS (SELECT 1 FROM repo_collaborators c WHERE c.repo = r.full_name AND c.login = $1)
+)
+ORDER BY r.full_name
+`, login, team)
 	if err != nil {
 		return nil, err
 	}
@@ -412,34 +502,73 @@ func (s *Store) VisibleRepoNames(login string, admin bool) ([]string, error) {
 }
 
 func (s *Store) TeamCounts(login string, admin bool) ([]RepoTeamCount, error) {
-	teams, err := s.VisibleTeams(login, admin)
-	if err != nil {
-		return nil, err
+	if !s.ready() {
+		return nil, nil
+	}
+	if admin {
+		teams, err := s.VisibleTeams(login, true)
+		if err != nil {
+			return nil, err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		rows, err := s.pool.Query(ctx, `SELECT team, COUNT(*) FROM team_repos GROUP BY team`)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		n := map[string]int{}
+		for rows.Next() {
+			var team string
+			var c int
+			if err := rows.Scan(&team, &c); err != nil {
+				return nil, err
+			}
+			n[team] = c
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		out := make([]RepoTeamCount, 0, len(teams))
+		for _, t := range teams {
+			out = append(out, RepoTeamCount{Team: t.Name, Count: n[t.Name]})
+		}
+		return out, nil
+	}
+	if login == "" {
+		return nil, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	rows, err := s.pool.Query(ctx, `SELECT team, COUNT(*) FROM team_repos GROUP BY team`)
+	rows, err := s.pool.Query(ctx, `
+SELECT team, COUNT(*) FROM (
+  SELECT tr.team, r.full_name
+  FROM team_repos tr
+  JOIN repos r ON r.full_name = tr.repo AND NOT r.archived
+  JOIN team_members m ON m.team = tr.team AND m.login = $1
+  UNION
+  SELECT tr.team, r.full_name
+  FROM repo_collaborators c
+  JOIN repos r ON r.full_name = c.repo AND NOT r.archived
+  JOIN team_repos tr ON tr.repo = r.full_name
+  WHERE c.login = $1
+) x
+GROUP BY team
+ORDER BY team
+`, login)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	n := map[string]int{}
+	var out []RepoTeamCount
 	for rows.Next() {
-		var team string
-		var c int
-		if err := rows.Scan(&team, &c); err != nil {
+		var row RepoTeamCount
+		if err := rows.Scan(&row.Team, &row.Count); err != nil {
 			return nil, err
 		}
-		n[team] = c
+		out = append(out, row)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	out := make([]RepoTeamCount, 0, len(teams))
-	for _, t := range teams {
-		out = append(out, RepoTeamCount{Team: t.Name, Count: n[t.Name]})
-	}
-	return out, nil
+	return out, rows.Err()
 }
 
 type RepoTeamCount struct {
@@ -473,7 +602,14 @@ FROM teams t
 JOIN team_members m ON m.team = t.name AND m.login = $1
 LEFT JOIN team_repos tr ON tr.team = t.name
 LEFT JOIN repos r ON r.full_name = tr.repo AND NOT r.archived
-ORDER BY t.name, r.full_name`
+UNION
+SELECT tr.team, r.full_name, COALESCE(r.default_branch, ''), COALESCE(r.description, ''), COALESCE(r.updated, 0)
+FROM repo_collaborators c
+JOIN repos r ON r.full_name = c.repo AND NOT r.archived
+JOIN team_repos tr ON tr.repo = r.full_name
+WHERE c.login = $1
+  AND NOT EXISTS (SELECT 1 FROM team_members m WHERE m.team = tr.team AND m.login = $1)
+ORDER BY 1, 2`
 		args = []any{login}
 	}
 	rows, err := s.pool.Query(ctx, q, args...)
@@ -508,6 +644,12 @@ ORDER BY t.name, r.full_name`
 			return nil, err
 		}
 		out = appendUnassigned(out, extra)
+	} else {
+		extra, err := s.collabUnassigned(ctx, login)
+		if err != nil {
+			return nil, err
+		}
+		out = appendUnassigned(out, extra)
 	}
 	return out, nil
 }
@@ -520,6 +662,21 @@ LEFT JOIN team_repos tr ON tr.repo = r.full_name
 WHERE tr.repo IS NULL AND NOT r.archived
 ORDER BY r.full_name
 `)
+	if err != nil {
+		return nil, err
+	}
+	return scanRepos(rows)
+}
+
+func (s *Store) collabUnassigned(ctx context.Context, login string) ([]OrgRepo, error) {
+	rows, err := s.pool.Query(ctx, `
+SELECT r.full_name, r.default_branch, r.description, r.updated
+FROM repo_collaborators c
+JOIN repos r ON r.full_name = c.repo AND NOT r.archived
+LEFT JOIN team_repos tr ON tr.repo = r.full_name
+WHERE c.login = $1 AND tr.repo IS NULL
+ORDER BY r.full_name
+`, login)
 	if err != nil {
 		return nil, err
 	}
@@ -539,7 +696,7 @@ func (s *Store) ListReposPage(login, team string, admin bool, q page.Query) (pag
 		err   error
 	)
 	if team != "" {
-		repos, err = s.TeamRepos(team)
+		repos, err = s.VisibleTeamRepos(login, team, admin)
 	} else {
 		repos, err = s.VisibleRepos(login, admin)
 	}
@@ -549,7 +706,7 @@ func (s *Store) ListReposPage(login, team string, admin bool, q page.Query) (pag
 	return page.Take(repos, q), nil
 }
 
-func (s *Store) ReplaceOrg(teams []OrgTeam, repos []OrgRepo, links []TeamRepoLink, members []OrgMember) error {
+func (s *Store) ReplaceOrg(teams []OrgTeam, repos []OrgRepo, links []TeamRepoLink, members []OrgMember, collabs []OrgCollaborator) error {
 	if !s.ready() {
 		return nil
 	}
@@ -600,6 +757,9 @@ ON CONFLICT (name) DO UPDATE SET
 	if _, err := tx.Exec(ctx, `DELETE FROM team_members`); err != nil {
 		return err
 	}
+	if _, err := tx.Exec(ctx, `DELETE FROM repo_collaborators`); err != nil {
+		return err
+	}
 	for _, l := range links {
 		if l.Team == "" || l.Repo == "" {
 			continue
@@ -619,6 +779,20 @@ ON CONFLICT (name) DO UPDATE SET
 INSERT INTO team_members (team, login, role) VALUES ($1, $2, $3)
 ON CONFLICT (team, login) DO UPDATE SET role = EXCLUDED.role
 `, m.Team, m.Login, m.Role); err != nil {
+			return err
+		}
+	}
+	for _, c := range collabs {
+		if c.Repo == "" || c.Login == "" {
+			continue
+		}
+		if c.Role == "" {
+			c.Role = "write"
+		}
+		if _, err := tx.Exec(ctx, `
+INSERT INTO repo_collaborators (repo, login, role) VALUES ($1, $2, $3)
+ON CONFLICT (repo, login) DO UPDATE SET role = EXCLUDED.role
+`, c.Repo, c.Login, c.Role); err != nil {
 			return err
 		}
 	}

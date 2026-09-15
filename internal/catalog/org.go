@@ -158,6 +158,7 @@ func (c *Catalog) BackfillOrg() {
 	}
 	var links []store.TeamRepoLink
 	var members []store.OrgMember
+	var collabs []store.OrgCollaborator
 	for name, t := range clusters {
 		ot := store.OrgTeam{Name: name}
 		if r, ok := t.roles[permWrite]; ok {
@@ -214,7 +215,32 @@ func (c *Catalog) BackfillOrg() {
 	for _, r := range seenRepo {
 		repos = append(repos, r)
 	}
-	if err := c.Idx.ReplaceOrg(teams, repos, links, members); err != nil {
+	for _, r := range repos {
+		owner, name, ok := strings.Cut(r.FullName, "/")
+		if !ok || owner == "" || name == "" {
+			continue
+		}
+		users, err := page.Walk(func(q page.Query) (page.Result[forgejo.User], error) {
+			return c.FJ.ListCollaborators(owner, name, q)
+		})
+		if err != nil {
+			log.Printf("org backfill: collaborators %s: %v", r.FullName, err)
+			continue
+		}
+		for _, u := range users {
+			if u.Login == "" {
+				continue
+			}
+			perm := forgejo.NormalizePerm(u.Permissions.Level())
+			if !u.Permissions.Admin && !u.Permissions.Push {
+				if p, err := c.FJ.CollaboratorPerm(owner, name, u.Login); err == nil && p != "" {
+					perm = p
+				}
+			}
+			collabs = append(collabs, store.OrgCollaborator{Repo: r.FullName, Login: u.Login, Role: perm})
+		}
+	}
+	if err := c.Idx.ReplaceOrg(teams, repos, links, members, collabs); err != nil {
 		log.Printf("org backfill: replace: %v", err)
 		return
 	}

@@ -159,11 +159,6 @@ func (c *Catalog) ListRepos(user, team string, q page.Query) (page.Result[forgej
 		return page.Of([]forgejo.Repo{}, q, false), nil
 	}
 	admin := c.IsOrgAdmin(user)
-	if team != "" {
-		if !admin && !c.inTeam(user, teamRoles{name: team}) {
-			return page.Of([]forgejo.Repo{}, q, false), nil
-		}
-	}
 	res, err := c.Idx.ListReposPage(user, team, admin, q)
 	if err != nil {
 		return page.Result[forgejo.Repo]{}, err
@@ -569,10 +564,15 @@ func (c *Catalog) visiblePipeRepos(user, team string) ([]string, error) {
 	}
 	admin := c.IsOrgAdmin(user)
 	if team != "" {
-		if !admin && !c.inTeam(user, teamRoles{name: team}) {
-			return []string{}, nil
+		repos, err := c.Idx.VisibleTeamRepos(user, team, admin)
+		if err != nil {
+			return nil, err
 		}
-		return c.Idx.TeamRepoNames(team)
+		out := make([]string, 0, len(repos))
+		for _, r := range repos {
+			out = append(out, r.FullName)
+		}
+		return out, nil
 	}
 	return c.Idx.VisibleRepoNames(user, admin)
 }

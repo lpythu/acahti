@@ -382,7 +382,11 @@ func (c *Catalog) SetCollaborator(user, owner, name, login, perm string) error {
 	if err := c.FJ.AddCollaborator(owner, name, login, perm); err != nil {
 		return err
 	}
+	if c.indexed() {
+		_ = c.Idx.SetRepoCollaborator(owner+"/"+name, login, forgejo.NormalizePerm(perm))
+	}
 	c.forget()
+	c.publishCatalog()
 	return nil
 }
 
@@ -393,6 +397,10 @@ func (c *Catalog) RemoveCollaborator(user, owner, name, login string) error {
 	if err := c.FJ.RemoveCollaborator(owner, name, login); err != nil {
 		return err
 	}
+	if c.indexed() {
+		_ = c.Idx.RemoveRepoCollaborator(owner+"/"+name, login)
+	}
 	c.forget()
+	c.publishCatalog()
 	return nil
 }

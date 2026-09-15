@@ -123,6 +123,13 @@ CREATE TABLE IF NOT EXISTS team_members (
 );
 CREATE INDEX IF NOT EXISTS team_members_login_idx ON team_members (login);
 CREATE INDEX IF NOT EXISTS team_repos_repo_idx ON team_repos (repo);
+CREATE TABLE IF NOT EXISTS repo_collaborators (
+  repo text NOT NULL REFERENCES repos(full_name) ON DELETE CASCADE,
+  login text NOT NULL,
+  role text NOT NULL DEFAULT 'write',
+  PRIMARY KEY (repo, login)
+);
+CREATE INDEX IF NOT EXISTS repo_collaborators_login_idx ON repo_collaborators (login);
 ALTER TABLE repos ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT false;
 `)
 	return err

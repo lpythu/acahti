@@ -2,6 +2,12 @@ package store
 
 import "testing"
 
+func TestStrongerRole(t *testing.T) {
+	if strongerRole("read", "write") != "write" || strongerRole("admin", "write") != "admin" || strongerRole("", "read") != "read" {
+		t.Fatal("strongerRole")
+	}
+}
+
 func TestAppendUnassigned(t *testing.T) {
 	teams := []NavTeam{{Team: "Platform", Repos: []OrgRepo{{FullName: "saidc/ejp"}}}}
 	if got := appendUnassigned(teams, nil); len(got) != 1 || got[0].Team != "Platform" {
