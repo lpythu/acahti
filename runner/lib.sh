@@ -221,7 +221,12 @@ acahti_publish_token() {
     return 0
   fi
   local f
-  for f in /root/.harbor/acahti.env "${HOME}/.harbor/acahti.env"; do
+  # Woodpecker sets a temp HOME; also check the agent account path.
+  for f in \
+    /root/.harbor/acahti.env \
+    /home/saidc/.harbor/acahti.env \
+    "${HOME}/.harbor/acahti.env"
+  do
     if [[ -f "$f" ]]; then
       # shellcheck disable=SC1090
       set -a && source "$f" && set +a
@@ -231,6 +236,6 @@ acahti_publish_token() {
       fi
     fi
   done
-  echo "error: set ACAHTI_PUBLISH_TOKEN (or /root/.harbor/acahti.env)" >&2
+  echo "error: set ACAHTI_PUBLISH_TOKEN (or /root|/home/saidc/.harbor/acahti.env)" >&2
   exit 1
 }
