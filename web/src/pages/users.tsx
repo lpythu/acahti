@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useLoad } from "@/hooks/use-load"
 import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
-import { api, repoName, splitRepo, type Invite, type User } from "@/lib/api"
+import { api, repoName, splitRepo, type Invite } from "@/lib/api"
 import { onboardNote, randomPassword } from "@/lib/onboard"
 import { useSession } from "@/lib/session"
 
