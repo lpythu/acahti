@@ -112,15 +112,24 @@ func rewriteSecrets(name string, step map[string]any) error {
 	}
 	switch s := raw.(type) {
 	case []any:
-		names := make([]any, 0, len(s))
+		env, err := stepEnv(step)
+		if err != nil {
+			return fmt.Errorf("step %s: %w", name, err)
+		}
 		for i, v := range s {
 			sec, ok := v.(string)
 			if !ok || strings.TrimSpace(sec) == "" {
 				return fmt.Errorf("step %s: secrets[%d] must be a name", name, i)
 			}
-			names = append(names, strings.TrimSpace(sec))
+			sec = strings.TrimSpace(sec)
+			key := strings.ToUpper(sec)
+			if _, exists := env[key]; exists {
+				return fmt.Errorf("step %s: environment %s conflicts with secrets", name, key)
+			}
+			env[key] = map[string]any{"from_secret": sec}
 		}
-		step["secrets"] = names
+		step["environment"] = env
+		delete(step, "secrets")
 		return nil
 	case map[string]any:
 		env, err := stepEnv(step)

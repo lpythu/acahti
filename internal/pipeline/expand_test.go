@@ -148,8 +148,14 @@ func TestExpandSecretsList(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(got)
-	if !strings.Contains(text, "acahti_publish_token") || !strings.Contains(text, "secrets:") {
-		t.Fatalf("lost secrets list:\n%s", text)
+	if !strings.Contains(text, "from_secret: acahti_publish_token") {
+		t.Fatalf("missing from_secret:\n%s", text)
+	}
+	if !strings.Contains(text, "ACAHTI_PUBLISH_TOKEN") {
+		t.Fatalf("list secret not uppercased:\n%s", text)
+	}
+	if strings.Contains(text, "secrets:") {
+		t.Fatalf("list secrets leftover:\n%s", text)
 	}
 	if strings.Contains(text, "INPUT_SECRETS") {
 		t.Fatalf("secrets stringified:\n%s", text)
