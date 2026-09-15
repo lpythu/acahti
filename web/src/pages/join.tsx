@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from "react"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { toast } from "sonner"
 
 import { AcahtiMark } from "@/components/logo"
 import { Button } from "@/components/ui/button"
@@ -12,23 +13,23 @@ import { useSession } from "@/lib/session"
 
 export function JoinPage() {
   const t = useT()
+  const nav = useNavigate()
   const [params] = useSearchParams()
   const { refresh } = useSession()
-  const [error, setError] = useState("")
   const [pending, setPending] = useState(false)
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     setPending(true)
-    setError("")
     try {
       await api.join(String(fd.get("username") || ""), String(fd.get("password") || ""), String(fd.get("code") || ""))
       await refresh()
+      toast.success(t("joinSuccess"))
       const next = params.get("next") || "/board"
-      window.location.replace(next.startsWith("/") ? next : "/board")
+      nav(next.startsWith("/") ? next : "/board", { replace: true })
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("joinError"))
+      toast.error(err instanceof Error ? err.message : t("joinError"))
     } finally {
       setPending(false)
     }
@@ -60,7 +61,6 @@ export function JoinPage() {
                 <FieldLabel htmlFor="password">{t("password")}</FieldLabel>
                 <Input id="password" name="password" type="password" required autoComplete="new-password" />
               </Field>
-              {error ? <FieldDescription className="text-destructive">{error}</FieldDescription> : null}
               <Field>
                 <Button type="submit" disabled={pending}>
                   {t("join")}

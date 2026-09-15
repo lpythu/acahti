@@ -26,6 +26,7 @@ export function RepoBranchesPage() {
     setBusy(branch)
     try {
       await api.patchBranch(owner, name, branch, body)
+      toast.success(t("branchUpdated"))
       await Promise.all([list.reload(), reloadRepo()])
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t("loadError"))

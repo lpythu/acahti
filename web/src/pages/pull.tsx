@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Link, useParams } from "react-router-dom"
+import { toast } from "sonner"
 
 import { EmptyState } from "@/components/empty-state"
 import { Pager } from "@/components/paged-list"
@@ -23,16 +24,15 @@ export function PullPage() {
     n,
   ])
   const [busy, setBusy] = useState(false)
-  const [actionErr, setActionErr] = useState("")
 
   async function merge() {
     setBusy(true)
-    setActionErr("")
     try {
       await api.mergePull(owner, name, n)
+      toast.success(t("mergeSuccess"))
       await reload()
     } catch {
-      setActionErr(t("checksNotGreen"))
+      toast.error(t("checksNotGreen"))
     } finally {
       setBusy(false)
     }
@@ -40,7 +40,7 @@ export function PullPage() {
 
   const pr = data?.pr
   return (
-    <PageFrame loading={loading && !data} error={error || actionErr} className="gap-6">
+    <PageFrame loading={loading && !data} error={error} className="gap-6">
       {pr ? (
         <>
           <div>

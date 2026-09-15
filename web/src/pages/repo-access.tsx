@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from "react"
 import { Link } from "react-router-dom"
+import { toast } from "sonner"
 
 import { AddPersonMenu, PermSelect, permLabel } from "@/components/access-fields"
 import { PageFrame } from "@/components/page-frame"
@@ -34,21 +35,20 @@ function MoveTeamMenu({
   const [open, setOpen] = useState(false)
   const [pick, setPick] = useState("")
   const [newName, setNewName] = useState("")
-  const [err, setErr] = useState("")
   const target = (pick || newName).trim()
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!target || target === current) return
-    setErr("")
     try {
       await api.moveRepo(owner, name, target, current)
+      toast.success(t("repoMoved"))
       setOpen(false)
       setPick("")
       setNewName("")
       await onMoved()
     } catch (e) {
-      setErr(e instanceof Error ? e.message : t("loadError"))
+      toast.error(e instanceof Error ? e.message : t("loadError"))
     }
   }
 
@@ -60,7 +60,6 @@ function MoveTeamMenu({
         if (next) {
           setPick("")
           setNewName("")
-          setErr("")
           void teams.reload()
         }
       }}
@@ -107,7 +106,6 @@ function MoveTeamMenu({
                 </SelectContent>
               </Select>
             </Field>
-            {err ? <p className="text-sm text-destructive">{err}</p> : null}
             <Button type="submit" disabled={!target || target === current}>
               {t("move")}
             </Button>
@@ -153,7 +151,13 @@ export function RepoAccessPage() {
                 <Switch
                   checked={Boolean(data.granted)}
                   onCheckedChange={(v) => {
-                    void api.setRepoTeamGrant(owner, name, v === true).then(() => load.reload())
+                    void api
+                      .setRepoTeamGrant(owner, name, v === true)
+                      .then(async () => {
+                        toast.success(t("accessUpdated"))
+                        await load.reload()
+                      })
+                      .catch((e) => toast.error(e instanceof Error ? e.message : t("loadError")))
                   }}
                 />
                 {t("grantTeam")}
@@ -170,6 +174,7 @@ export function RepoAccessPage() {
                   exclude={[...data.inherited, ...data.direct].map((p) => p.login)}
                   onAdd={async (login, permission) => {
                     await api.setCollaborator(owner, name, login, permission)
+                    toast.success(t("memberAdded"))
                     await load.reload()
                   }}
                 />
@@ -179,8 +184,24 @@ export function RepoAccessPage() {
               people={data.direct}
               empty={t("noDirect")}
               manage={manage}
-              onPerm={(login, perm) => void api.setCollaborator(owner, name, login, perm).then(() => load.reload())}
-              onRemove={(login) => void api.removeCollaborator(owner, name, login).then(() => load.reload())}
+              onPerm={(login, perm) =>
+                void api
+                  .setCollaborator(owner, name, login, perm)
+                  .then(async () => {
+                    toast.success(t("accessUpdated"))
+                    await load.reload()
+                  })
+                  .catch((e) => toast.error(e instanceof Error ? e.message : t("loadError")))
+              }
+              onRemove={(login) =>
+                void api
+                  .removeCollaborator(owner, name, login)
+                  .then(async () => {
+                    toast.success(t("accessRemoved"))
+                    await load.reload()
+                  })
+                  .catch((e) => toast.error(e instanceof Error ? e.message : t("loadError")))
+              }
             />
           </section>
         </div>

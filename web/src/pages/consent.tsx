@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Navigate, useLocation, useSearchParams } from "react-router-dom"
+import { toast } from "sonner"
 
 import { AcahtiMark } from "@/components/logo"
 import { Button } from "@/components/ui/button"
@@ -13,7 +14,6 @@ export function ConsentPage() {
   const loc = useLocation()
   const [params] = useSearchParams()
   const { me, ready } = useSession()
-  const [error, setError] = useState("")
   const [pending, setPending] = useState(false)
 
   if (!ready) {
@@ -25,7 +25,6 @@ export function ConsentPage() {
 
   async function approve() {
     setPending(true)
-    setError("")
     try {
       const r = await api.oauthApprove({
         client_id: params.get("client_id") || "",
@@ -35,7 +34,7 @@ export function ConsentPage() {
       })
       window.location.href = r.redirect
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("loadError"))
+      toast.error(err instanceof Error ? err.message : t("loadError"))
       setPending(false)
     }
   }
@@ -52,7 +51,6 @@ export function ConsentPage() {
           <CardDescription>{t("consentDesc")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
           <Button disabled={pending} onClick={() => void approve()}>
             {t("consentAllow")}
           </Button>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
+import { toast } from "sonner"
 
 import { EmptyState } from "@/components/empty-state"
 import { PipelineJobs } from "@/components/pipeline-jobs"
@@ -72,7 +73,10 @@ export function PipelinePage() {
     setBusy(true)
     try {
       const next = await api.rerun(owner, name, n)
+      toast.success(t("rerunQueued"))
       nav(pipelineHref(owner, name, next.number))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("loadError"))
     } finally {
       setBusy(false)
     }
@@ -82,7 +86,10 @@ export function PipelinePage() {
     setBusy(true)
     try {
       await api.approve(owner, name, n)
+      toast.success(t("approved"))
       await reload()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("loadError"))
     } finally {
       setBusy(false)
     }
@@ -92,7 +99,10 @@ export function PipelinePage() {
     setBusy(true)
     try {
       await api.cancel(owner, name, n)
+      toast.success(t("canceled"))
       await reload()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("loadError"))
     } finally {
       setBusy(false)
     }
@@ -102,7 +112,10 @@ export function PipelinePage() {
     setBusy(true)
     try {
       await api.deletePipeline(owner, name, n)
+      toast.success(t("pipelineDeleted"))
       nav(`/repos/${owner}/${name}/pipelines`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("loadError"))
     } finally {
       setBusy(false)
     }

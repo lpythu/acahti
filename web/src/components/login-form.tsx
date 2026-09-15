@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { toast } from "sonner"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
@@ -18,23 +19,23 @@ import { useSession } from "@/lib/session"
 
 export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
   const t = useT()
+  const nav = useNavigate()
   const [params] = useSearchParams()
   const { refresh } = useSession()
-  const [error, setError] = useState("")
   const [pending, setPending] = useState(false)
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     setPending(true)
-    setError("")
     try {
       await api.login(String(fd.get("username") || ""), String(fd.get("password") || ""))
       await refresh()
+      toast.success(t("loginSuccess"))
       const next = params.get("next") || "/board"
-      window.location.replace(next.startsWith("/") ? next : "/board")
+      nav(next.startsWith("/") ? next : "/board", { replace: true })
     } catch {
-      setError(t("loginError"))
+      toast.error(t("loginError"))
     } finally {
       setPending(false)
     }
@@ -69,9 +70,6 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                   required
                 />
               </Field>
-              {error ? (
-                <FieldDescription className="text-destructive">{error}</FieldDescription>
-              ) : null}
               <Field>
                 <Button type="submit" disabled={pending}>
                   {t("login")}

@@ -1,4 +1,5 @@
 import { type FormEvent, useMemo, useState } from "react"
+import { toast } from "sonner"
 
 import { MenuPanel } from "@/components/menu-panel"
 import { Button } from "@/components/ui/button"
@@ -78,7 +79,6 @@ export function AddPersonMenu({
   const [open, setOpen] = useState(false)
   const [login, setLogin] = useState("")
   const [permission, setPermission] = useState<AccessPerm>("write")
-  const [err, setErr] = useState("")
   const users = useLoad(() => loadUsers(), [], open)
   const taken = useMemo(() => new Set(exclude), [exclude])
   const options = useMemo(
@@ -92,14 +92,13 @@ export function AddPersonMenu({
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!login) return
-    setErr("")
     try {
       await onAdd(login, permission)
       setLogin("")
       setPermission("write")
       setOpen(false)
     } catch (e) {
-      setErr(e instanceof Error ? e.message : t("loadError"))
+      toast.error(e instanceof Error ? e.message : t("loadError"))
     }
   }
 
@@ -111,7 +110,6 @@ export function AddPersonMenu({
         if (next) {
           setLogin("")
           setPermission("write")
-          setErr("")
           void users.reload()
         }
       }}
@@ -140,7 +138,6 @@ export function AddPersonMenu({
               <FieldLabel>{t("permission")}</FieldLabel>
               <PermSelect value={permission} onChange={setPermission} className="w-full" />
             </Field>
-            {err ? <p className="text-sm text-destructive">{err}</p> : null}
             <Button type="submit" disabled={!login}>
               {t("create")}
             </Button>

@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { toast } from "sonner"
 
 import { PagedList } from "@/components/paged-list"
 import { PipelineRunRow } from "@/components/pipeline-run-row"
@@ -24,16 +25,15 @@ export function RepoPipelinesPage() {
     list.apply((page) => upsertRun(page, next, list.page))
   })
   const [busy, setBusy] = useState(false)
-  const [actionErr, setActionErr] = useState("")
 
   async function runPipe() {
     setBusy(true)
-    setActionErr("")
     try {
       const p = await api.trigger(owner, name, data?.repo.default_branch || "dev")
+      toast.success(t("runStarted"))
       nav(pipelineHref(owner, name, p.number))
     } catch (err) {
-      setActionErr(err instanceof Error ? err.message : t("loadError"))
+      toast.error(err instanceof Error ? err.message : t("loadError"))
       setBusy(false)
       await list.reload()
     }
@@ -41,7 +41,7 @@ export function RepoPipelinesPage() {
 
   return (
     <PagedList
-      list={{ ...list, error: list.error || actionErr }}
+      list={list}
       emptyText={t("noPipelines")}
       skeleton="lines"
       header={

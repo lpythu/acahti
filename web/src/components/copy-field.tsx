@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -7,16 +7,14 @@ import { useT } from "@/i18n/i18n"
 
 export function CopyField({ value, label, multiline }: { value: string; label?: string; multiline?: boolean }) {
   const t = useT()
-  const [done, setDone] = useState(false)
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(value)
+      toast.success(t("copied"))
     } catch {
-      /* field stays visible for a manual copy */
+      toast.error(t("copyFailed"))
     }
-    setDone(true)
-    window.setTimeout(() => setDone(false), 1500)
   }
 
   return (
@@ -29,7 +27,7 @@ export function CopyField({ value, label, multiline }: { value: string; label?: 
           <Input readOnly value={value} className="font-mono text-xs" />
         )}
         <Button type="button" variant="outline" onClick={() => void copy()}>
-          {done ? t("copied") : t("copy")}
+          {t("copy")}
         </Button>
       </div>
     </div>

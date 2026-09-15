@@ -1,5 +1,5 @@
-import { useState } from "react"
 import { Code2Icon } from "lucide-react"
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,12 +8,14 @@ import { useT } from "@/i18n/i18n"
 
 export function CloneMenu({ url }: { url: string }) {
   const t = useT()
-  const [done, setDone] = useState(false)
 
   async function copy() {
-    await navigator.clipboard.writeText(url)
-    setDone(true)
-    window.setTimeout(() => setDone(false), 1500)
+    try {
+      await navigator.clipboard.writeText(url)
+      toast.success(t("copied"))
+    } catch {
+      toast.error(t("copyFailed"))
+    }
   }
 
   return (
@@ -26,7 +28,7 @@ export function CloneMenu({ url }: { url: string }) {
         <div className="flex gap-2">
           <Input readOnly value={url} className="h-8 font-mono text-xs" />
           <Button type="button" size="sm" variant="outline" onClick={() => void copy()}>
-            {done ? t("copied") : t("copy")}
+            {t("copy")}
           </Button>
         </div>
       </PopoverContent>

@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { toast } from "sonner"
 
 import { PagedList } from "@/components/paged-list"
 import { PipelineRunRow } from "@/components/pipeline-run-row"
@@ -22,7 +23,6 @@ export function BoardPage() {
   const pipes = usePage((q) => api.boardPipes(q), [], { enabled: section === "pipes" })
   const prs = usePage((q) => api.boardPRs(q), [], { enabled: section === "prs" })
   const [busy, setBusy] = useState("")
-  const [actionErr, setActionErr] = useState("")
 
   useEvents((ev) => {
     if (ev.type === "forgejo") {
@@ -47,12 +47,12 @@ export function BoardPage() {
   async function approve(p: Pipeline) {
     const { owner, name } = splitRepo(p.repo)
     setBusy(`${p.repo}-${p.number}`)
-    setActionErr("")
     try {
       await api.approve(owner, name, p.number)
+      toast.success(t("approved"))
       await pipes.reload()
     } catch (err) {
-      setActionErr(err instanceof Error ? err.message : t("loadError"))
+      toast.error(err instanceof Error ? err.message : t("loadError"))
     } finally {
       setBusy("")
     }
@@ -61,12 +61,12 @@ export function BoardPage() {
   async function rerun(p: Pipeline) {
     const { owner, name } = splitRepo(p.repo)
     setBusy(`${p.repo}-${p.number}`)
-    setActionErr("")
     try {
       const next = await api.rerun(owner, name, p.number)
+      toast.success(t("rerunQueued"))
       nav(pipelineHref(owner, name, next.number))
     } catch (err) {
-      setActionErr(err instanceof Error ? err.message : t("loadError"))
+      toast.error(err instanceof Error ? err.message : t("loadError"))
       setBusy("")
     }
   }
@@ -115,7 +115,7 @@ export function BoardPage() {
 
   return (
     <PagedList
-      list={{ ...pipes, error: pipes.error || actionErr }}
+      list={pipes}
       emptyText={t("inboxEmpty")}
       skeleton="lines"
     >

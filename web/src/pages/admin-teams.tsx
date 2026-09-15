@@ -1,5 +1,6 @@
-import { type FormEvent, useState } from "react"
+import { type FormEvent } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
+import { toast } from "sonner"
 
 import { AddPersonMenu, PermSelect, permLabel } from "@/components/access-fields"
 import { PageFrame } from "@/components/page-frame"
@@ -18,19 +19,18 @@ import { displayName } from "@/lib/user"
 
 function CreateTeamMenu({ onCreated }: { onCreated: (name: string) => void }) {
   const t = useT()
-  const [err, setErr] = useState("")
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
     const name = String(fd.get("name") || "").trim()
     if (!name) return
-    setErr("")
     try {
       await api.createTeam(name)
+      toast.success(t("teamCreated"))
       e.currentTarget.reset()
       onCreated(name)
     } catch (e) {
-      setErr(e instanceof Error ? e.message : t("loadError"))
+      toast.error(e instanceof Error ? e.message : t("loadError"))
     }
   }
   return (
@@ -43,7 +43,6 @@ function CreateTeamMenu({ onCreated }: { onCreated: (name: string) => void }) {
               <FieldLabel htmlFor="name">{t("name")}</FieldLabel>
               <Input id="name" name="name" required autoComplete="off" />
             </Field>
-            {err ? <p className="text-sm text-destructive">{err}</p> : null}
             <Button type="submit">{t("create")}</Button>
           </FieldGroup>
         </form>
@@ -59,9 +58,14 @@ function AddRepoMenu({ team, onAdd }: { team: string; onAdd: () => Promise<void>
     const fd = new FormData(e.currentTarget)
     const repo = String(fd.get("repo") || "").trim()
     if (!repo) return
-    await api.addTeamRepo(team, repo)
-    e.currentTarget.reset()
-    await onAdd()
+    try {
+      await api.addTeamRepo(team, repo)
+      toast.success(t("repoAdded"))
+      e.currentTarget.reset()
+      await onAdd()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("loadError"))
+    }
   }
   return (
     <Popover>
@@ -157,6 +161,7 @@ export function AdminTeamPage() {
                 exclude={(data?.members ?? []).map((m) => m.login)}
                 onAdd={async (login, permission) => {
                   await api.setTeamMember(team, login, permission)
+                  toast.success(t("memberAdded"))
                   await load.reload()
                 }}
               />
@@ -166,7 +171,13 @@ export function AdminTeamPage() {
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  void api.deleteTeam(team).then(() => nav("/admin/teams"))
+                  void api
+                    .deleteTeam(team)
+                    .then(() => {
+                      toast.success(t("teamDeleted"))
+                      nav("/admin/teams")
+                    })
+                    .catch((e) => toast.error(e instanceof Error ? e.message : t("loadError")))
                 }}
               >
                 {t("deleteTeam")}
@@ -206,7 +217,15 @@ export function AdminTeamPage() {
                               type="button"
                               size="sm"
                               variant="outline"
-                              onClick={() => void api.removeTeamRepo(team, name).then(() => load.reload())}
+                              onClick={() =>
+                                void api
+                                  .removeTeamRepo(team, name)
+                                  .then(async () => {
+                                    toast.success(t("repoRemoved"))
+                                    await load.reload()
+                                  })
+                                  .catch((e) => toast.error(e instanceof Error ? e.message : t("loadError")))
+                              }
                             >
                               {t("remove")}
                             </Button>
@@ -241,7 +260,13 @@ export function AdminTeamPage() {
                           <PermSelect
                             value={m.permission}
                             onChange={(perm) => {
-                              void api.setTeamMember(team, m.login, perm).then(() => load.reload())
+                              void api
+                                .setTeamMember(team, m.login, perm)
+                                .then(async () => {
+                                  toast.success(t("accessUpdated"))
+                                  await load.reload()
+                                })
+                                .catch((e) => toast.error(e instanceof Error ? e.message : t("loadError")))
                             }}
                           />
                         ) : (
@@ -254,7 +279,15 @@ export function AdminTeamPage() {
                             type="button"
                             size="sm"
                             variant="outline"
-                            onClick={() => void api.removeTeamMember(team, m.login).then(() => load.reload())}
+                            onClick={() =>
+                              void api
+                                .removeTeamMember(team, m.login)
+                                .then(async () => {
+                                  toast.success(t("memberRemoved"))
+                                  await load.reload()
+                                })
+                                .catch((e) => toast.error(e instanceof Error ? e.message : t("loadError")))
+                            }
                           >
                             {t("remove")}
                           </Button>

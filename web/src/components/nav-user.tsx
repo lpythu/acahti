@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom"
 import { LogOutIcon } from "lucide-react"
+import { toast } from "sonner"
 
 import {
   DropdownMenu,
@@ -22,9 +23,14 @@ export function NavUser({
   const { clear } = useSession()
 
   async function logout() {
-    await api.logout()
-    clear()
-    nav("/login", { replace: true })
+    try {
+      await api.logout()
+      clear()
+      toast.success(t("logoutSuccess"))
+      nav("/login", { replace: true })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("logoutFailed"))
+    }
   }
 
   return (

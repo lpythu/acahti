@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react"
 import { Link } from "react-router-dom"
-import { ShieldIcon } from "lucide-react"
+import { CheckIcon, CopyIcon, ShieldIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 
 import { PermSelect, type AccessPerm } from "@/components/access-fields"
@@ -21,11 +21,14 @@ import { api, repoName, splitRepo, type Invite, type UserRepoPerm } from "@/lib/
 import { onboardNote } from "@/lib/onboard"
 import { useSession } from "@/lib/session"
 
-async function copyText(text: string) {
+async function copyText(text: string, ok: string, fail: string) {
   try {
     await navigator.clipboard.writeText(text)
+    toast.success(ok)
+    return true
   } catch {
-    /* note stays in the menu for a manual copy */
+    toast.error(fail)
+    return false
   }
 }
 
@@ -77,13 +80,41 @@ function AuthorInput({
 }
 
 function PasswordInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const t = useT()
+  const [focused, setFocused] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const known = value.trim() !== ""
+
+  async function copy() {
+    if (!known) return
+    if (await copyText(value, t("copied"), t("copyFailed"))) {
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1500)
+    }
+  }
+
   return (
-    <Input
-      type="password"
-      autoComplete="new-password"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    />
+    <div className="relative min-w-36">
+      <Input
+        type="password"
+        autoComplete="new-password"
+        aria-label={t("password")}
+        value={known || focused ? value : "••••••••"}
+        className="pr-7"
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <button
+        type="button"
+        disabled={!known}
+        aria-label={t("copy")}
+        className="absolute top-1/2 right-1.5 -translate-y-1/2 text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+        onClick={() => void copy()}
+      >
+        {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+      </button>
+    </div>
   )
 }
 
@@ -148,15 +179,11 @@ function CreateUserMenu({
 }) {
   const t = useT()
   const [note, setNote] = useState("")
-  const [err, setErr] = useState("")
 
   return (
     <Popover
       onOpenChange={(open) => {
-        if (!open) {
-          setNote("")
-          setErr("")
-        }
+        if (!open) setNote("")
       }}
     >
       <PopoverTrigger render={<Button type="button" size="sm" />}>{t("createUser")}</PopoverTrigger>
@@ -167,18 +194,18 @@ function CreateUserMenu({
             const fd = new FormData(e.currentTarget)
             const login = String(fd.get("username") || "").trim()
             const password = String(fd.get("password") || "")
-            setErr("")
             const form = e.currentTarget
             void onCreate(login, password, admin)
               .then((created) => {
+                toast.success(t("userCreated"))
                 const text = onboardNote(root, created, password)
                 setNote(text)
-                void copyText(text)
+                void copyText(text, t("copied"), t("copyFailed"))
                 form.reset()
                 setAdmin(false)
               })
               .catch((e: unknown) => {
-                setErr(e instanceof Error ? e.message : t("loadError"))
+                toast.error(e instanceof Error ? e.message : t("loadError"))
               })
           }}
         >
@@ -198,7 +225,6 @@ function CreateUserMenu({
             <Button type="submit">{t("create")}</Button>
           </FieldGroup>
         </form>
-        {err ? <p className="text-sm text-destructive">{err}</p> : null}
         {note ? (
           <>
             <p className="text-sm text-muted-foreground">{t("onboardHint")}</p>
@@ -256,7 +282,6 @@ function UserReposMenu({
   const t = useT()
   const [open, setOpen] = useState(false)
   const [rows, setRows] = useState(initial)
-  const [err, setErr] = useState("")
 
   useEffect(() => {
     setRows(initial)
@@ -273,50 +298,63 @@ function UserReposMenu({
       <PopoverTrigger render={<Button type="button" size="sm" variant="outline" />}>
         {t("userRepos")}
       </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className="flex max-h-80 w-max min-w-48 max-w-[min(22rem,calc(100vw-2rem))] flex-col gap-2 overflow-y-auto"
-      >
+      <PopoverContent align="start" className="flex max-h-80 w-[min(24rem,calc(100vw-2rem))] flex-col gap-2 overflow-y-auto">
         {isAdmin ? <p className="text-sm text-muted-foreground">{t("orgAdminRepos")}</p> : null}
-        <MenuPanel error={err} empty={!rows.length && !isAdmin ? t("noUserRepos") : undefined}>
+        <MenuPanel empty={!rows.length && !isAdmin ? t("noUserRepos") : undefined}>
           {rows.length ? (
             <ul className="flex flex-col gap-1.5">
               {rows.map((row) => {
                 const { owner, name } = splitRepo(row.repo)
                 const direct = Boolean(row.direct)
+                const via = repoViaLabel(t, row)
                 return (
-                  <li key={row.repo} className="flex items-center gap-2 text-sm">
-                    <Link className="min-w-0 truncate hover:underline" to={`/repos/${owner}/${name}`}>
+                  <li
+                    key={row.repo}
+                    className="grid grid-cols-[minmax(0,1fr)_minmax(0,8rem)_6rem_1.5rem] items-center gap-x-2 text-sm"
+                  >
+                    <Link
+                      className="min-w-0 truncate hover:underline"
+                      title={repoName(row.repo)}
+                      to={`/repos/${owner}/${name}`}
+                    >
                       {repoName(row.repo)}
                     </Link>
-                    <span className="shrink-0 text-muted-foreground">{repoViaLabel(t, row)}</span>
+                    <span className="min-w-0 truncate text-muted-foreground" title={via}>
+                      {via}
+                    </span>
                     <PermSelect
                       value={row.permission}
-                      className="w-24"
+                      className="w-full"
                       onChange={(perm: AccessPerm) => {
-                        setErr("")
                         void api
                           .setCollaborator(owner, name, login, perm)
-                          .then(() => refresh())
-                          .catch((e) => setErr(e instanceof Error ? e.message : t("loadError")))
+                          .then(async () => {
+                            toast.success(t("accessUpdated"))
+                            await refresh()
+                          })
+                          .catch((e) => toast.error(e instanceof Error ? e.message : t("loadError")))
                       }}
                     />
                     <Button
                       type="button"
-                      size="sm"
-                      variant="outline"
+                      size="icon-xs"
+                      variant="ghost"
                       disabled={!direct}
-                      title={!direct ? t("inheritRemoveHint") : undefined}
+                      aria-label={t("remove")}
+                      title={!direct ? t("inheritRemoveHint") : t("remove")}
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive disabled:text-muted-foreground"
                       onClick={() => {
                         if (!direct) return
-                        setErr("")
                         void api
                           .removeCollaborator(owner, name, login)
-                          .then(() => refresh())
-                          .catch((e) => setErr(e instanceof Error ? e.message : t("loadError")))
+                          .then(async () => {
+                            toast.success(t("accessRemoved"))
+                            await refresh()
+                          })
+                          .catch((e) => toast.error(e instanceof Error ? e.message : t("loadError")))
                       }}
                     >
-                      {t("remove")}
+                      <Trash2Icon />
                     </Button>
                   </li>
                 )
@@ -340,34 +378,28 @@ function OnboardMenu({
 }) {
   const t = useT()
   const [pw, setPw] = useState("")
-  const [err, setErr] = useState("")
 
   async function prepare() {
-    setErr("")
     const next = password.trim()
     if (!next) {
-      setErr(t("passwordRequired"))
+      toast.error(t("passwordRequired"))
       return
     }
     setPw(next)
-    await copyText(onboardNote(root, login, next))
+    await copyText(onboardNote(root, login, next), t("copied"), t("copyFailed"))
   }
 
   return (
     <Popover
       onOpenChange={(open) => {
         if (open) void prepare()
-        else {
-          setPw("")
-          setErr("")
-        }
+        else setPw("")
       }}
     >
       <PopoverTrigger render={<Button type="button" size="sm" disabled={!root} />}>
         {t("join")}
       </PopoverTrigger>
       <PopoverContent className="flex w-96 flex-col gap-3">
-        {err ? <p className="text-sm text-destructive">{err}</p> : null}
         {pw ? (
           <>
             <p className="text-sm text-muted-foreground">{t("onboardHint")}</p>
@@ -388,7 +420,6 @@ export function UsersPage() {
     const r = await api.invites()
     return { invites: r.invites || [], join: r.join }
   }, [])
-  const [formErr, setFormErr] = useState("")
   const [admin, setAdmin] = useState(false)
   const [resets, setResets] = useState<Record<string, string>>({})
   const users = usersLoad.items
@@ -418,7 +449,7 @@ export function UsersPage() {
 
   return (
     <PagedList
-      list={{ ...usersLoad, error: usersLoad.error || formErr }}
+      list={usersLoad}
       className="gap-6"
       skeleton="table"
       header={
@@ -429,17 +460,22 @@ export function UsersPage() {
               joinBase={joinBase}
               error={invitesLoad.error ? t("invitesUnavailable") : undefined}
               onCreate={async () => {
-                setFormErr("")
                 try {
                   await api.createInvite()
+                  toast.success(t("inviteCreated"))
                   await invitesLoad.reload()
                 } catch (err) {
-                  setFormErr(err instanceof Error ? err.message : t("loadError"))
+                  toast.error(err instanceof Error ? err.message : t("loadError"))
                 }
               }}
               onRevoke={async (code) => {
-                await api.deleteInvite(code)
-                await invitesLoad.reload()
+                try {
+                  await api.deleteInvite(code)
+                  toast.success(t("inviteRevoked"))
+                  await invitesLoad.reload()
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : t("loadError"))
+                }
               }}
             />
             <CreateUserMenu admin={admin} setAdmin={setAdmin} root={root} onCreate={onCreate} />
