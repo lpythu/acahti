@@ -17,11 +17,13 @@ export function PipelineRunRow({
   hideRepo,
   busy,
   onRun,
+  onApprove,
 }: {
   pipe: Pipeline
   hideRepo?: boolean
   busy?: boolean
   onRun?: () => void
+  onApprove?: () => void
 }) {
   const t = useT()
   const locale = useLocale()
@@ -41,6 +43,7 @@ export function PipelineRunRow({
   const exact = formatUnix(pipe.started || pipe.created)
   const duration = formatDuration(pipe.started, pipe.finished, pipe.status)
   const jobs = jobDotsOf(pipe)
+  const blocked = pipe.status === "blocked"
 
   return (
     <li className="flex items-center gap-3 px-3 py-3 hover:bg-muted/50">
@@ -72,7 +75,11 @@ export function PipelineRunRow({
           </span>
         ) : null}
       </div>
-      {onRun ? (
+      {blocked && onApprove ? (
+        <Button type="button" size="sm" disabled={busy} onClick={onApprove}>
+          {t("approve")}
+        </Button>
+      ) : onRun ? (
         <Button
           type="button"
           size="icon-xs"

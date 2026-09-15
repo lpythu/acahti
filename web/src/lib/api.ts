@@ -171,6 +171,8 @@ export type Commit = {
   parents?: { sha: string }[]
   files?: CommitFile[]
   stats?: CommitStats
+  check_status?: string
+  check_url?: string
 }
 
 export type ContentEntry = {
@@ -266,8 +268,7 @@ export const api = {
   deleteInvite: (code: string) => req<{ ok: boolean }>(`/ui/invites/${code}`, { method: "DELETE" }),
   logout: () => req<{ ok: boolean }>("/ui/logout", { method: "POST" }),
   boardPRs: (q?: PageQuery) => req<Page<PR>>(`/ui/board${pageQS(q, { section: "prs" })}`),
-  boardBlocked: (q?: PageQuery) => req<Page<Pipeline>>(`/ui/board${pageQS(q, { section: "blocked" })}`),
-  boardFailed: (q?: PageQuery) => req<Page<Pipeline>>(`/ui/board${pageQS(q, { section: "failed" })}`),
+  boardPipes: (q?: PageQuery) => req<Page<Pipeline>>(`/ui/board${pageQS(q, { section: "pipes" })}`),
   users: (q?: PageQuery) => req<Page<User>>(`/ui/users${pageQS(q)}`),
   createUser: (username: string, password: string, admin: boolean) =>
     req<{ user: User }>("/ui/users", {
@@ -311,6 +312,25 @@ export const api = {
       method: "DELETE",
     }),
   repoAccess: (owner: string, name: string) => req<RepoAccess>(`/ui/repos/${owner}/${name}/access`),
+  moveRepo: async (owner: string, name: string, team: string, from = "") => {
+    const listed = await req<Page<RepoTeam>>(`/ui/repos${pageQS({ page_size: 200 }, { teams: "1" })}`)
+    if (!listed.items.some((row) => row.team === team)) {
+      try {
+        await req<TeamAccess>("/ui/teams", { method: "POST", body: JSON.stringify({ name: team }) })
+      } catch {
+        /* already exists */
+      }
+    }
+    if (from && from !== team) {
+      await req<{ ok: boolean }>(`/ui/teams/${encodeURIComponent(from)}/repos/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+      })
+    }
+    await req<{ ok: boolean }>(`/ui/teams/${encodeURIComponent(team)}/repos/${encodeURIComponent(name)}`, {
+      method: "PUT",
+    })
+    return req<RepoAccess>(`/ui/repos/${owner}/${name}/access`)
+  },
   setCollaborator: (owner: string, name: string, login: string, permission: string) =>
     req<{ ok: boolean }>(`/ui/repos/${owner}/${name}/collaborators/${encodeURIComponent(login)}`, {
       method: "PUT",
@@ -330,8 +350,8 @@ export const api = {
     req<Page<Commit>>(`/ui/repos/${owner}/${name}/commits${pageQS(opts, { ref: opts?.ref })}`),
   branches: (owner: string, name: string, q?: PageQuery) =>
     req<Page<BranchInfo>>(`/ui/repos/${owner}/${name}/branches${pageQS(q)}`),
-  pulls: (owner: string, name: string, q?: PageQuery) =>
-    req<Page<PR>>(`/ui/repos/${owner}/${name}/pulls${pageQS(q)}`),
+  pulls: (owner: string, name: string, q?: PageQuery & { state?: string }) =>
+    req<Page<PR>>(`/ui/repos/${owner}/${name}/pulls${pageQS(q, { state: q?.state })}`),
   commit: (owner: string, name: string, sha: string, q?: PageQuery) =>
     req<CommitDetail>(`/ui/repos/${owner}/${name}/commits/${encodeURIComponent(sha)}${pageQS(q)}`),
   pull: (owner: string, name: string, n: number) =>
@@ -366,5 +386,10 @@ export const api = {
 export function splitRepo(full: string): { owner: string; name: string } {
   const [owner, name] = full.split("/")
   return { owner: owner || "", name: name || full }
+}
+
+/** Display name without org prefix (saidc/ops → ops). */
+export function repoName(full: string): string {
+  return splitRepo(full).name
 }
 

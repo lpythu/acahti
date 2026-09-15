@@ -1,4 +1,4 @@
-import { splitRepo, type Pipeline, type Step } from "@/lib/api"
+import { repoName, type Pipeline, type Step } from "@/lib/api"
 import type { MessageKey } from "@/i18n/messages"
 
 export type Stage = { name: string; state: string }
@@ -206,11 +206,10 @@ export function triggerKey(event?: string): MessageKey {
 }
 
 export function triggerVars(p: Pipeline): Record<string, string> {
-  const { name } = splitRepo(p.repo)
   const ref = shortRef(p.ref) || p.branch || p.title || ""
   return {
     author: p.author || "—",
-    repo: name,
+    repo: repoName(p.repo),
     branch: p.branch || ref,
     ref,
   }

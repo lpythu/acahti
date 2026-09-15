@@ -150,8 +150,8 @@ func TestAcahtiCheckURL(t *testing.T) {
 		{"", ""},
 		{"https://acahti.example.com/ci", "https://acahti.example.com/pipelines"},
 		{"https://acahti.example.com/ci/", "https://acahti.example.com/pipelines"},
-		{"https://acahti.example.com/ci/acme/demo/12", "https://acahti.example.com/pipelines/acme/demo/12"},
-		{"https://acahti.example.com/ci/repos/acme/demo/pipeline/12", "https://acahti.example.com/pipelines/acme/demo/12"},
+		{"https://acahti.example.com/ci/acme/demo/12", "https://acahti.example.com/repos/acme/demo/pipelines/12"},
+		{"https://acahti.example.com/ci/repos/acme/demo/pipeline/12", "https://acahti.example.com/repos/acme/demo/pipelines/12"},
 		{"https://acahti.example.com/repos/acme/demo", "https://acahti.example.com/repos/acme/demo"},
 	}
 	for _, tc := range cases {

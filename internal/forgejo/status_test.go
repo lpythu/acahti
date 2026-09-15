@@ -63,6 +63,21 @@ func TestNormalizeRef(t *testing.T) {
 	}
 }
 
+func TestRollupStatus(t *testing.T) {
+	if RollupStatus(nil) != "" {
+		t.Fatal("empty")
+	}
+	if got := RollupStatus([]Status{{Status: "success"}, {Status: "pending"}}); got != "running" {
+		t.Fatalf("pending=%s", got)
+	}
+	if got := RollupStatus([]Status{{Status: "success"}, {Status: "failure"}}); got != "failure" {
+		t.Fatalf("fail=%s", got)
+	}
+	if got := RollupStatus([]Status{{Status: "success"}, {Status: "success"}}); got != "success" {
+		t.Fatalf("ok=%s", got)
+	}
+}
+
 func TestChecksGreenEmptyIsGreen(t *testing.T) {
 	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`[]`))

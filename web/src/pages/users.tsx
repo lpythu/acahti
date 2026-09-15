@@ -340,8 +340,7 @@ export function UsersPage() {
       className="gap-6"
       skeleton="table"
       header={
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <p className="text-sm text-muted-foreground">{t("usersDesc")}</p>
+        <div className="flex flex-wrap items-start justify-end gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <InviteMenu
               invites={invites}

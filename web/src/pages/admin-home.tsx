@@ -48,7 +48,6 @@ export function AdminHomePage() {
       loading={loading}
       error={error}
       className="gap-6"
-      header={<p className="text-sm text-muted-foreground">{t("adminHomeDesc")}</p>}
     >
       {stack ? (
         <section className="flex flex-col gap-2">

@@ -27,7 +27,7 @@ function ShellFrame({ me }: { me: Me }) {
       className="flex h-svh flex-col overflow-hidden"
       style={
         {
-          "--sidebar-width": "15rem",
+          "--sidebar-width": "13rem",
           "--header-height": "3rem",
         } as React.CSSProperties
       }

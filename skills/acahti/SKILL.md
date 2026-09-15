@@ -50,7 +50,7 @@ Trigger CI with `git push`, a tag, or opening a PR. Do not use `pipeline_trigger
 3. Failed: `pipeline_list` `{repo: owner/name, sha}` (sha prefix) → `pipeline_get` → `pipeline_log` (omit `step`)
 4. Fix and push, or `pipeline_rerun`. `pipeline_cancel` only for a stuck run
 5. Green (`ok` and `done`): `pr_merge`. `blocked`: `deploy_approve`
-6. Island triage: `inbox` `{section: prs|blocked|failed}`
+6. Island triage: `inbox` `{section: pipes|prs}` (default pipes: latest blocked/failed per repo)
 
 `pr_merge` succeeds when the newest pipeline number on the head SHA is green. Close leftover heads with `pr_close` then `ref_delete` (`dev`, `heads/dev`, or `refs/heads/dev`).
 

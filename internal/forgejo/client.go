@@ -628,8 +628,10 @@ type Commit struct {
 	Parents   []struct {
 		SHA string `json:"sha"`
 	} `json:"parents"`
-	Files []CommitFile `json:"files"`
-	Stats *CommitStats `json:"stats"`
+	Files       []CommitFile `json:"files"`
+	Stats       *CommitStats `json:"stats"`
+	CheckStatus string       `json:"check_status,omitempty"`
+	CheckURL    string       `json:"check_url,omitempty"`
 }
 
 type ContentEntry struct {
@@ -958,6 +960,35 @@ func (c *Client) ChecksGreen(owner, name, sha string) (bool, []Status, error) {
 		}
 	}
 	return ok, st, nil
+}
+
+// RollupStatus collapses per-context checks into one list icon state.
+// Empty when there are no statuses (no icon).
+func RollupStatus(st []Status) string {
+	if len(st) == 0 {
+		return ""
+	}
+	pending, failed, blocked := false, false, false
+	for _, s := range st {
+		switch strings.ToLower(s.Status) {
+		case "pending", "running":
+			pending = true
+		case "failure", "error", "killed", "declined":
+			failed = true
+		case "blocked":
+			blocked = true
+		}
+	}
+	if pending {
+		return "running"
+	}
+	if failed {
+		return "failure"
+	}
+	if blocked {
+		return "blocked"
+	}
+	return "success"
 }
 
 func (c *Client) ListPackages(owner, typ, query string, q page.Query) (page.Result[Package], error) {

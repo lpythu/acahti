@@ -121,22 +121,15 @@ func (p *Pages) Board(w http.ResponseWriter, r *http.Request) {
 	}
 	q := page.Parse(r)
 	switch r.URL.Query().Get("section") {
-	case "blocked":
-		out, err := p.Cat.BoardPipes(user, "blocked", q)
-		if err != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusOK, out)
-	case "failed":
-		out, err := p.Cat.BoardPipes(user, "failed", q)
+	case "prs":
+		out, err := p.Cat.BoardPRs(user, q)
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 			return
 		}
 		writeJSON(w, http.StatusOK, out)
 	default:
-		out, err := p.Cat.BoardPRs(user, q)
+		out, err := p.Cat.BoardPipes(user, q)
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 			return

@@ -3,6 +3,8 @@ import { Link, useSearchParams } from "react-router-dom"
 import { CheckIcon, CopyIcon, FolderTreeIcon, GitBranchIcon } from "lucide-react"
 
 import { PagedList } from "@/components/paged-list"
+import { RunStatusIcon } from "@/components/run-status-icon"
+import { statusText } from "@/components/status-badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useLoad } from "@/hooks/use-load"
@@ -19,12 +21,16 @@ function CommitRow({ owner, name, c }: { owner: string; name: string; c: Commit 
   const href = `/repos/${owner}/${name}/commits/${c.sha}`
   const author = commitAuthor(c)
   const date = c.commit?.author?.date
+  const check = c.check_status
+  const checkHref = c.check_url || undefined
 
   async function copySha() {
     await navigator.clipboard.writeText(c.sha)
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1500)
   }
+
+  const checkIcon = check ? <RunStatusIcon status={check} className="size-4" /> : null
 
   return (
     <li className="flex items-start justify-between gap-3 px-3 py-3">
@@ -43,6 +49,22 @@ function CommitRow({ owner, name, c }: { owner: string; name: string; c: Commit 
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1">
+        {checkIcon ? (
+          checkHref ? (
+            <Link
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-muted"
+              to={checkHref}
+              aria-label={statusText(check!, t)}
+              title={statusText(check!, t)}
+            >
+              {checkIcon}
+            </Link>
+          ) : (
+            <span className="rounded-md p-1.5" aria-label={statusText(check!, t)} title={statusText(check!, t)}>
+              {checkIcon}
+            </span>
+          )
+        ) : null}
         <button
           type="button"
           className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"

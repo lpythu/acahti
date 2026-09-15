@@ -29,10 +29,12 @@ export function parsePackagePath(path: string): { kind: string; name: string } |
 }
 
 export function pipelineHref(owner: string, name: string, n: number | string) {
-  return `/pipelines/${owner}/${name}/${n}`
+  return `/repos/${owner}/${name}/pipelines/${n}`
 }
 
 export function parsePipelinePath(path: string): { owner: string; name: string; number?: string } | null {
-  const m = path.match(/^\/pipelines\/([^/]+)\/([^/]+)(?:\/([^/]+))?$/)
-  return m ? { owner: m[1], name: m[2], number: m[3] } : null
+  const underRepo = path.match(/^\/repos\/([^/]+)\/([^/]+)\/pipelines(?:\/([^/]+))?$/)
+  if (underRepo) return { owner: underRepo[1], name: underRepo[2], number: underRepo[3] }
+  const legacy = path.match(/^\/pipelines\/([^/]+)\/([^/]+)(?:\/([^/]+))?$/)
+  return legacy ? { owner: legacy[1], name: legacy[2], number: legacy[3] } : null
 }

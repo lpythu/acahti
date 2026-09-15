@@ -6,7 +6,7 @@ import { PipelineRunRow } from "@/components/pipeline-run-row"
 import { useEvents } from "@/hooks/use-events"
 import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
-import { api, splitRepo, type Pipeline } from "@/lib/api"
+import { api, repoName, splitRepo, type Pipeline } from "@/lib/api"
 import { pipelineHref } from "@/lib/nav"
 import { asPipeline, upsertRun } from "@/lib/pipeline"
 
@@ -44,8 +44,12 @@ export function PipelinesPage() {
     <PagedList
       list={{ ...list, error: list.error || actionErr }}
       emptyText={t("noPipelines")}
-      header={<p className="text-sm text-muted-foreground">{team || repo || t("pipelinesDesc")}</p>}
       skeleton="lines"
+      header={
+        team || repo ? (
+          <p className="text-sm text-muted-foreground">{team || repoName(repo)}</p>
+        ) : undefined
+      }
     >
       {(items) => (
         <ul className="divide-y rounded-md border">

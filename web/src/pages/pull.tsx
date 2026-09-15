@@ -44,7 +44,7 @@ export function PullPage() {
         <>
           <div>
             <Link className="text-sm text-muted-foreground hover:underline" to={`/repos/${owner}/${name}/pulls`}>
-              {owner}/{name}
+              {name}
             </Link>
             <h2 className="text-lg font-medium">
               #{pr.number} {pr.title}

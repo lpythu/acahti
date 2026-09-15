@@ -52,11 +52,26 @@ function SidebarCollapseToggle() {
   )
 }
 
+type NavItem = { title: string; url: string; icon?: ReactNode; end?: boolean; active?: boolean }
+
 function secondaryItems(
   path: string,
   ref: string,
-  t: (k: "files" | "commits" | "branches" | "tabPulls" | "tabPipes" | "access" | "adminHome" | "users") => string,
-): { title: string; url: string; icon?: ReactNode; end?: boolean }[] {
+  section: string,
+  t: (
+    k:
+      | "files"
+      | "commits"
+      | "branches"
+      | "tabPulls"
+      | "tabPipes"
+      | "access"
+      | "adminHome"
+      | "users"
+      | "pipelines"
+      | "prs",
+  ) => string,
+): NavItem[] {
   const base = repoBase(path)
   const q = ref ? `?ref=${encodeURIComponent(ref)}` : ""
   if (base) {
@@ -67,6 +82,23 @@ function secondaryItems(
       { title: t("tabPulls"), url: `${base}/pulls`, icon: <GitPullRequestIcon /> },
       { title: t("tabPipes"), url: `${base}/pipelines`, icon: <WorkflowIcon /> },
       { title: t("access"), url: `${base}/access`, icon: <LockIcon /> },
+    ]
+  }
+  if (path === "/board") {
+    return [
+      {
+        title: t("pipelines"),
+        url: "/board",
+        icon: <WorkflowIcon />,
+        end: true,
+        active: section !== "prs",
+      },
+      {
+        title: t("prs"),
+        url: "/board?section=prs",
+        icon: <GitPullRequestIcon />,
+        active: section === "prs",
+      },
     ]
   }
   if (path.startsWith("/admin")) {
@@ -80,9 +112,9 @@ function secondaryItems(
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const t = useT()
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const [sp] = useSearchParams()
-  const items = secondaryItems(pathname, sp.get("ref") || "", t)
+  const items = secondaryItems(pathname, sp.get("ref") || "", sp.get("section") || "", t)
   const { isMobile } = useSidebar()
 
   return (
@@ -96,7 +128,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         {sectionOf(pathname) === "repos" && !repoBase(pathname) ? <ReposNavPanel /> : null}
         {sectionOf(pathname) === "pipelines" ? <PipelinesNavPanel /> : null}
         {sectionOf(pathname) === "packages" ? <PackagesNavPanel /> : null}
-        {items.length ? <NavMain items={items} active={pathname} /> : null}
+        {items.length ? <NavMain items={items} active={pathname} search={search} /> : null}
       </SidebarContent>
       {isMobile ? null : (
         <SidebarFooter className="mt-auto p-2">
@@ -109,6 +141,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
 export function sidebarHasNav(path: string): boolean {
   return (
+    path.startsWith("/board") ||
     path.startsWith("/repos") ||
     path.startsWith("/pipelines") ||
     path.startsWith("/packages") ||

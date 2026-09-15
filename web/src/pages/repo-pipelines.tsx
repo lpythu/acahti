@@ -9,6 +9,7 @@ import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api } from "@/lib/api"
 import { asPipeline, upsertRun } from "@/lib/pipeline"
+import { pipelineHref } from "@/lib/nav"
 import { useRepo } from "@/pages/repo-layout"
 
 export function RepoPipelinesPage() {
@@ -30,7 +31,7 @@ export function RepoPipelinesPage() {
     setActionErr("")
     try {
       const p = await api.trigger(owner, name, data?.repo.default_branch || "dev")
-      nav(`/pipelines/${owner}/${name}/${p.number}`)
+      nav(pipelineHref(owner, name, p.number))
     } catch (err) {
       setActionErr(err instanceof Error ? err.message : t("loadError"))
       setBusy(false)

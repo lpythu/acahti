@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react"
 import { Link, useLocation, useSearchParams } from "react-router-dom"
-import { BookMarkedIcon, ChevronRightIcon, FolderIcon, SquareMinusIcon, SquarePlusIcon, WorkflowIcon } from "lucide-react"
+import { BookMarkedIcon, ChevronRightIcon, FolderIcon, ListChevronsDownUpIcon, ListChevronsUpDownIcon, WorkflowIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -20,7 +20,7 @@ import {
 import { useEvents } from "@/hooks/use-events"
 import { useLoad } from "@/hooks/use-load"
 import { useT } from "@/i18n/i18n"
-import { api, splitRepo, type NavTeam, type Repo } from "@/lib/api"
+import { api, repoName, splitRepo, type NavTeam, type Repo } from "@/lib/api"
 import { parsePipelinePath, repoBase } from "@/lib/nav"
 
 export type CodeTeamSection = "repos" | "pipelines"
@@ -35,10 +35,6 @@ function itemHref(section: CodeTeamSection, owner: string, name: string) {
     return `/pipelines?repo=${encodeURIComponent(`${owner}/${name}`)}`
   }
   return `/repos/${owner}/${name}`
-}
-
-function repoName(r: Repo) {
-  return splitRepo(r.full_name || r.name).name || r.name
 }
 
 function liveRepos(repos: Repo[] | undefined): Repo[] {
@@ -56,7 +52,7 @@ function filterTree(tree: NavTeam[], q: string, unassignedLabel: string): NavTea
       continue
     }
     const repos = row.repos.filter((r) => {
-      const name = repoName(r).toLowerCase()
+      const name = repoName(r.full_name || r.name).toLowerCase()
       const full = (r.full_name || "").toLowerCase()
       return name.includes(needle) || full.includes(needle)
     })
@@ -215,7 +211,7 @@ export function CodeTeamNav({ section }: { section: CodeTeamSection }) {
                 setOpenByKey(Object.fromEntries(teams.map((row) => [row.team, next])))
               }}
             >
-              {allOpen ? <SquareMinusIcon /> : <SquarePlusIcon />}
+              {allOpen ? <ListChevronsDownUpIcon /> : <ListChevronsUpDownIcon />}
             </SidebarGroupAction>
           )}
           <SidebarGroupContent>

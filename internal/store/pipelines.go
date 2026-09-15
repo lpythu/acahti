@@ -129,6 +129,44 @@ created, started, finished, jobs FROM pipelines WHERE 1=1`)
 	return page.Clip(items, q), nil
 }
 
+// LatestByRepo returns the newest pipeline for each repo (by number).
+func (s *Store) LatestByRepo(repos []string) ([]woodpecker.Pipeline, error) {
+	if !s.ready() {
+		return nil, nil
+	}
+	if repos != nil && len(repos) == 0 {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	var (
+		q    string
+		args []any
+	)
+	if repos == nil {
+		q = `SELECT DISTINCT ON (repo) repo, number, status, event, branch, ref, title, message, author, avatar, commit, error,
+created, started, finished, jobs FROM pipelines ORDER BY repo, number DESC`
+	} else {
+		args = append(args, repos)
+		q = `SELECT DISTINCT ON (repo) repo, number, status, event, branch, ref, title, message, author, avatar, commit, error,
+created, started, finished, jobs FROM pipelines WHERE repo = ANY($1) ORDER BY repo, number DESC`
+	}
+	rows, err := s.pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []woodpecker.Pipeline
+	for rows.Next() {
+		p, err := scanPipe(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, p)
+	}
+	return items, rows.Err()
+}
+
 type row interface {
 	Scan(dest ...any) error
 }

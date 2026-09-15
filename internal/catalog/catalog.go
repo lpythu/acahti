@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/url"
 	"path"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -293,7 +294,47 @@ func (c *Catalog) ListCommits(user, owner, name, ref string, q page.Query) (page
 	} else if err := c.seeOK(user, owner, name); err != nil {
 		return page.Result[forgejo.Commit]{}, err
 	}
-	return c.FJ.ListCommits(owner, name, ref, q)
+	res, err := c.FJ.ListCommits(owner, name, ref, q)
+	if err != nil {
+		return page.Result[forgejo.Commit]{}, err
+	}
+	c.paintCommitChecks(owner, name, res.Items)
+	return res, nil
+}
+
+func (c *Catalog) paintCommitChecks(owner, name string, items []forgejo.Commit) {
+	if c.FJ == nil || !c.FJ.Ready() || len(items) == 0 {
+		return
+	}
+	var wg sync.WaitGroup
+	for i := range items {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			st, err := c.FJ.CommitStatuses(owner, name, items[i].SHA)
+			if err != nil || len(st) == 0 {
+				return
+			}
+			st = forgejo.LatestStatuses(forgejo.LatestRound(st))
+			c.rewriteChecks(st)
+			items[i].CheckStatus = forgejo.RollupStatus(st)
+			for _, s := range st {
+				if s.TargetURL == "" {
+					continue
+				}
+				if u, err := url.Parse(s.TargetURL); err == nil && u.Path != "" {
+					items[i].CheckURL = u.Path
+					if u.RawQuery != "" {
+						items[i].CheckURL += "?" + u.RawQuery
+					}
+				} else {
+					items[i].CheckURL = s.TargetURL
+				}
+				break
+			}
+		}(i)
+	}
+	wg.Wait()
 }
 
 func (c *Catalog) ListPulls(user, owner, name, state string, q page.Query) (page.Result[forgejo.PR], error) {
@@ -454,7 +495,7 @@ func (c *Catalog) acahtiCheckURL(raw string) string {
 	rest = strings.ReplaceAll(rest, "/pipeline/", "/")
 	parts := strings.Split(rest, "/")
 	if len(parts) >= 3 && parts[0] != "" && parts[1] != "" && parts[2] != "" {
-		return root + "/pipelines/" + parts[0] + "/" + parts[1] + "/" + parts[2]
+		return root + "/repos/" + parts[0] + "/" + parts[1] + "/pipelines/" + parts[2]
 	}
 	if len(parts) >= 2 && parts[0] != "" && parts[1] != "" {
 		return root + "/pipelines?repo=" + parts[0] + "/" + parts[1]
@@ -1103,25 +1144,43 @@ func (c *Catalog) BoardPRs(user string, q page.Query) (page.Result[forgejo.PR], 
 	return page.Take(matched, q), nil
 }
 
-func (c *Catalog) BoardPipes(user, kind string, q page.Query) (page.Result[woodpecker.Pipeline], error) {
+func (c *Catalog) BoardPipes(user string, q page.Query) (page.Result[woodpecker.Pipeline], error) {
 	names, err := c.visiblePipeRepos(user, "")
 	if err != nil {
 		return page.Result[woodpecker.Pipeline]{}, err
 	}
 	c.syncRecentPipelines(names)
-	f := store.Filter{Repos: names}
-	switch kind {
-	case "blocked":
-		f.Status = []string{"blocked"}
-	default:
-		f.Status = []string{"failure", "error", "killed", "declined"}
+	if c.Idx == nil {
+		return page.Of([]woodpecker.Pipeline{}, q, false), nil
 	}
-	res, err := c.listIndexed(f, q)
+	latest, err := c.Idx.LatestByRepo(names)
 	if err != nil {
 		return page.Result[woodpecker.Pipeline]{}, err
 	}
+	var attention []woodpecker.Pipeline
+	for _, p := range latest {
+		if boardPipeAttention(p.Status) {
+			attention = append(attention, p)
+		}
+	}
+	sort.SliceStable(attention, func(i, j int) bool {
+		if attention[i].Created != attention[j].Created {
+			return attention[i].Created > attention[j].Created
+		}
+		return attention[i].Number > attention[j].Number
+	})
+	res := page.Take(attention, q)
 	res.Items = c.paintPipes(res.Items)
 	return res, nil
+}
+
+func boardPipeAttention(status string) bool {
+	switch strings.ToLower(status) {
+	case "blocked", "failure", "error", "killed", "declined":
+		return true
+	default:
+		return false
+	}
 }
 
 func (c *Catalog) ListAgents(q page.Query) (page.Result[woodpecker.Agent], error) {

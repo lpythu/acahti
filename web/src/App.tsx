@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
+import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom"
 
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -27,6 +27,11 @@ import { JoinPage } from "@/pages/join"
 import { UsePage } from "@/pages/use"
 import { UsersPage } from "@/pages/users"
 
+function LegacyPipelineRedirect() {
+  const { owner = "", name = "", number = "" } = useParams()
+  return <Navigate to={`/repos/${owner}/${name}/pipelines/${number}`} replace />
+}
+
 export default function App() {
   return (
     <I18nProvider>
@@ -49,10 +54,11 @@ export default function App() {
                   <Route path="pulls" element={<RepoPullsPage />} />
                   <Route path="pulls/:number" element={<PullPage />} />
                   <Route path="pipelines" element={<RepoPipelinesPage />} />
+                  <Route path="pipelines/:number" element={<PipelinePage />} />
                   <Route path="access" element={<RepoAccessPage />} />
                 </Route>
                 <Route path="/pipelines" element={<PipelinesPage />} />
-                <Route path="/pipelines/:owner/:name/:number" element={<PipelinePage />} />
+                <Route path="/pipelines/:owner/:name/:number" element={<LegacyPipelineRedirect />} />
                 <Route path="/packages" element={<PackagesPage />} />
                 <Route path="/packages/:kind/*" element={<PackageDetailPage />} />
                 <Route element={<AdminGate />}>

@@ -1,18 +1,10 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 
 import { EmptyState } from "@/components/empty-state"
 import { PipelineJobs } from "@/components/pipeline-jobs"
 import { StatusBadge } from "@/components/status-badge"
 import { AutoHideScroll } from "@/components/ui/auto-hide-scroll"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
 import { Button } from "@/components/ui/button"
 import { CodeBlock } from "@/components/ui/code-block"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
@@ -24,6 +16,7 @@ import type { FileBlob, PipelineDetail, Step } from "@/lib/api"
 import { api } from "@/lib/api"
 import { formatUnix } from "@/lib/format"
 import { langOf } from "@/lib/lang"
+import { pipelineHref } from "@/lib/nav"
 import { asPipeline, declaredJobNames, jobsOf, triggerKey, triggerVars } from "@/lib/pipeline"
 
 export function PipelinePage() {
@@ -32,7 +25,6 @@ export function PipelinePage() {
   const { owner = "", name = "", number = "" } = useParams()
   const n = Number(number)
   const { data, error, loading, reload, apply } = useLoad(() => api.pipeline(owner, name, n), [owner, name, n])
-  const team = data?.team || ""
   const files = data?.files
   const p = data?.pipeline
   const [step, setStep] = useState<Step | null>(null)
@@ -80,7 +72,7 @@ export function PipelinePage() {
     setBusy(true)
     try {
       const next = await api.rerun(owner, name, n)
-      nav(`/pipelines/${owner}/${name}/${next.number}`)
+      nav(pipelineHref(owner, name, next.number))
     } finally {
       setBusy(false)
     }
@@ -125,35 +117,6 @@ export function PipelinePage() {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-start justify-between gap-3 border-b px-4 py-3 lg:px-6">
         <div className="min-w-0">
-          <Breadcrumb className="mb-2">
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink render={<Link to="/pipelines" />}>{t("pipelines")}</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              {team ? (
-                <>
-                  <BreadcrumbItem>
-                    <BreadcrumbLink render={<Link to={`/pipelines?team=${encodeURIComponent(team)}`} />}>
-                      {team}
-                    </BreadcrumbLink>
-                  </BreadcrumbItem>
-                  <BreadcrumbSeparator />
-                </>
-              ) : null}
-              <BreadcrumbItem>
-                <BreadcrumbLink
-                  render={<Link to={`/pipelines?repo=${encodeURIComponent(`${owner}/${name}`)}`} />}
-                >
-                  {name}
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>#{n}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-medium">
               #{n} {p.title || p.event || t("pipelines")}

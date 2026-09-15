@@ -98,14 +98,12 @@ function TeamPage({ team }: { team: string }) {
       error={load.error}
       header={
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-base font-medium">{team}</h1>
-            <p className="text-sm text-muted-foreground">{t("teamAccessDesc")}</p>
-          </div>
+          <h1 className="text-base font-medium">{team}</h1>
           {manage ? (
             <div className="flex flex-wrap items-center gap-2">
               <AddPersonMenu
                 title={t("addMember")}
+                exclude={(data?.members ?? []).map((m) => m.login)}
                 onAdd={async (login, permission) => {
                   await api.setTeamMember(team, login, permission)
                   await load.reload()
@@ -247,10 +245,11 @@ export function ReposPage() {
       emptyText={t("noRepos")}
       skeleton="table"
       header={
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <p className="text-sm text-muted-foreground">{t("reposDesc")}</p>
-          {me?.admin ? <CreateTeamMenu onCreated={(name) => nav(`/repos?team=${encodeURIComponent(name)}`)} /> : null}
-        </div>
+        me?.admin ? (
+          <div className="flex flex-wrap items-start justify-end gap-3">
+            <CreateTeamMenu onCreated={(name) => nav(`/repos?team=${encodeURIComponent(name)}`)} />
+          </div>
+        ) : undefined
       }
     >
       {(items) => (

@@ -19,7 +19,6 @@ export function PackagesPage() {
     <PagedList
       list={list}
       emptyText={t("noPackages")}
-      header={<p className="text-sm text-muted-foreground">{t("packagesDesc")}</p>}
       skeleton="table"
     >
       {(items) => (

@@ -1,167 +1,136 @@
-import { Link } from "react-router-dom"
+import { useState } from "react"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 
-import { Pager } from "@/components/paged-list"
-import { PageFrame } from "@/components/page-frame"
+import { PagedList } from "@/components/paged-list"
+import { PipelineRunRow } from "@/components/pipeline-run-row"
 import { StatusBadge } from "@/components/status-badge"
-import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useEvents } from "@/hooks/use-events"
 import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
-import { api, splitRepo, type Pipeline } from "@/lib/api"
+import { api, repoName, splitRepo, type Pipeline } from "@/lib/api"
+import { pipelineHref } from "@/lib/nav"
 import { asPipeline, upsertRun } from "@/lib/pipeline"
+
+type BoardSection = "pipes" | "prs"
 
 export function BoardPage() {
   const t = useT()
-  const blocked = usePage((q) => api.boardBlocked(q), [], { param: "blocked" })
-  const failed = usePage((q) => api.boardFailed(q), [], { param: "failed" })
-  const prs = usePage((q) => api.boardPRs(q), [], { param: "prs" })
+  const nav = useNavigate()
+  const [sp] = useSearchParams()
+  const section: BoardSection = sp.get("section") === "prs" ? "prs" : "pipes"
+  const pipes = usePage((q) => api.boardPipes(q), [], { enabled: section === "pipes" })
+  const prs = usePage((q) => api.boardPRs(q), [], { enabled: section === "prs" })
+  const [busy, setBusy] = useState("")
+  const [actionErr, setActionErr] = useState("")
+
   useEvents((ev) => {
     if (ev.type === "forgejo") {
-      void prs.reload()
+      if (section === "prs") void prs.reload()
       return
     }
-    if (ev.type !== "pipeline.updated") return
+    if (ev.type !== "pipeline.updated" || section !== "pipes") return
     const next = asPipeline(ev.data)
     if (!next) return
-    const failedSet = new Set(["failure", "error", "killed", "declined"])
-    blocked.apply((page) => {
-      if (next.status === "blocked") return upsertRun(page, next, blocked.page)
-      if (!page?.items?.some((p: Pipeline) => p.repo === next.repo && p.number === next.number)) return page
-      return { ...page, items: page.items.filter((p: Pipeline) => !(p.repo === next.repo && p.number === next.number)) }
-    })
-    failed.apply((page) => {
-      if (failedSet.has(next.status)) return upsertRun(page, next, failed.page)
-      if (!page?.items?.some((p: Pipeline) => p.repo === next.repo && p.number === next.number)) return page
-      return { ...page, items: page.items.filter((p: Pipeline) => !(p.repo === next.repo && p.number === next.number)) }
+    const attention = new Set(["blocked", "failure", "error", "killed", "declined"])
+    pipes.apply((page) => {
+      const base = page ?? { items: [] as Pipeline[], page: pipes.page, page_size: pipes.pageSize, has_more: false }
+      const withoutRepo = {
+        ...base,
+        items: base.items.filter((p: Pipeline) => p.repo !== next.repo),
+      }
+      if (!attention.has(next.status)) return withoutRepo
+      return upsertRun(withoutRepo, next, pipes.page)
     })
   })
 
-  const loading = [blocked, failed, prs].every((x) => x.loading && !x.data)
-  const empty = blocked.empty && failed.empty && prs.empty
-  const error = blocked.error || failed.error || prs.error
+  async function approve(p: Pipeline) {
+    const { owner, name } = splitRepo(p.repo)
+    setBusy(`${p.repo}-${p.number}`)
+    setActionErr("")
+    try {
+      await api.approve(owner, name, p.number)
+      await pipes.reload()
+    } catch (err) {
+      setActionErr(err instanceof Error ? err.message : t("loadError"))
+    } finally {
+      setBusy("")
+    }
+  }
 
-  return (
-    <PageFrame
-      loading={loading}
-      error={error}
-      empty={empty}
-      emptyText={t("inboxEmpty")}
-      header={<p className="text-sm text-muted-foreground">{t("boardDesc")}</p>}
-      className="gap-6"
-      skeleton="table"
-    >
-      {blocked.items.length ? (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-medium">{t("blocked")}</h2>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("repo")}</TableHead>
-                <TableHead>#</TableHead>
-                <TableHead>{t("status")}</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {blocked.items.map((p) => {
-                const { owner, name } = splitRepo(p.repo)
-                return (
-                  <TableRow key={`${p.repo}-${p.number}`}>
-                    <TableCell>
-                      <Link className="hover:underline" to={`/pipelines/${owner}/${name}/${p.number}`}>
-                        {p.repo}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{p.number}</TableCell>
-                    <TableCell>
-                      <StatusBadge status={p.status} />
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        size="sm"
-                        onClick={async () => {
-                          await api.approve(owner, name, p.number)
-                          await blocked.reload()
-                        }}
+  async function rerun(p: Pipeline) {
+    const { owner, name } = splitRepo(p.repo)
+    setBusy(`${p.repo}-${p.number}`)
+    setActionErr("")
+    try {
+      const next = await api.rerun(owner, name, p.number)
+      nav(pipelineHref(owner, name, next.number))
+    } catch (err) {
+      setActionErr(err instanceof Error ? err.message : t("loadError"))
+      setBusy("")
+    }
+  }
+
+  if (section === "prs") {
+    return (
+      <PagedList list={prs} emptyText={t("inboxEmpty")} skeleton="lines">
+        {(items) => (
+          <ul className="divide-y rounded-md border">
+            {items.map((pr) => {
+              const { owner, name } = splitRepo(pr.repo)
+              const author = pr.user?.login || ""
+              const head = pr.head?.ref || ""
+              const base = pr.base?.ref || ""
+              return (
+                <li key={`${pr.repo}-${pr.number}`} className="flex items-start gap-3 px-3 py-3">
+                  <StatusBadge status={pr.merged ? "merged" : pr.state || "open"} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <Link
+                        className="truncate text-sm font-medium hover:underline"
+                        to={`/repos/${owner}/${name}/pulls/${pr.number}`}
                       >
-                        {t("approve")}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-          <Pager page={blocked.page} hasMore={blocked.hasMore} onPage={blocked.setPage} />
-        </section>
-      ) : null}
-
-      {failed.items.length ? (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-medium">{t("failed")}</h2>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("repo")}</TableHead>
-                <TableHead>#</TableHead>
-                <TableHead>{t("status")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {failed.items.map((p) => {
-                const { owner, name } = splitRepo(p.repo)
-                return (
-                  <TableRow key={`${p.repo}-${p.number}`}>
-                    <TableCell>
-                      <Link className="hover:underline" to={`/pipelines/${owner}/${name}/${p.number}`}>
-                        {p.repo}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{p.number}</TableCell>
-                    <TableCell>
-                      <StatusBadge status={p.status} />
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-          <Pager page={failed.page} hasMore={failed.hasMore} onPage={failed.setPage} />
-        </section>
-      ) : null}
-
-      {prs.items.length ? (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-medium">{t("prs")}</h2>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>PR</TableHead>
-                <TableHead>{t("title")}</TableHead>
-                <TableHead>{t("repo")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {prs.items.map((pr) => {
-                const { owner, name } = splitRepo(pr.repo)
-                return (
-                  <TableRow key={`${pr.repo}-${pr.number}`}>
-                    <TableCell>#{pr.number}</TableCell>
-                    <TableCell>
-                      <Link className="hover:underline" to={`/repos/${owner}/${name}/pulls/${pr.number}`}>
                         {pr.title}
                       </Link>
-                    </TableCell>
-                    <TableCell>{pr.repo}</TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-          <Pager page={prs.page} hasMore={prs.hasMore} onPage={prs.setPage} />
-        </section>
-      ) : null}
-    </PageFrame>
+                      <span className="text-xs text-muted-foreground">
+                        {repoName(pr.repo)} #{pr.number}
+                      </span>
+                    </div>
+                    {(author || (head && base)) && (
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {author}
+                        {author && head && base ? " · " : ""}
+                        {head && base ? `${head} → ${base}` : ""}
+                      </p>
+                    )}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </PagedList>
+    )
+  }
+
+  return (
+    <PagedList
+      list={{ ...pipes, error: pipes.error || actionErr }}
+      emptyText={t("inboxEmpty")}
+      skeleton="lines"
+    >
+      {(items) => (
+        <ul className="divide-y rounded-md border">
+          {items.map((p) => (
+            <PipelineRunRow
+              key={`${p.repo}-${p.number}`}
+              pipe={p}
+              busy={busy === `${p.repo}-${p.number}`}
+              onApprove={p.status === "blocked" ? () => void approve(p) : undefined}
+              onRun={p.status === "blocked" ? undefined : () => void rerun(p)}
+            />
+          ))}
+        </ul>
+      )}
+    </PagedList>
   )
 }
