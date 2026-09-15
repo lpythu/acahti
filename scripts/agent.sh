@@ -112,6 +112,23 @@ fi
 cp -a "${pipes_src}/." /usr/local/lib/acahti/pipes/
 install -m 0755 /usr/local/lib/acahti/pipes/acahti-pipe /usr/local/bin/acahti-pipe
 
+helm_ver="${HELM_VERSION:-3.18.4}"
+if ! command -v helm >/dev/null || ! helm version --short 2>/dev/null | grep -q "v${helm_ver}"; then
+  echo "==> helm ${helm_ver}"
+  curl -fsSL "https://get.helm.sh/helm-v${helm_ver}-linux-${ARCH}.tar.gz" -o "${tmpdir}/helm.tgz"
+  tar -C "$tmpdir" -xzf "${tmpdir}/helm.tgz"
+  install -m 0755 "${tmpdir}/linux-${ARCH}/helm" "${bindir}/helm"
+fi
+crane_ver="${CRANE_VERSION:-0.20.6}"
+crane_arch="$ARCH"
+[[ "$ARCH" == amd64 ]] && crane_arch=x86_64
+if ! command -v crane >/dev/null; then
+  echo "==> crane ${crane_ver}"
+  curl -fsSL "https://github.com/google/go-containerregistry/releases/download/v${crane_ver}/go-containerregistry_Linux_${crane_arch}.tar.gz" -o "${tmpdir}/crane.tgz"
+  tar -C "$tmpdir" -xzf "${tmpdir}/crane.tgz" crane
+  install -m 0755 "${tmpdir}/crane" "${bindir}/crane"
+fi
+
 install -d -m 0755 /etc/woodpecker
 cat >/etc/woodpecker/agent.env <<EOF
 WOODPECKER_SERVER=${SERVER}

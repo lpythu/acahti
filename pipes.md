@@ -80,7 +80,7 @@ OCI tags: office CD `dev-${CI_COMMIT_SHA}`; HK CD `${CI_COMMIT_TAG#v}` (git tag 
 
 ### helm
 
-`with:` `release`, `namespace` (required). Optional `chart` (default `chart`), `files` (`-f` paths), `set` (`--set` lines), `timeout` (default `5m`), `take_ownership: true`. Env `KUBECONFIG` must be the kubeconfig **document** from a secret.
+`with:` `release`, `namespace` (required). Optional `chart` (default `chart`), `files` (`-f` paths), `set` (`--set` lines), `timeout` (default `5m`), `take_ownership: true`, `jump` (SSH host on the Runner; HK ACK is VPC-only so `thk`). Env `KUBECONFIG` must be the kubeconfig **document** from a secret. The Runner has helm and crane (`agent.sh`).
 
 ### wait-http
 
@@ -125,7 +125,7 @@ steps:
       NPM_TOKEN: npm_token
 ```
 
-Office CD (push `dev`) publishes Harbor `dev-${CI_COMMIT_SHA}` + `latest`, helm pin is that tag, then GC keeps 3 tags including `latest`. HK CD (tag on `test`) is the same shape with ACR login, image tag `${CI_COMMIT_TAG#v}`, and `kubeconfig_hk`.
+Office CD (push `dev`) publishes Harbor `dev-${CI_COMMIT_SHA}` + `latest`, helm pin is that tag, then GC keeps 3 tags including `latest`. HK CD (tag on `test`) is the same shape with ACR login, image tag `${CI_COMMIT_TAG#v}`, `kubeconfig_hk`, and `jump: thk` (ACK API is VPC-only).
 
 ```yaml
 steps:
