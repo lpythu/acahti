@@ -21,6 +21,7 @@ import { RepoLayout } from "@/pages/repo-layout"
 import { RepoPipelinesPage } from "@/pages/repo-pipelines"
 import { RepoAccessPage } from "@/pages/repo-access"
 import { RepoPullsPage } from "@/pages/repo-pulls"
+import { RepoTagsPage } from "@/pages/repo-tags"
 import { ReposPage } from "@/pages/repos"
 import { AdminGate, AppShell } from "@/pages/shell"
 import { ConsentPage } from "@/pages/consent"
@@ -52,6 +53,7 @@ export default function App() {
                   <Route path="commits" element={<RepoCommitsPage />} />
                   <Route path="commits/:sha" element={<RepoCommitPage />} />
                   <Route path="branches" element={<RepoBranchesPage />} />
+                  <Route path="tags" element={<RepoTagsPage />} />
                   <Route path="pulls" element={<RepoPullsPage />} />
                   <Route path="pulls/:number" element={<PullPage />} />
                   <Route path="pipelines" element={<RepoPipelinesPage />} />

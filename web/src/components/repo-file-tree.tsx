@@ -2,8 +2,7 @@ import { useState } from "react"
 import { ChevronRightIcon, FileIcon, FolderIcon } from "lucide-react"
 import { cn } from "cn"
 
-import { MoreButton } from "@/components/paged-list"
-import { usePage } from "@/hooks/use-page"
+import { useLoad } from "@/hooks/use-load"
 import { api, type ContentEntry } from "@/lib/api"
 
 function sortEntries(entries: ContentEntry[]) {
@@ -11,6 +10,21 @@ function sortEntries(entries: ContentEntry[]) {
     if (a.type === b.type) return a.name.localeCompare(b.name)
     return a.type === "dir" ? -1 : 1
   })
+}
+
+async function loadAllEntries(owner: string, name: string, gitRef: string, path: string) {
+  const all: ContentEntry[] = []
+  for (let page = 1; ; page++) {
+    const res = await api.contents(owner, name, {
+      page,
+      page_size: 50,
+      ref: gitRef || undefined,
+      path: path || undefined,
+    })
+    all.push(...(res.items || []))
+    if (!res.has_more) break
+  }
+  return sortEntries(all)
 }
 
 function TreeDir({
@@ -30,12 +44,8 @@ function TreeDir({
   depth: number
   onPick: (path: string, dir: boolean) => void
 }) {
-  const list = usePage(
-    (q) => api.contents(owner, name, { ...q, ref: gitRef || undefined, path }),
-    [owner, name, gitRef, path],
-    { url: false },
-  )
-  const entries = sortEntries(list.items)
+  const list = useLoad(() => loadAllEntries(owner, name, gitRef, path), [owner, name, gitRef, path])
+  const entries = list.data || []
   return (
     <ul>
       {entries.map((e) => (
@@ -50,7 +60,6 @@ function TreeDir({
           onPick={onPick}
         />
       ))}
-      <MoreButton page={list.page} hasMore={list.hasMore} onPage={list.setPage} />
     </ul>
   )
 }

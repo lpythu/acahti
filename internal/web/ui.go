@@ -120,6 +120,19 @@ func (p *Pages) RepoBranches(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (p *Pages) RepoTags(w http.ResponseWriter, r *http.Request) {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
+		return
+	}
+	out, err := p.Cat.ListTags(user, r.PathValue("owner"), r.PathValue("name"), page.Parse(r))
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (p *Pages) RepoPulls(w http.ResponseWriter, r *http.Request) {
 	user, _, ok := p.requireJSON(w, r)
 	if !ok {

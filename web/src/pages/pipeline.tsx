@@ -152,7 +152,7 @@ export function PipelinePage() {
             </Button>
           ) : null}
           {p.status !== "running" && p.status !== "pending" && p.status !== "blocked" ? (
-            <Button size="sm" variant="outline" disabled={busy} onClick={() => void remove()}>
+            <Button size="sm" variant="destructive" disabled={busy} onClick={() => void remove()}>
               {t("deletePipeline")}
             </Button>
           ) : null}

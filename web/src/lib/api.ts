@@ -142,6 +142,11 @@ export type BranchInfo = {
   protected: boolean
 }
 
+export type TagInfo = {
+  name: string
+  sha: string
+}
+
 export type CommitPerson = { name: string; email?: string; date: string }
 
 export type CommitUser = { login: string; avatar_url?: string }
@@ -350,6 +355,8 @@ export const api = {
     req<Page<Commit>>(`/ui/repos/${owner}/${name}/commits${pageQS(opts, { ref: opts?.ref })}`),
   branches: (owner: string, name: string, q?: PageQuery) =>
     req<Page<BranchInfo>>(`/ui/repos/${owner}/${name}/branches${pageQS(q)}`),
+  tags: (owner: string, name: string, q?: PageQuery) =>
+    req<Page<TagInfo>>(`/ui/repos/${owner}/${name}/tags${pageQS(q)}`),
   pulls: (owner: string, name: string, q?: PageQuery & { state?: string }) =>
     req<Page<PR>>(`/ui/repos/${owner}/${name}/pulls${pageQS(q, { state: q?.state })}`),
   commit: (owner: string, name: string, sha: string, q?: PageQuery) =>

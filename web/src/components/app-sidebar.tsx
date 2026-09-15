@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 import { useLocation, useSearchParams } from "react-router-dom"
 import {
-  FileIcon,
+  Code2Icon,
   FolderIcon,
   GitBranchIcon,
   GitPullRequestIcon,
@@ -9,6 +9,7 @@ import {
   PanelLeftCloseIcon,
   PanelLeftIcon,
   ShieldIcon,
+  TagIcon,
   UsersIcon,
   LockIcon,
   WorkflowIcon,
@@ -64,6 +65,7 @@ function secondaryItems(
       | "files"
       | "commits"
       | "branches"
+      | "tags"
       | "tabPulls"
       | "tabPipes"
       | "access"
@@ -78,9 +80,10 @@ function secondaryItems(
   const q = ref ? `?ref=${encodeURIComponent(ref)}` : ""
   if (base) {
     return [
-      { title: t("files"), url: `${base}${q}`, icon: <FileIcon />, end: true },
+      { title: t("files"), url: `${base}${q}`, icon: <Code2Icon />, end: true },
       { title: t("commits"), url: `${base}/commits${q}`, icon: <HistoryIcon /> },
       { title: t("branches"), url: `${base}/branches`, icon: <GitBranchIcon /> },
+      { title: t("tags"), url: `${base}/tags`, icon: <TagIcon /> },
       { title: t("tabPulls"), url: `${base}/pulls`, icon: <GitPullRequestIcon /> },
       { title: t("tabPipes"), url: `${base}/pipelines`, icon: <WorkflowIcon /> },
       { title: t("access"), url: `${base}/access`, icon: <LockIcon /> },

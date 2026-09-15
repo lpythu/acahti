@@ -91,6 +91,13 @@ type Branch struct {
 	} `json:"commit"`
 }
 
+type Tag struct {
+	Name   string `json:"name"`
+	Commit struct {
+		SHA string `json:"sha"`
+	} `json:"commit"`
+}
+
 type PR struct {
 	Number int    `json:"number"`
 	Title  string `json:"title"`
@@ -713,6 +720,10 @@ func (c *Client) GetFile(owner, name, ref, path string) (ContentEntry, error) {
 
 func (c *Client) ListBranches(owner, name string, q page.Query) (page.Result[Branch], error) {
 	return listPage[Branch](c, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/branches", q, nil, "")
+}
+
+func (c *Client) ListTags(owner, name string, q page.Query) (page.Result[Tag], error) {
+	return listPage[Tag](c, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/tags", q, nil, "")
 }
 
 func NormalizeRef(ref string) (string, error) {

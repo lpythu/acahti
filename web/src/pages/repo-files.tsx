@@ -1,5 +1,7 @@
-import { useSearchParams } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
+import { GitBranchIcon, TagIcon } from "lucide-react"
 
+import { CloneMenu } from "@/components/clone-menu"
 import { Markdown, isMarkdownPath } from "@/components/markdown"
 import { RepoFileTree } from "@/components/repo-file-tree"
 import { CodeBlock } from "@/components/ui/code-block"
@@ -8,11 +10,20 @@ import { AutoHideScroll } from "@/components/ui/auto-hide-scroll"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useLoad } from "@/hooks/use-load"
+import { useT } from "@/i18n/i18n"
 import { api } from "@/lib/api"
 import { langOf } from "@/lib/lang"
+import type { Page } from "@/lib/page"
 import { useRepo } from "@/pages/repo-layout"
 
+function pageCount(p?: Page<unknown> | null): string {
+  if (!p) return "—"
+  const n = p.items.length
+  return p.has_more ? `${n}+` : String(n)
+}
+
 export function RepoFilesPage() {
+  const t = useT()
   const repo = useRepo()
   const [sp, setSp] = useSearchParams()
   const ref = sp.get("ref") || ""
@@ -20,6 +31,7 @@ export function RepoFilesPage() {
   const root = repo.data
   const currentRef = ref || root?.ref || "dev"
   const branches = useLoad(() => api.branches(repo.owner, repo.name, { page: 1, page_size: 50 }), [repo.owner, repo.name])
+  const tags = useLoad(() => api.tags(repo.owner, repo.name, { page: 1, page_size: 50 }), [repo.owner, repo.name])
   const preview = useLoad(
     () => api.contents(repo.owner, repo.name, { page: 1, page_size: 1, ref: currentRef, path: path || undefined }),
     [repo.owner, repo.name, currentRef, path],
@@ -40,6 +52,7 @@ export function RepoFilesPage() {
   const shownReadme = path ? readme : rootReadme
   const md = file ? isMarkdownPath(file.name) : Boolean(shownReadme)
   const branchItems = branches.data?.items.length ? branches.data.items : [{ name: currentRef, sha: "", default: true, protected: false }]
+  const base = `/repos/${repo.owner}/${repo.name}`
 
   function setQuery(next: { ref?: string; path?: string }) {
     const q = new URLSearchParams(sp)
@@ -57,22 +70,44 @@ export function RepoFilesPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {error && !root ? <p className="px-4 py-3 text-sm text-destructive">{error}</p> : null}
+      <div className="flex h-12 shrink-0 items-center gap-3 border-b px-4 lg:px-6">
+        <Select value={currentRef} onValueChange={(v) => setQuery({ ref: String(v ?? ""), path: "" })}>
+          <SelectTrigger size="sm" className="w-fit min-w-36" aria-label={t("branches")}>
+            <GitBranchIcon className="size-3.5" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {branchItems.map((b) => (
+              <SelectItem key={b.name} value={b.name}>
+                {b.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Link
+          to={`${base}/branches`}
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          aria-label={t("branches")}
+          title={t("branches")}
+        >
+          <GitBranchIcon className="size-3.5" />
+          {pageCount(branches.data)}
+        </Link>
+        <Link
+          to={`${base}/tags`}
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          aria-label={t("tags")}
+          title={t("tags")}
+        >
+          <TagIcon className="size-3.5" />
+          {pageCount(tags.data)}
+        </Link>
+        <div className="ml-auto">
+          {root ? <CloneMenu url={root.clone_https} /> : null}
+        </div>
+      </div>
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
         <ResizablePanel defaultSize={22} minSize={14} className="flex min-h-0 flex-col">
-          <div className="border-b p-2">
-            <Select value={currentRef} onValueChange={(v) => setQuery({ ref: String(v ?? ""), path: "" })}>
-              <SelectTrigger size="sm" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {branchItems.map((b) => (
-                  <SelectItem key={b.name} value={b.name}>
-                    {b.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
           <AutoHideScroll className="min-h-0 flex-1">
             {loading ? (
               <div className="flex flex-col gap-2 p-3">

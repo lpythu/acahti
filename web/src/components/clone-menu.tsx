@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { Code2Icon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,7 +18,8 @@ export function CloneMenu({ url }: { url: string }) {
 
   return (
     <Popover>
-      <PopoverTrigger render={<Button type="button" variant="outline" size="sm" />}>
+      <PopoverTrigger render={<Button type="button" variant="default" size="sm" />}>
+        <Code2Icon />
         {t("clone")}
       </PopoverTrigger>
       <PopoverContent className="flex w-96 flex-col gap-3">

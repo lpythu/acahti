@@ -38,6 +38,11 @@ type BranchInfo struct {
 	Protected bool   `json:"protected"`
 }
 
+type TagInfo struct {
+	Name string `json:"name"`
+	SHA  string `json:"sha"`
+}
+
 type FileBlob struct {
 	Name    string `json:"name"`
 	Path    string `json:"path"`
@@ -277,6 +282,21 @@ func (c *Catalog) ListBranches(user, owner, name string, q page.Query) (page.Res
 			Default:   b.Name == repo.DefaultBranch,
 			Protected: protSet[b.Name],
 		})
+	}
+	return page.Of(out, q, res.HasMore), nil
+}
+
+func (c *Catalog) ListTags(user, owner, name string, q page.Query) (page.Result[TagInfo], error) {
+	if err := c.seeOK(user, owner, name); err != nil {
+		return page.Result[TagInfo]{}, err
+	}
+	res, err := c.FJ.ListTags(owner, name, q)
+	if err != nil {
+		return page.Result[TagInfo]{}, err
+	}
+	out := make([]TagInfo, 0, len(res.Items))
+	for _, t := range res.Items {
+		out = append(out, TagInfo{Name: t.Name, SHA: t.Commit.SHA})
 	}
 	return page.Of(out, q, res.HasMore), nil
 }

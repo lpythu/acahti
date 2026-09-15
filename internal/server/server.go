@@ -86,6 +86,7 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 	mux.HandleFunc("GET /ui/repos/{owner}/{name}/commits", pages.RepoCommits)
 	mux.HandleFunc("GET /ui/repos/{owner}/{name}/commits/{sha}", pages.Commit)
 	mux.HandleFunc("GET /ui/repos/{owner}/{name}/branches", pages.RepoBranches)
+	mux.HandleFunc("GET /ui/repos/{owner}/{name}/tags", pages.RepoTags)
 	mux.HandleFunc("GET /ui/repos/{owner}/{name}/pulls", pages.RepoPulls)
 	mux.HandleFunc("GET /ui/repos/{owner}/{name}/pulls/{n}", pages.Pull)
 	mux.HandleFunc("GET /ui/repos/{owner}/{name}/pulls/{n}/comments", pages.PullComments)
