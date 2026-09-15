@@ -245,3 +245,22 @@ func TestExpandOciGc(t *testing.T) {
 		t.Fatalf("missing INPUT_REPOS:\n%s", text)
 	}
 }
+
+func TestExpandDockerLoginInjectsHarbor(t *testing.T) {
+	got, err := Expand([]byte(`steps:
+  login:
+    pipe: docker-login@v1
+    with:
+      registry: saidc-registry.cn-hongkong.cr.aliyuncs.com
+    secrets:
+      DOCKER_USERNAME: acr_username
+      DOCKER_PASSWORD: acr_password
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(got)
+	if !strings.Contains(text, "from_secret: harbor_password") {
+		t.Fatalf("missing harbor pull secret:\n%s", text)
+	}
+}

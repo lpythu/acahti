@@ -201,6 +201,11 @@ func expandStep(name string, step map[string]any) error {
 			env[key] = stringify(v)
 		}
 	}
+	if pipeName == "docker-login" || pipeName == "docker-build" {
+		if _, exists := env["HARBOR_PASSWORD"]; !exists {
+			env["HARBOR_PASSWORD"] = map[string]any{"from_secret": "harbor_password"}
+		}
+	}
 	step["image"] = "bash"
 	step["commands"] = []any{"acahti-pipe " + pipeName}
 	if len(env) > 0 {
