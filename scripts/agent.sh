@@ -130,7 +130,7 @@ if ! command -v crane >/dev/null; then
 fi
 
 install -d -m 0755 /etc/woodpecker
-cat >/etc/woodpecker/agent.env <<EOF
+cat >"${tmpdir}/agent.env" <<EOF
 WOODPECKER_SERVER=${SERVER}
 WOODPECKER_AGENT_SECRET=${SECRET}
 WOODPECKER_BACKEND=local
@@ -139,8 +139,7 @@ WOODPECKER_AGENT_LABELS=${LABELS}
 WOODPECKER_MAX_WORKFLOWS=12
 WOODPECKER_HEALTHCHECK=false
 EOF
-chmod 600 /etc/woodpecker/agent.env
-chown root:root /etc/woodpecker/agent.env
+chmod 600 "${tmpdir}/agent.env"
 # Drop a stale agent id from a previous control plane.
 if [[ "${RESET_AGENT_ID:-}" == "1" || ! -s /etc/woodpecker/agent.conf ]]; then
   rm -f /etc/woodpecker/agent.conf
@@ -149,7 +148,7 @@ touch /etc/woodpecker/agent.conf
 chown "${run_user}:${run_user}" /etc/woodpecker/agent.conf
 chmod 600 /etc/woodpecker/agent.conf
 
-cat >/etc/systemd/system/woodpecker-agent.service <<EOF
+cat >"${tmpdir}/agent.service" <<EOF
 [Unit]
 Description=Acahti Runner (${AGENT_NAME})
 After=network-online.target
@@ -169,8 +168,25 @@ WorkingDirectory=${run_home}
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload
-systemctl enable woodpecker-agent.service
-systemctl restart woodpecker-agent.service
-systemctl --no-pager --full status woodpecker-agent.service || true
-echo "OK: runner ${AGENT_NAME} mode=${MODE} -> ${SERVER} labels=${LABELS} pipes=/usr/local/lib/acahti/pipes"
+need_restart=0
+if [[ ! -f /etc/woodpecker/agent.env ]] || ! cmp -s "${tmpdir}/agent.env" /etc/woodpecker/agent.env; then
+  need_restart=1
+fi
+if [[ ! -f /etc/systemd/system/woodpecker-agent.service ]] || ! cmp -s "${tmpdir}/agent.service" /etc/systemd/system/woodpecker-agent.service; then
+  need_restart=1
+fi
+if ! systemctl is-active --quiet woodpecker-agent.service; then
+  need_restart=1
+fi
+install -m 0600 "${tmpdir}/agent.env" /etc/woodpecker/agent.env
+chown root:root /etc/woodpecker/agent.env
+install -m 0644 "${tmpdir}/agent.service" /etc/systemd/system/woodpecker-agent.service
+if ((need_restart)); then
+  systemctl daemon-reload
+  systemctl enable woodpecker-agent.service
+  systemctl restart woodpecker-agent.service
+  systemctl --no-pager --full status woodpecker-agent.service || true
+  echo "OK: runner ${AGENT_NAME} restarted mode=${MODE} -> ${SERVER} labels=${LABELS} pipes=/usr/local/lib/acahti/pipes"
+else
+  echo "OK: runner ${AGENT_NAME} already active; pipes updated in place"
+fi
