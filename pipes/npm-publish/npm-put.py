@@ -85,6 +85,7 @@ def main() -> None:
                 "Authorization": f"Basic {auth}",
                 "Content-Type": "application/json",
                 "Host": host,
+                "User-Agent": "acahti-ops/1.0",
                 "X-Forwarded-Proto": proto,
             },
         )
