@@ -51,7 +51,7 @@ func TestView(t *testing.T) {
 
 func TestInstructions(t *testing.T) {
 	s := Instructions("https://acahti.saidc.ai", "acahti.saidc.ai")
-	for _, need := range []string{"whoami", "git_name", "apply_when_remote_host", "acahti.saidc.ai", "--local", "--global", "github.com", "api-gateway", "/skill.md", "ANY remote"} {
+	for _, need := range []string{"whoami", "git_name", "apply_when_remote_host", "acahti.saidc.ai", "--local", "--global", "github.com", "lpythu/acahti", "directory or repo name", "/skill.md", "ANY remote"} {
 		if !strings.Contains(s, need) {
 			t.Fatalf("missing %q in %s", need, s)
 		}

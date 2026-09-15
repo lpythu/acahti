@@ -238,6 +238,23 @@ func (p *Pages) PatchUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, identity.View(login, name, p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
 }
 
+func (p *Pages) UserRepos(w http.ResponseWriter, r *http.Request) {
+	if _, ok := p.requireAdmin(w, r); !ok {
+		return
+	}
+	login := strings.TrimSpace(r.PathValue("login"))
+	if login == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username required"})
+		return
+	}
+	out, err := p.Cat.UserRepoAccess(login)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"repos": out})
+}
+
 func (p *Pages) Skill(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	_, _ = w.Write([]byte(skills.Acahti(p.Cfg.RootURL, p.Cfg.Org, identity.Domain(p.Cfg.RootURL, p.Cfg.Domain))))

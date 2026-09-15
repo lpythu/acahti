@@ -28,14 +28,15 @@ Clone is always `$ACAHTI_ORG/<repo>`. A team (Platform, ModelCamp, …) is acces
 
 If Codeup (or another host) is `origin`, keep it. Fetch and push the island on remote `acahti`. Do not `git fetch --all` to sync the island.
 
-This is not about the `acahti/` product repo on GitHub. That remote stays GitHub.
+This is not about the `acahti/` or `acahti-plugin/` product repos on GitHub. Those remotes stay GitHub; do **not** run `setup_local` there.
 
 Before any `git commit` in the current repo:
 
 1. `git remote -v`
 2. Call MCP `whoami`
-3. If **any** remote URL host is in `apply_when_remote_host`, run `setup_local` (`git config --local` only)
-4. Keep the laptop identity only when **no** remote is an acahti host
+3. Gate **only** on remote URL host — never on directory or repo name (a folder named `acahti` on GitHub is not island git)
+4. If **any** remote URL host is in `apply_when_remote_host`, run `setup_local` (`git config --local` only)
+5. If **no** remote host matches, do **not** change `user.name` / `user.email`. If local author was wrongly set to `*@noreply.$DOMAIN`, `git config --local --unset user.name` and `user.email` so the laptop identity applies
 
 `git_name` is the commit author the admin set on the user (default `login`). `git_email` is `{login}@noreply.$DOMAIN`. Run `setup_local` with `whoami.git_name` and `whoami.git_email`. Do not ask the user for a name or email.
 

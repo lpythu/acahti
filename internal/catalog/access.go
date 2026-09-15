@@ -17,6 +17,11 @@ type AccessPerson struct {
 	Permission string `json:"permission"`
 }
 
+type RepoPerm struct {
+	Repo       string `json:"repo"`
+	Permission string `json:"permission"`
+}
+
 type TeamAccess struct {
 	Name      string         `json:"name"`
 	CanManage bool           `json:"can_manage"`
@@ -118,6 +123,26 @@ func strongerPerm(a, b string) string {
 		return forgejo.NormalizePerm(b)
 	}
 	return forgejo.NormalizePerm(a)
+}
+
+func repoPermList(perms map[string]string) []RepoPerm {
+	out := make([]RepoPerm, 0, len(perms))
+	for repo, perm := range perms {
+		out = append(out, RepoPerm{Repo: repo, Permission: forgejo.NormalizePerm(perm)})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Repo < out[j].Repo })
+	return out
+}
+
+func (c *Catalog) UserRepoAccess(login string) ([]RepoPerm, error) {
+	if !c.indexed() || login == "" {
+		return []RepoPerm{}, nil
+	}
+	perms, err := c.Idx.UserRepoPerms(login)
+	if err != nil {
+		return nil, err
+	}
+	return repoPermList(perms), nil
 }
 
 func (c *Catalog) TeamAccess(user, name string) (TeamAccess, error) {

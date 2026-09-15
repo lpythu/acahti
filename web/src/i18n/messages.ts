@@ -182,6 +182,10 @@ export const messages = {
     viaDirect: "Outside the team",
     noInherited: "No members inherited from the team.",
     noDirect: "No members outside the team.",
+    teamsCount: "{n} teams",
+    userRepos: "Repos",
+    noUserRepos: "No repository access.",
+    orgAdminRepos: "Org admin can access every repository.",
   },
   zh: {
     brand: "Acahti",
@@ -366,6 +370,10 @@ export const messages = {
     viaDirect: "团队外成员",
     noInherited: "没有从团队继承的成员。",
     noDirect: "没有团队外成员。",
+    teamsCount: "{n} 个团队",
+    userRepos: "仓库",
+    noUserRepos: "没有仓库权限。",
+    orgAdminRepos: "组织管理员可访问全部仓库。",
   },
 } as const
 

@@ -96,6 +96,8 @@ export type Repo = {
 
 export type AccessPerson = { login: string; author?: string; permission: string }
 
+export type UserRepoPerm = { repo: string; permission: string }
+
 export type TeamAccess = {
   name: string
   can_manage: boolean
@@ -292,6 +294,8 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ git_name }),
     }),
+  userRepos: (login: string) =>
+    req<{ repos: UserRepoPerm[] }>(`/ui/users/${encodeURIComponent(login)}/repos`),
   navTree: () => req<NavTeam[]>("/ui/nav/tree"),
   repoTeams: (q?: PageQuery) => req<Page<RepoTeam>>(`/ui/repos${pageQS(q, { teams: "1" })}`),
   repos: (q?: PageQuery, team?: string) => req<Page<Repo>>(`/ui/repos${pageQS(q, { team })}`),

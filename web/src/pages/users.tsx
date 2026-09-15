@@ -1,7 +1,9 @@
 import { type FormEvent, useEffect, useState } from "react"
 import { Link } from "react-router-dom"
+import { ShieldIcon } from "lucide-react"
 import { toast } from "sonner"
 
+import { permLabel } from "@/components/access-fields"
 import { CopyField } from "@/components/copy-field"
 import { PagedList } from "@/components/paged-list"
 import { Button } from "@/components/ui/button"
@@ -14,38 +16,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useLoad } from "@/hooks/use-load"
 import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
-import { api, type Invite, type User } from "@/lib/api"
+import { api, repoName, splitRepo, type Invite, type User } from "@/lib/api"
 import { onboardNote, randomPassword } from "@/lib/onboard"
 import { useSession } from "@/lib/session"
-
-async function teamsByLogin() {
-  const map: Record<string, string[]> = {}
-  let pageNum = 1
-  for (;;) {
-    const listed = await api.repoTeams({ page: pageNum, page_size: 50 })
-    await Promise.all(
-      (listed.items || []).map(async (row) => {
-        const team = await api.team(row.team)
-        for (const m of team.members || []) {
-          const cur = map[m.login] || []
-          if (!cur.includes(row.team)) cur.push(row.team)
-          map[m.login] = cur
-        }
-      }),
-    )
-    if (!listed.has_more) break
-    pageNum++
-  }
-  for (const login of Object.keys(map)) {
-    map[login].sort((a, b) => a.localeCompare(b))
-  }
-  return map
-}
-
-function userTeams(u: User, fallback: Record<string, string[]> | null) {
-  if (u.teams) return u.teams
-  return fallback?.[u.login] || []
-}
 
 async function copyText(text: string) {
   try {
@@ -241,6 +214,74 @@ function CreateUserMenu({
   )
 }
 
+function UserTeamsMenu({ teams }: { teams: string[] }) {
+  const t = useT()
+  if (!teams.length) {
+    return <span className="text-sm text-muted-foreground">—</span>
+  }
+  return (
+    <Popover>
+      <PopoverTrigger render={<Button type="button" size="sm" variant="outline" />}>
+        {t("teamsCount", { n: teams.length })}
+      </PopoverTrigger>
+      <PopoverContent align="start" className="flex max-h-80 w-56 flex-col gap-1 overflow-y-auto">
+        {teams.map((name) => (
+          <Link
+            key={name}
+            to={`/admin/teams/${encodeURIComponent(name)}`}
+            className="rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+          >
+            {name}
+          </Link>
+        ))}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function UserReposMenu({
+  login,
+  isAdmin,
+}: {
+  login: string
+  isAdmin: boolean
+}) {
+  const t = useT()
+  const [open, setOpen] = useState(false)
+  const load = useLoad(() => api.userRepos(login).then((r) => r.repos || []), [login], open)
+  const repos = load.data || []
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger render={<Button type="button" size="sm" variant="outline" />}>
+        {t("userRepos")}
+      </PopoverTrigger>
+      <PopoverContent align="start" className="flex max-h-80 w-80 flex-col gap-2 overflow-y-auto">
+        {load.error ? <p className="text-sm text-destructive">{load.error}</p> : null}
+        {isAdmin ? <p className="text-sm text-muted-foreground">{t("orgAdminRepos")}</p> : null}
+        {!load.loading && !load.error && !isAdmin && !repos.length ? (
+          <p className="text-sm text-muted-foreground">{t("noUserRepos")}</p>
+        ) : null}
+        {repos.length ? (
+          <ul className="flex flex-col gap-1.5">
+            {repos.map((row) => {
+              const { owner, name } = splitRepo(row.repo)
+              return (
+                <li key={row.repo} className="flex items-center justify-between gap-2 text-sm">
+                  <Link className="min-w-0 truncate hover:underline" to={`/repos/${owner}/${name}`}>
+                    {repoName(row.repo)}
+                  </Link>
+                  <span className="shrink-0 text-muted-foreground">{permLabel(t, row.permission)}</span>
+                </li>
+              )
+            })}
+          </ul>
+        ) : null}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 function OnboardMenu({
   login,
   root,
@@ -308,8 +349,6 @@ export function UsersPage() {
   const [admin, setAdmin] = useState(false)
   const [resets, setResets] = useState<Record<string, string>>({})
   const users = usersLoad.items
-  const apiHasTeams = Boolean(usersLoad.data) && users.every((u) => u.teams !== undefined)
-  const membership = useLoad(teamsByLogin, [], Boolean(usersLoad.data) && !apiHasTeams)
   const invites = invitesLoad.data?.invites || []
   const joinBase = invitesLoad.data?.join || "/join"
 
@@ -372,50 +411,57 @@ export function UsersPage() {
               <TableHead>{t("username")}</TableHead>
               <TableHead>{t("gitName")}</TableHead>
               <TableHead>{t("team")}</TableHead>
+              <TableHead>{t("repos")}</TableHead>
               <TableHead>{t("admin")}</TableHead>
               <TableHead>{t("password")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.map((u) => (
-              <TableRow key={u.login}>
-                <TableCell>{u.login}</TableCell>
-                <TableCell>
-                  <AuthorInput login={u.login} value={u.full_name || u.login} onSaved={async () => { usersLoad.reload() }} />
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1.5">
-                    {userTeams(u, membership.data).map((name) => (
-                      <Link
-                        key={name}
-                        to={`/admin/teams/${encodeURIComponent(name)}`}
-                        className="inline-flex rounded-md bg-background px-2 py-0.5 text-xs shadow-sm ring-1 ring-foreground/10 hover:bg-muted"
-                      >
-                        {name}
-                      </Link>
-                    ))}
-                  </div>
-                </TableCell>
-                <TableCell>{u.is_admin ? t("admin") : ""}</TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <PasswordInput
-                      value={resets[u.login] || ""}
-                      onChange={(v) => setResets((m) => ({ ...m, [u.login]: v }))}
-                    />
-                    <Button type="button" size="sm" variant="outline" onClick={() => void resetRow(u.login)}>
-                      {t("resetPassword")}
-                    </Button>
-                    <OnboardMenu
+            {users.map((u) => {
+              const teams = u.teams || []
+              return (
+                <TableRow key={u.login}>
+                  <TableCell>{u.login}</TableCell>
+                  <TableCell>
+                    <AuthorInput
                       login={u.login}
-                      root={root}
-                      password={resets[u.login] || ""}
-                      onPassword={(pw) => setResets((m) => ({ ...m, [u.login]: pw }))}
+                      value={u.full_name || u.login}
+                      onSaved={async () => {
+                        usersLoad.reload()
+                      }}
                     />
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+                  </TableCell>
+                  <TableCell>
+                    <UserTeamsMenu teams={teams} />
+                  </TableCell>
+                  <TableCell>
+                    <UserReposMenu login={u.login} isAdmin={u.is_admin} />
+                  </TableCell>
+                  <TableCell>
+                    {u.is_admin ? (
+                      <ShieldIcon className="size-4 text-muted-foreground" aria-label={t("admin")} />
+                    ) : null}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <PasswordInput
+                        value={resets[u.login] || ""}
+                        onChange={(v) => setResets((m) => ({ ...m, [u.login]: v }))}
+                      />
+                      <Button type="button" size="sm" variant="outline" onClick={() => void resetRow(u.login)}>
+                        {t("resetPassword")}
+                      </Button>
+                      <OnboardMenu
+                        login={u.login}
+                        root={root}
+                        password={resets[u.login] || ""}
+                        onPassword={(pw) => setResets((m) => ({ ...m, [u.login]: pw }))}
+                      />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
           </TableBody>
         </Table>
       )}
