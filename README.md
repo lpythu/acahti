@@ -84,7 +84,7 @@ Join    https://acahti.example.com/join     (invite from an admin)
 
 Give the first line to any coding agent. It GET `$ROOT_URL/skill.md` this turn, connects `$ROOT_URL/mcp`, and completes OAuth. If the browser has no account, open the second line with an admin invite and pick a username and password; existing accounts use `/login`. Then `whoami` and set `--local` git identity when any remote host is acahti.
 
-Cursor: [lpythu/acahti-cursor-plugin](https://github.com/lpythu/acahti-cursor-plugin). Do not put `acahti` in `~/.cursor/mcp.json`.
+Plugins: [lpythu/acahti-plugin](https://github.com/lpythu/acahti-plugin) (`cursor/` for Cursor, `codex/` for Codex). Do not put `acahti` in `~/.cursor/mcp.json`.
 
 - Git: `https://acahti.example.com/acme/<repo>.git` — username `whoami.login`, password is the OAuth `access_token` the client already holds
 - Packages: `https://acahti.example.com/api/packages/acme/pypi/simple/` and `…/npm/`
