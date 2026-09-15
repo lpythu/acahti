@@ -20,6 +20,8 @@ type AccessPerson struct {
 type RepoPerm struct {
 	Repo       string `json:"repo"`
 	Permission string `json:"permission"`
+	Team       string `json:"team,omitempty"`
+	Direct     bool   `json:"direct"`
 }
 
 type TeamAccess struct {
@@ -31,6 +33,7 @@ type TeamAccess struct {
 
 type RepoAccess struct {
 	Team      string         `json:"team"`
+	Granted   bool           `json:"granted"`
 	CanManage bool           `json:"can_manage"`
 	Inherited []AccessPerson `json:"inherited"`
 	Direct    []AccessPerson `json:"direct"`
@@ -82,7 +85,7 @@ func (c *Catalog) ensureRoleTeam(team, perm string) (forgejo.Team, error) {
 		return forgejo.Team{}, err
 	}
 	if perm != permWrite {
-		if repos, err := c.teamRepos(team); err == nil {
+		if repos, err := c.grantedTeamRepos(team); err == nil {
 			for _, r := range repos {
 				_ = c.FJ.AddTeamRepo(t.ID, c.Cfg.Org, r.Name)
 			}
@@ -125,24 +128,71 @@ func strongerPerm(a, b string) string {
 	return forgejo.NormalizePerm(a)
 }
 
-func repoPermList(perms map[string]string) []RepoPerm {
-	out := make([]RepoPerm, 0, len(perms))
-	for repo, perm := range perms {
-		out = append(out, RepoPerm{Repo: repo, Permission: forgejo.NormalizePerm(perm)})
+func mergeRepoACL(rows []store.UserRepoACL) []RepoPerm {
+	type acc struct {
+		perm   string
+		team   string
+		direct bool
+	}
+	by := map[string]acc{}
+	for _, row := range rows {
+		cur, ok := by[row.Repo]
+		if !ok {
+			by[row.Repo] = acc{perm: row.Role, team: row.Team, direct: row.Direct}
+			continue
+		}
+		cur.perm = strongerPerm(cur.perm, row.Role)
+		if row.Direct {
+			cur.direct = true
+		}
+		if cur.team == "" {
+			cur.team = row.Team
+		}
+		by[row.Repo] = cur
+	}
+	out := make([]RepoPerm, 0, len(by))
+	for repo, a := range by {
+		out = append(out, RepoPerm{
+			Repo:       repo,
+			Permission: forgejo.NormalizePerm(a.perm),
+			Team:       a.team,
+			Direct:     a.direct,
+		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Repo < out[j].Repo })
 	return out
 }
 
 func (c *Catalog) UserRepoAccess(login string) ([]RepoPerm, error) {
-	if !c.indexed() || login == "" {
-		return []RepoPerm{}, nil
-	}
-	perms, err := c.Idx.UserRepoPerms(login)
+	got, err := c.UserRepoAccessMany([]string{login})
 	if err != nil {
 		return nil, err
 	}
-	return repoPermList(perms), nil
+	return got[login], nil
+}
+
+func (c *Catalog) UserRepoAccessMany(logins []string) (map[string][]RepoPerm, error) {
+	out := map[string][]RepoPerm{}
+	for _, login := range logins {
+		if login != "" {
+			out[login] = []RepoPerm{}
+		}
+	}
+	if !c.indexed() || len(logins) == 0 {
+		return out, nil
+	}
+	rows, err := c.Idx.UserRepoPermsMany(logins)
+	if err != nil {
+		return nil, err
+	}
+	byLogin := map[string][]store.UserRepoACL{}
+	for _, row := range rows {
+		byLogin[row.Login] = append(byLogin[row.Login], row)
+	}
+	for login, group := range byLogin {
+		out[login] = mergeRepoACL(group)
+	}
+	return out, nil
 }
 
 func (c *Catalog) TeamAccess(user, name string) (TeamAccess, error) {
@@ -283,8 +333,7 @@ func (c *Catalog) RemoveTeamMember(user, team, login string) error {
 }
 
 func (c *Catalog) AttachRepo(team, repo string) error {
-	t, err := c.findTeam(team)
-	if err != nil {
+	if _, err := c.findTeam(team); err != nil {
 		return err
 	}
 	repo = strings.TrimSpace(repo)
@@ -298,20 +347,6 @@ func (c *Catalog) AttachRepo(team, repo string) error {
 	if err != nil {
 		return fmt.Errorf("%w: %s", ErrNotFound, err)
 	}
-	if _, ok := t.roles[permWrite]; !ok {
-		if _, err := c.ensureRoleTeam(team, permWrite); err != nil {
-			return err
-		}
-		t, err = c.findTeam(team)
-		if err != nil {
-			return err
-		}
-	}
-	for _, role := range t.roles {
-		if err := c.FJ.AddTeamRepo(role.ID, c.Cfg.Org, repo); err != nil {
-			return err
-		}
-	}
 	if c.indexed() {
 		full := got.FullName
 		if full == "" {
@@ -323,6 +358,60 @@ func (c *Catalog) AttachRepo(team, repo string) error {
 	c.forget()
 	c.publishCatalog()
 	return nil
+}
+
+func (c *Catalog) SetRepoTeamGrant(user, owner, name string, granted bool) error {
+	if err := c.requireAdmin(user); err != nil {
+		return err
+	}
+	repo, err := c.seeRepo(user, owner, name)
+	if err != nil {
+		return err
+	}
+	if repo.Team == "" {
+		return fmt.Errorf("%w team", ErrInvalid)
+	}
+	t, err := c.findTeam(repo.Team)
+	if err != nil {
+		return err
+	}
+	if granted {
+		if _, ok := t.roles[permWrite]; !ok {
+			if _, err := c.ensureRoleTeam(repo.Team, permWrite); err != nil {
+				return err
+			}
+			t, err = c.findTeam(repo.Team)
+			if err != nil {
+				return err
+			}
+		}
+		for _, role := range t.roles {
+			if err := c.FJ.AddTeamRepo(role.ID, c.Cfg.Org, name); err != nil {
+				return err
+			}
+		}
+	} else {
+		for _, role := range t.roles {
+			_ = c.FJ.RemoveTeamRepo(role.ID, c.Cfg.Org, name)
+		}
+	}
+	if c.indexed() {
+		_ = c.Idx.SetTeamRepoGranted(repo.Team, owner+"/"+name, granted)
+	}
+	c.forget()
+	c.publishCatalog()
+	return nil
+}
+
+func (c *Catalog) grantedTeamRepos(name string) ([]forgejo.Repo, error) {
+	if !c.indexed() || name == "" {
+		return nil, nil
+	}
+	rows, err := c.Idx.GrantedTeamRepos(name)
+	if err != nil {
+		return nil, err
+	}
+	return c.asRepos(rows, name), nil
 }
 
 func (c *Catalog) AddTeamRepo(user, team, repo string) error {
@@ -360,7 +449,14 @@ func (c *Catalog) RepoAccess(user, owner, name string) (RepoAccess, error) {
 		return RepoAccess{}, err
 	}
 	inherited := []AccessPerson{}
-	if repo.Team != "" {
+	granted := false
+	if c.indexed() {
+		_, granted, _, err = c.Idx.RepoTeamInfo(owner + "/" + name)
+		if err != nil {
+			return RepoAccess{}, err
+		}
+	}
+	if repo.Team != "" && granted {
 		if t, err := c.findTeam(repo.Team); err == nil {
 			inherited, err = c.membersOf(t)
 			if err != nil {
@@ -393,6 +489,7 @@ func (c *Catalog) RepoAccess(user, owner, name string) (RepoAccess, error) {
 	direct = c.withAuthors(direct)
 	return RepoAccess{
 		Team:      repo.Team,
+		Granted:   granted,
 		CanManage: c.IsOrgAdmin(user) || repo.Permissions.Admin,
 		Inherited: inherited,
 		Direct:    direct,

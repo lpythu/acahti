@@ -131,6 +131,8 @@ CREATE TABLE IF NOT EXISTS repo_collaborators (
 );
 CREATE INDEX IF NOT EXISTS repo_collaborators_login_idx ON repo_collaborators (login);
 ALTER TABLE repos ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT false;
+ALTER TABLE team_repos ADD COLUMN IF NOT EXISTS granted boolean NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS team_repos_granted_idx ON team_repos (team) WHERE granted;
 `)
 	return err
 }

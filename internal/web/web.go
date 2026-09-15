@@ -202,6 +202,15 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
+	logins := make([]string, 0, len(out.Items))
+	for _, u := range out.Items {
+		logins = append(logins, u.Login)
+	}
+	byRepo, err := p.Cat.UserRepoAccessMany(logins)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
 	for i := range out.Items {
 		out.Items[i].FullName = identity.Name(out.Items[i].Login, out.Items[i].FullName)
 		names := byLogin[out.Items[i].Login]
@@ -209,6 +218,17 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 			names = []string{}
 		}
 		out.Items[i].Teams = names
+		repos := byRepo[out.Items[i].Login]
+		if repos == nil {
+			repos = []catalog.RepoPerm{}
+		}
+		dst := make([]forgejo.UserRepo, 0, len(repos))
+		for _, row := range repos {
+			dst = append(dst, forgejo.UserRepo{
+				Repo: row.Repo, Permission: row.Permission, Team: row.Team, Direct: row.Direct,
+			})
+		}
+		out.Items[i].Repos = dst
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -253,6 +273,25 @@ func (p *Pages) UserRepos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"repos": out})
+}
+
+func (p *Pages) RepoTeamGrant(w http.ResponseWriter, r *http.Request) {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Granted bool `json:"granted"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	if err := p.Cat.SetRepoTeamGrant(user, r.PathValue("owner"), r.PathValue("name"), body.Granted); err != nil {
+		writeCatErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (p *Pages) Skill(w http.ResponseWriter, _ *http.Request) {

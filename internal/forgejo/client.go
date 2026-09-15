@@ -35,15 +35,23 @@ func (c *Client) Ready() bool {
 }
 
 type User struct {
-	ID          int64    `json:"id"`
-	Login       string   `json:"login"`
-	LoginName   string   `json:"login_name"`
-	SourceID    int64    `json:"source_id"`
-	Email       string   `json:"email"`
-	IsAdmin     bool     `json:"is_admin"`
-	FullName    string   `json:"full_name"`
-	Permissions Perm     `json:"permissions"`
-	Teams       []string `json:"teams,omitempty"`
+	ID          int64      `json:"id"`
+	Login       string     `json:"login"`
+	LoginName   string     `json:"login_name"`
+	SourceID    int64      `json:"source_id"`
+	Email       string     `json:"email"`
+	IsAdmin     bool       `json:"is_admin"`
+	FullName    string     `json:"full_name"`
+	Permissions Perm       `json:"permissions"`
+	Teams       []string   `json:"teams,omitempty"`
+	Repos       []UserRepo `json:"repos,omitempty"`
+}
+
+type UserRepo struct {
+	Repo       string `json:"repo"`
+	Permission string `json:"permission"`
+	Team       string `json:"team,omitempty"`
+	Direct     bool   `json:"direct"`
 }
 
 type Perm struct {

@@ -31,8 +31,17 @@ type OrgMember struct {
 }
 
 type TeamRepoLink struct {
-	Team string
-	Repo string
+	Team    string
+	Repo    string
+	Granted bool
+}
+
+type UserRepoACL struct {
+	Login  string
+	Repo   string
+	Role   string
+	Team   string
+	Direct bool
 }
 
 type OrgCollaborator struct {
@@ -156,6 +165,19 @@ ON CONFLICT (team, repo) DO NOTHING
 	return err
 }
 
+func (s *Store) SetTeamRepoGranted(team, repo string, granted bool) error {
+	if !s.ready() || team == "" || repo == "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := s.pool.Exec(ctx, `
+INSERT INTO team_repos (team, repo, granted) VALUES ($1, $2, $3)
+ON CONFLICT (team, repo) DO UPDATE SET granted = EXCLUDED.granted
+`, team, repo, granted)
+	return err
+}
+
 func (s *Store) RemoveTeamRepo(team, repo string) error {
 	if !s.ready() || team == "" || repo == "" {
 		return nil
@@ -230,35 +252,48 @@ func (s *Store) HasMember(team, login string) (bool, error) {
 }
 
 func (s *Store) UserRepoPerms(login string) (map[string]string, error) {
-	if !s.ready() || login == "" {
-		return map[string]string{}, nil
+	rows, err := s.UserRepoPermsMany([]string{login})
+	if err != nil {
+		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	out := map[string]string{}
+	for _, row := range rows {
+		out[row.Repo] = strongerRole(out[row.Repo], row.Role)
+	}
+	return out, nil
+}
+
+func (s *Store) UserRepoPermsMany(logins []string) ([]UserRepoACL, error) {
+	if !s.ready() || len(logins) == 0 {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	rows, err := s.pool.Query(ctx, `
-SELECT x.repo, x.role FROM (
-  SELECT tr.repo, m.role
+SELECT x.login, x.repo, x.role, x.team, x.direct FROM (
+  SELECT m.login, tr.repo, m.role, tr.team, false AS direct
   FROM team_members m
-  JOIN team_repos tr ON tr.team = m.team
-  WHERE m.login = $1
+  JOIN team_repos tr ON tr.team = m.team AND tr.granted
+  WHERE m.login = ANY($1)
   UNION ALL
-  SELECT c.repo, c.role
+  SELECT c.login, c.repo, c.role, COALESCE(tr.team, ''), true
   FROM repo_collaborators c
-  WHERE c.login = $1
+  LEFT JOIN team_repos tr ON tr.repo = c.repo AND tr.granted
+  WHERE c.login = ANY($1)
 ) x
 JOIN repos r ON r.full_name = x.repo AND NOT r.archived
-`, login)
+`, logins)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := map[string]string{}
+	var out []UserRepoACL
 	for rows.Next() {
-		var repo, role string
-		if err := rows.Scan(&repo, &role); err != nil {
+		var row UserRepoACL
+		if err := rows.Scan(&row.Login, &row.Repo, &row.Role, &row.Team, &row.Direct); err != nil {
 			return nil, err
 		}
-		out[repo] = strongerRole(out[repo], role)
+		out = append(out, row)
 	}
 	return out, rows.Err()
 }
@@ -274,7 +309,7 @@ func (s *Store) HasVisibleRepo(login, repo string) (bool, error) {
 SELECT EXISTS(
   SELECT 1 FROM team_repos tr
   JOIN team_members m ON m.team = tr.team AND m.login = $1
-  WHERE tr.repo = $2
+  WHERE tr.repo = $2 AND tr.granted
   UNION ALL
   SELECT 1 FROM repo_collaborators c
   WHERE c.login = $1 AND c.repo = $2
@@ -326,36 +361,76 @@ func (s *Store) TeamsByLogin() (map[string][]string, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) RepoTeam(fullName string) (string, bool, error) {
+func (s *Store) RepoTeamInfo(fullName string) (string, bool, bool, error) {
 	if !s.ready() || fullName == "" {
-		return "", false, nil
+		return "", false, false, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var team string
-	err := s.pool.QueryRow(ctx, `SELECT team FROM team_repos WHERE repo = $1 ORDER BY team LIMIT 1`, fullName).Scan(&team)
+	var granted bool
+	err := s.pool.QueryRow(ctx, `SELECT team, granted FROM team_repos WHERE repo = $1 ORDER BY team LIMIT 1`, fullName).Scan(&team, &granted)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return "", false, nil
+			return "", false, false, nil
 		}
-		return "", false, err
+		return "", false, false, err
 	}
-	return team, true, nil
+	return team, granted, true, nil
+}
+
+func (s *Store) RepoTeam(fullName string) (string, bool, error) {
+	team, _, ok, err := s.RepoTeamInfo(fullName)
+	return team, ok, err
+}
+
+func (s *Store) ListTeamRepoLinks() ([]TeamRepoLink, error) {
+	if !s.ready() {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	rows, err := s.pool.Query(ctx, `SELECT team, repo, granted FROM team_repos ORDER BY team, repo`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []TeamRepoLink
+	for rows.Next() {
+		var l TeamRepoLink
+		if err := rows.Scan(&l.Team, &l.Repo, &l.Granted); err != nil {
+			return nil, err
+		}
+		out = append(out, l)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) TeamRepos(team string) ([]OrgRepo, error) {
+	return s.teamRepos(team, false)
+}
+
+func (s *Store) GrantedTeamRepos(team string) ([]OrgRepo, error) {
+	return s.teamRepos(team, true)
+}
+
+func (s *Store) teamRepos(team string, grantedOnly bool) ([]OrgRepo, error) {
 	if !s.ready() || team == "" {
 		return nil, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	rows, err := s.pool.Query(ctx, `
+	q := `
 SELECT r.full_name, r.default_branch, r.description, r.updated
 FROM team_repos tr
 JOIN repos r ON r.full_name = tr.repo
 WHERE tr.team = $1
-ORDER BY r.full_name
-`, team)
+`
+	if grantedOnly {
+		q += ` AND tr.granted`
+	}
+	q += ` ORDER BY r.full_name`
+	rows, err := s.pool.Query(ctx, q, team)
 	if err != nil {
 		return nil, err
 	}
@@ -444,7 +519,7 @@ WHERE NOT r.archived AND (
   EXISTS (
     SELECT 1 FROM team_repos tr
     JOIN team_members m ON m.team = tr.team AND m.login = $1
-    WHERE tr.repo = r.full_name
+    WHERE tr.repo = r.full_name AND tr.granted
   )
   OR EXISTS (
     SELECT 1 FROM repo_collaborators c
@@ -476,7 +551,7 @@ SELECT r.full_name, r.default_branch, r.description, r.updated
 FROM team_repos tr
 JOIN repos r ON r.full_name = tr.repo AND NOT r.archived
 WHERE tr.team = $2 AND (
-  EXISTS (SELECT 1 FROM team_members m WHERE m.team = $2 AND m.login = $1)
+  (tr.granted AND EXISTS (SELECT 1 FROM team_members m WHERE m.team = $2 AND m.login = $1))
   OR EXISTS (SELECT 1 FROM repo_collaborators c WHERE c.repo = r.full_name AND c.login = $1)
 )
 ORDER BY r.full_name
@@ -547,6 +622,7 @@ SELECT team, COUNT(*) FROM (
   FROM team_repos tr
   JOIN repos r ON r.full_name = tr.repo AND NOT r.archived
   JOIN team_members m ON m.team = tr.team AND m.login = $1
+  WHERE tr.granted
   UNION
   SELECT tr.team, r.full_name
   FROM repo_collaborators c
@@ -602,7 +678,10 @@ SELECT t.name, r.full_name, COALESCE(r.default_branch, ''), COALESCE(r.descripti
 FROM teams t
 JOIN team_members m ON m.team = t.name AND m.login = $1
 LEFT JOIN team_repos tr ON tr.team = t.name
-LEFT JOIN repos r ON r.full_name = tr.repo AND NOT r.archived
+LEFT JOIN repos r ON r.full_name = tr.repo AND NOT r.archived AND (
+  tr.granted
+  OR EXISTS (SELECT 1 FROM repo_collaborators c WHERE c.repo = r.full_name AND c.login = $1)
+)
 UNION
 SELECT tr.team, r.full_name, COALESCE(r.default_branch, ''), COALESCE(r.description, ''), COALESCE(r.updated, 0)
 FROM repo_collaborators c
@@ -765,7 +844,7 @@ ON CONFLICT (name) DO UPDATE SET
 		if l.Team == "" || l.Repo == "" {
 			continue
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO team_repos (team, repo) VALUES ($1, $2) ON CONFLICT DO NOTHING`, l.Team, l.Repo); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO team_repos (team, repo, granted) VALUES ($1, $2, $3) ON CONFLICT (team, repo) DO UPDATE SET granted = EXCLUDED.granted`, l.Team, l.Repo, l.Granted); err != nil {
 			return err
 		}
 	}

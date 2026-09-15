@@ -20,6 +20,36 @@ func (c *Catalog) indexed() bool {
 	return c != nil && c.Idx != nil && c.Idx.Ready()
 }
 
+type teamRepoHit struct {
+	team, repo, name string
+	roles            teamRoles
+}
+
+func folderLinkKey(team, repo string) string {
+	return team + "\x00" + repo
+}
+
+func forgejoTeamReposToStrip(folder map[string]store.TeamRepoLink, fj []teamRepoHit) []teamRepoHit {
+	var out []teamRepoHit
+	for _, hit := range fj {
+		if l, ok := folder[folderLinkKey(hit.team, hit.repo)]; ok && l.Granted {
+			continue
+		}
+		out = append(out, hit)
+	}
+	return out
+}
+
+func grantedFolderLinks(folder map[string]store.TeamRepoLink) []store.TeamRepoLink {
+	out := make([]store.TeamRepoLink, 0)
+	for _, l := range folder {
+		if l.Granted {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
 func (c *Catalog) asRepo(r store.OrgRepo, team string) forgejo.Repo {
 	name := r.FullName
 	if _, n, ok := strings.Cut(r.FullName, "/"); ok {
@@ -156,9 +186,21 @@ func (c *Catalog) BackfillOrg() {
 		}
 		seenRepo[r.FullName] = asOrgRepo(r)
 	}
-	var links []store.TeamRepoLink
 	var members []store.OrgMember
 	var collabs []store.OrgCollaborator
+	existing, err := c.Idx.ListTeamRepoLinks()
+	if err != nil {
+		log.Printf("org backfill: folder links: %v", err)
+		existing = nil
+	}
+	folder := map[string]store.TeamRepoLink{}
+	for _, l := range existing {
+		if l.Team == "" || l.Repo == "" {
+			continue
+		}
+		folder[folderLinkKey(l.Team, l.Repo)] = l
+	}
+	var fjRepos []teamRepoHit
 	for name, t := range clusters {
 		ot := store.OrgTeam{Name: name}
 		if r, ok := t.roles[permWrite]; ok {
@@ -208,7 +250,11 @@ func (c *Catalog) BackfillOrg() {
 			if _, ok := seenRepo[r.FullName]; !ok {
 				seenRepo[r.FullName] = asOrgRepo(r)
 			}
-			links = append(links, store.TeamRepoLink{Team: name, Repo: r.FullName})
+			short := r.Name
+			if short == "" {
+				_, short, _ = strings.Cut(r.FullName, "/")
+			}
+			fjRepos = append(fjRepos, teamRepoHit{team: name, repo: r.FullName, name: short, roles: t})
 		}
 	}
 	repos := make([]store.OrgRepo, 0, len(seenRepo))
@@ -239,6 +285,28 @@ func (c *Catalog) BackfillOrg() {
 			}
 			collabs = append(collabs, store.OrgCollaborator{Repo: r.FullName, Login: u.Login, Role: perm})
 		}
+	}
+	for _, hit := range forgejoTeamReposToStrip(folder, fjRepos) {
+		for _, role := range hit.roles.roles {
+			_ = c.FJ.RemoveTeamRepo(role.ID, c.Cfg.Org, hit.name)
+		}
+	}
+	for _, l := range grantedFolderLinks(folder) {
+		t, ok := clusters[l.Team]
+		if !ok {
+			continue
+		}
+		_, short, _ := strings.Cut(l.Repo, "/")
+		if short == "" {
+			continue
+		}
+		for _, role := range t.roles {
+			_ = c.FJ.AddTeamRepo(role.ID, c.Cfg.Org, short)
+		}
+	}
+	links := make([]store.TeamRepoLink, 0, len(folder))
+	for _, l := range folder {
+		links = append(links, l)
 	}
 	if err := c.Idx.ReplaceOrg(teams, repos, links, members, collabs); err != nil {
 		log.Printf("org backfill: replace: %v", err)

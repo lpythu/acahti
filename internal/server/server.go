@@ -80,6 +80,7 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 	mux.HandleFunc("DELETE /ui/teams/{team}/repos/{repo}", pages.TeamRepo)
 	mux.HandleFunc("GET /ui/repos/{owner}/{name}", pages.Repo)
 	mux.HandleFunc("GET /ui/repos/{owner}/{name}/access", pages.RepoAccess)
+	mux.HandleFunc("PUT /ui/repos/{owner}/{name}/grant", pages.RepoTeamGrant)
 	mux.HandleFunc("PUT /ui/repos/{owner}/{name}/collaborators/{login}", pages.RepoCollaborator)
 	mux.HandleFunc("DELETE /ui/repos/{owner}/{name}/collaborators/{login}", pages.RepoCollaborator)
 	mux.HandleFunc("GET /ui/repos/{owner}/{name}/contents", pages.RepoContents)

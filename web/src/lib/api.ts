@@ -76,7 +76,7 @@ export type Stack = {
   upgrade_hint: string
 }
 
-export type User = { login: string; email: string; is_admin: boolean; full_name: string; teams?: string[] }
+export type User = { login: string; email: string; is_admin: boolean; full_name: string; teams?: string[]; repos?: UserRepoPerm[] }
 
 export type Invite = { code: string }
 
@@ -96,7 +96,7 @@ export type Repo = {
 
 export type AccessPerson = { login: string; author?: string; permission: string }
 
-export type UserRepoPerm = { repo: string; permission: string }
+export type UserRepoPerm = { repo: string; permission: string; team?: string; direct?: boolean }
 
 export type TeamAccess = {
   name: string
@@ -107,6 +107,7 @@ export type TeamAccess = {
 
 export type RepoAccess = {
   team: string
+  granted?: boolean
   can_manage: boolean
   inherited: AccessPerson[]
   direct: AccessPerson[]
@@ -348,6 +349,11 @@ export const api = {
   removeCollaborator: (owner: string, name: string, login: string) =>
     req<{ ok: boolean }>(`/ui/repos/${owner}/${name}/collaborators/${encodeURIComponent(login)}`, {
       method: "DELETE",
+    }),
+  setRepoTeamGrant: (owner: string, name: string, granted: boolean) =>
+    req<{ ok: boolean }>(`/ui/repos/${owner}/${name}/grant`, {
+      method: "PUT",
+      body: JSON.stringify({ granted }),
     }),
   repo: (owner: string, name: string, ref?: string) =>
     req<RepoHeader>(`/ui/repos/${owner}/${name}${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`),

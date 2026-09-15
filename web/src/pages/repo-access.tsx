@@ -6,6 +6,8 @@ import { PageFrame } from "@/components/page-frame"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
+import { MenuPanel } from "@/components/menu-panel"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -65,6 +67,7 @@ function MoveTeamMenu({
     >
       <PopoverTrigger render={<Button type="button" size="sm" variant="outline" />}>{t("moveTeam")}</PopoverTrigger>
       <PopoverContent className="w-72">
+        <MenuPanel loading={open && teams.loading} error={teams.error}>
         <form onSubmit={(e) => void submit(e)}>
           <FieldGroup>
             <Field>
@@ -110,6 +113,7 @@ function MoveTeamMenu({
             </Button>
           </FieldGroup>
         </form>
+        </MenuPanel>
       </PopoverContent>
     </Popover>
   )
@@ -144,7 +148,18 @@ export function RepoAccessPage() {
                 <span className="text-muted-foreground">{t("unassignedRepos")}</span>
               )}
             </p>
-            {data.team ? <PeopleTable people={data.inherited} empty={t("noInherited")} /> : null}
+            {data.team && admin ? (
+              <label className="flex items-center gap-2 text-sm">
+                <Switch
+                  checked={Boolean(data.granted)}
+                  onCheckedChange={(v) => {
+                    void api.setRepoTeamGrant(owner, name, v === true).then(() => load.reload())
+                  }}
+                />
+                {t("grantTeam")}
+              </label>
+            ) : null}
+            {data.team && data.granted ? <PeopleTable people={data.inherited} empty={t("noInherited")} /> : null}
           </section>
           <section className="flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">

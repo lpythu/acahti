@@ -3,8 +3,9 @@ import { Link } from "react-router-dom"
 import { ShieldIcon } from "lucide-react"
 import { toast } from "sonner"
 
-import { permLabel } from "@/components/access-fields"
+import { PermSelect, type AccessPerm } from "@/components/access-fields"
 import { CopyField } from "@/components/copy-field"
+import { MenuPanel } from "@/components/menu-panel"
 import { PagedList } from "@/components/paged-list"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -16,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useLoad } from "@/hooks/use-load"
 import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
-import { api, repoName, splitRepo, type Invite } from "@/lib/api"
+import { api, repoName, splitRepo, type Invite, type UserRepoPerm } from "@/lib/api"
 import { onboardNote, randomPassword } from "@/lib/onboard"
 import { useSession } from "@/lib/session"
 
@@ -239,44 +240,95 @@ function UserTeamsMenu({ teams }: { teams: string[] }) {
   )
 }
 
+function repoViaLabel(t: ReturnType<typeof useT>, row: UserRepoPerm) {
+  if (row.direct && row.team) return t("viaDirectOverTeam", { team: row.team })
+  if (row.direct) return t("viaDirectGrant")
+  if (row.team) return t("viaTeam", { team: row.team })
+  return t("viaDirectGrant")
+}
+
 function UserReposMenu({
   login,
   isAdmin,
+  repos: initial,
+  onChanged,
 }: {
   login: string
   isAdmin: boolean
+  repos: UserRepoPerm[]
+  onChanged: () => Promise<void>
 }) {
   const t = useT()
   const [open, setOpen] = useState(false)
-  const load = useLoad(() => api.userRepos(login).then((r) => r.repos || []), [login], open)
-  const repos = load.data || []
+  const [rows, setRows] = useState(initial)
+  const [err, setErr] = useState("")
+
+  useEffect(() => {
+    setRows(initial)
+  }, [initial])
+
+  async function refresh() {
+    const r = await api.userRepos(login)
+    setRows(r.repos || [])
+    await onChanged()
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger render={<Button type="button" size="sm" variant="outline" />}>
         {t("userRepos")}
       </PopoverTrigger>
-      <PopoverContent align="start" className="flex max-h-80 w-80 flex-col gap-2 overflow-y-auto">
-        {load.error ? <p className="text-sm text-destructive">{load.error}</p> : null}
+      <PopoverContent
+        align="start"
+        className="flex max-h-80 w-max min-w-48 max-w-[min(22rem,calc(100vw-2rem))] flex-col gap-2 overflow-y-auto"
+      >
         {isAdmin ? <p className="text-sm text-muted-foreground">{t("orgAdminRepos")}</p> : null}
-        {!load.loading && !load.error && !isAdmin && !repos.length ? (
-          <p className="text-sm text-muted-foreground">{t("noUserRepos")}</p>
-        ) : null}
-        {repos.length ? (
-          <ul className="flex flex-col gap-1.5">
-            {repos.map((row) => {
-              const { owner, name } = splitRepo(row.repo)
-              return (
-                <li key={row.repo} className="flex items-center justify-between gap-2 text-sm">
-                  <Link className="min-w-0 truncate hover:underline" to={`/repos/${owner}/${name}`}>
-                    {repoName(row.repo)}
-                  </Link>
-                  <span className="shrink-0 text-muted-foreground">{permLabel(t, row.permission)}</span>
-                </li>
-              )
-            })}
-          </ul>
-        ) : null}
+        <MenuPanel error={err} empty={!rows.length && !isAdmin ? t("noUserRepos") : undefined}>
+          {rows.length ? (
+            <ul className="flex flex-col gap-1.5">
+              {rows.map((row) => {
+                const { owner, name } = splitRepo(row.repo)
+                const direct = Boolean(row.direct)
+                return (
+                  <li key={row.repo} className="flex items-center gap-2 text-sm">
+                    <Link className="min-w-0 truncate hover:underline" to={`/repos/${owner}/${name}`}>
+                      {repoName(row.repo)}
+                    </Link>
+                    <span className="shrink-0 text-muted-foreground">{repoViaLabel(t, row)}</span>
+                    <PermSelect
+                      value={row.permission}
+                      className="w-24"
+                      onChange={(perm: AccessPerm) => {
+                        setErr("")
+                        void api
+                          .setCollaborator(owner, name, login, perm)
+                          .then(() => refresh())
+                          .catch((e) => setErr(e instanceof Error ? e.message : t("loadError")))
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={!direct}
+                      title={!direct ? t("inheritRemoveHint") : undefined}
+                      onClick={() => {
+                        if (!direct) return
+                        setErr("")
+                        void api
+                          .removeCollaborator(owner, name, login)
+                          .then(() => refresh())
+                          .catch((e) => setErr(e instanceof Error ? e.message : t("loadError")))
+                      }}
+                    >
+                      {t("remove")}
+                    </Button>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : null}
+        </MenuPanel>
       </PopoverContent>
     </Popover>
   )
@@ -294,21 +346,20 @@ function OnboardMenu({
   onPassword: (pw: string) => void
 }) {
   const t = useT()
-  const [note, setNote] = useState("")
+  const [pw, setPw] = useState("")
   const [err, setErr] = useState("")
 
   async function prepare() {
     setErr("")
     try {
-      let pw = password.trim()
-      if (!pw) {
-        pw = randomPassword()
-        onPassword(pw)
+      let next = password.trim()
+      if (!next) {
+        next = randomPassword()
+        onPassword(next)
       }
-      await api.setPassword(login, pw)
-      const text = onboardNote(root, login, pw)
-      setNote(text)
-      await copyText(text)
+      await api.setPassword(login, next)
+      setPw(next)
+      await copyText(onboardNote(root, login, next))
     } catch (e) {
       setErr(e instanceof Error ? e.message : t("loadError"))
     }
@@ -319,7 +370,7 @@ function OnboardMenu({
       onOpenChange={(open) => {
         if (open) void prepare()
         else {
-          setNote("")
+          setPw("")
           setErr("")
         }
       }}
@@ -328,9 +379,13 @@ function OnboardMenu({
         {t("join")}
       </PopoverTrigger>
       <PopoverContent className="flex w-96 flex-col gap-3">
-        <p className="text-sm text-muted-foreground">{t("onboardHint")}</p>
         {err ? <p className="text-sm text-destructive">{err}</p> : null}
-        {note ? <CopyField multiline value={note} /> : null}
+        {pw ? (
+          <>
+            <p className="text-sm text-muted-foreground">{t("onboardHint")}</p>
+            <CopyField multiline value={onboardNote(root, login, pw)} />
+          </>
+        ) : null}
       </PopoverContent>
     </Popover>
   )
@@ -435,7 +490,14 @@ export function UsersPage() {
                     <UserTeamsMenu teams={teams} />
                   </TableCell>
                   <TableCell>
-                    <UserReposMenu login={u.login} isAdmin={u.is_admin} />
+                    <UserReposMenu
+                      login={u.login}
+                      isAdmin={u.is_admin}
+                      repos={u.repos || []}
+                      onChanged={async () => {
+                        usersLoad.reload()
+                      }}
+                    />
                   </TableCell>
                   <TableCell>
                     {u.is_admin ? (

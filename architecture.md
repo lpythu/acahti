@@ -106,16 +106,20 @@ flowchart LR
   hook --> sync
 ```
 
+A **team folder** (`team_repos`) is grouping in the nav. Git and UI visibility is a per-repo ACL: `repo_collaborators` ∪ `team_repos.granted`. Joining a team does not open every repo in that folder.
+
 **Write**
 
-1. Create/delete team, members, attach repo → Forgejo, then upsert the index, publish `catalog.updated`.
-2. MCP `repo_create` upserts `repos` (and `team_repos` if a team is set).
-3. Forgejo `repository` / create / delete webhooks upsert or delete the repo row.
-4. Startup **reconcile** walks org teams, members, and repos once and `ReplaceOrg`s the tables.
+1. Create/delete team, members → Forgejo, then upsert the index, publish `catalog.updated`. Move/attach repo only writes the folder row (`granted` stays false until Access grants it).
+2. Access `PUT /ui/repos/{owner}/{name}/grant` sets `team_repos.granted` and Forgejo `AddTeamRepo` / `RemoveTeamRepo` for that one repo. Direct people stay `repo_collaborators`.
+3. MCP `repo_create` upserts `repos` (and a folder `team_repos` if a team is set).
+4. Forgejo `repository` / create / delete webhooks upsert or delete the repo row.
+5. Startup **reconcile** walks org teams, members, collaborators, and team-repos. Folder links already in the index are kept. Forgejo team-repos that are not `granted` are removed so git matches the index; granted rows are `AddTeamRepo`d again. Then `ReplaceOrg`.
 
 **Read**
 
-- `GET /ui/nav/tree`, `GET /ui/repos?teams=1`, `GET /ui/repos`, `GET /ui/teams/{team}` members/repos, pipeline ACL: SQL only.
+- `GET /ui/nav/tree`, `GET /ui/repos?teams=1`, `GET /ui/repos`, `GET /ui/teams/{team}` members/repos, pipeline ACL: SQL only. Visible repos are direct collab or a `granted` team.
+- `GET /ui/users` attaches this page’s `teams` and `repos` ACL (`UserRepoPermsMany`); the Users Repos menu does not N+1.
 - Repo file browser / commits / PRs still `GetRepo` (git ACL + live metadata). Team label comes from `team_repos`.
 - `IsOrgAdmin` still checks Forgejo Owners (memo 30s).
 
@@ -180,6 +184,7 @@ One screen, one JSON. The SPA renders fields; it does not walk kernels.
 | `GET /ui/pipelines/{owner}/{name}/{n}` | `{ pipeline, steps, team, files }` |
 | `GET /ui/nav/tree` | `[{ team, repos }]` from the org catalog; trailing `{ team: "" }` is unassigned repos |
 | `GET /ui/repos?teams=1` | team names and counts |
+| `GET /ui/users` | page of users with `teams` and this page’s `repos` ACL |
 | `GET /ui/events` | SSE: `pipeline.updated`, `catalog.updated`, or `forgejo` (PRs) |
 
 ```mermaid
@@ -224,7 +229,7 @@ The extra hop `browser → gateway → localhost kernel` is not the cost. The co
 | `woodpecker/` | Woodpecker server state |
 | `gateway/` | invites, OAuth clients |
 
-`acahti.pipelines` keys `(repo, number)`. Org catalog: `repos`, `teams`, `team_repos`, `team_members`.
+`acahti.pipelines` keys `(repo, number)`. Org catalog: `repos`, `teams`, `team_repos` (folder + `granted`), `team_members`, `repo_collaborators`.
 
 Gateway migrate is `CREATE TABLE IF NOT EXISTS` at process start. Existing hosts: `store.Open` creates database `acahti` if missing (init script only runs on an empty PG data dir).
 
