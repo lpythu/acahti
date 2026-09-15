@@ -42,9 +42,19 @@ func New(cfg config.Config, cat *catalog.Catalog, fj *forgejo.Client, wp *woodpe
 	}
 }
 
+func (p *Pages) isAdmin(user string) bool {
+	if user == "" {
+		return false
+	}
+	if p.Cat != nil {
+		return p.Cat.IsOrgAdmin(user)
+	}
+	return p.Auth.IsAdmin(user)
+}
+
 func (p *Pages) SessionUser(r *http.Request) (string, bool) {
 	user := p.Auth.CookieUser(r)
-	return user, p.Auth.IsAdmin(user)
+	return user, p.isAdmin(user)
 }
 
 func (p *Pages) SetSession(w http.ResponseWriter, user string) {
@@ -70,13 +80,22 @@ func (p *Pages) requireJSON(w http.ResponseWriter, r *http.Request) (string, boo
 	return user, admin, true
 }
 
+func (p *Pages) requireAdmin(w http.ResponseWriter, r *http.Request) (string, bool) {
+	user, admin, ok := p.requireJSON(w, r)
+	if !ok {
+		return "", false
+	}
+	if !admin {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin only"})
+		return "", false
+	}
+	return user, true
+}
+
 func (p *Pages) Me(w http.ResponseWriter, r *http.Request) {
 	user, admin, ok := p.requireJSON(w, r)
 	if !ok {
 		return
-	}
-	if !admin && p.Cat != nil && p.Cat.IsOrgAdmin(user) {
-		admin = true
 	}
 	author := ""
 	if p.FJ != nil {
@@ -102,7 +121,7 @@ func (p *Pages) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.SetSession(w, u.Login)
-	writeJSON(w, http.StatusOK, identity.Session(u.Login, u.FullName, p.Cat != nil && p.Cat.IsOrgAdmin(u.Login), p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
+	writeJSON(w, http.StatusOK, identity.Session(u.Login, u.FullName, p.isAdmin(u.Login), p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
 }
 
 func (p *Pages) Logout(w http.ResponseWriter, r *http.Request) {
@@ -139,15 +158,7 @@ func (p *Pages) Board(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
-	user, admin, ok := p.requireJSON(w, r)
-	if !ok {
-		return
-	}
-	if !admin && p.Cat != nil && p.Cat.IsOrgAdmin(user) {
-		admin = true
-	}
-	if !admin {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin only"})
+	if _, ok := p.requireAdmin(w, r); !ok {
 		return
 	}
 	if r.Method == http.MethodPost {
@@ -203,15 +214,7 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Pages) PatchUser(w http.ResponseWriter, r *http.Request) {
-	user, admin, ok := p.requireJSON(w, r)
-	if !ok {
-		return
-	}
-	if !admin && p.Cat != nil && p.Cat.IsOrgAdmin(user) {
-		admin = true
-	}
-	if !admin {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin only"})
+	if _, ok := p.requireAdmin(w, r); !ok {
 		return
 	}
 	login := strings.TrimSpace(r.PathValue("login"))
@@ -282,12 +285,7 @@ func (p *Pages) Join(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Pages) Invites(w http.ResponseWriter, r *http.Request) {
-	_, admin, ok := p.requireJSON(w, r)
-	if !ok {
-		return
-	}
-	if !admin {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin only"})
+	if _, ok := p.requireAdmin(w, r); !ok {
 		return
 	}
 	if p.InviteStore == nil {
@@ -355,12 +353,7 @@ func (p *Pages) Password(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Pages) Stack(w http.ResponseWriter, r *http.Request) {
-	_, admin, ok := p.requireJSON(w, r)
-	if !ok {
-		return
-	}
-	if !admin {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin only"})
+	if _, ok := p.requireAdmin(w, r); !ok {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -373,12 +366,7 @@ func (p *Pages) Stack(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Pages) Agents(w http.ResponseWriter, r *http.Request) {
-	_, admin, ok := p.requireJSON(w, r)
-	if !ok {
-		return
-	}
-	if !admin {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin only"})
+	if _, ok := p.requireAdmin(w, r); !ok {
 		return
 	}
 	out, err := p.Cat.ListAgents(page.Parse(r))
