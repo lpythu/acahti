@@ -57,6 +57,7 @@ Org catalog (Owners put once under Admin → Pipeline secrets):
 | `kubeconfig_office` / `kubeconfig_hk` | `KUBECONFIG` |
 | `acahti_publish_token` | `ACAHTI_PUBLISH_TOKEN` |
 | `npm_token` | `NPM_TOKEN` |
+| `codeup_netrc` | `CODEUP_NETRC` (Go private modules still fetched from Codeup) |
 | `oss_access_key_id` / `oss_access_key_secret` | `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` |
 | `argos_dash` | `ARGOS_DASH` |
 
@@ -70,7 +71,7 @@ Only org/repo admins can list or put secrets. Members cannot see names. Values a
 
 ### docker-build
 
-`with:` `images` (required). One image per line. First field is the primary tag. Optional `also=` extra tags (comma-separated), `context=` (default `.`), `file=` Dockerfile, other `KEY=VAL` as `--build-arg`. Optional `push` (default `true`); `push: false` is `--load` only (CI). If `NPM_TOKEN` is set, it is passed as BuildKit `--secret id=npm_token`. Builds with `--pull --provenance=false --load`, then pushes primary and `also=` tags when `push` is true.
+`with:` `images` (required). One image per line. First field is the primary tag. Optional `also=` extra tags (comma-separated), `context=` (default `.`), `file=` Dockerfile, other `KEY=VAL` as `--build-arg`. Optional `push` (default `true`); `push: false` is `--load` only (CI). BuildKit secrets: `NPM_TOKEN` → `id=npm_token`, `CODEUP_NETRC` → `id=codeup_netrc`. Builds with `--pull --provenance=false --load`, then pushes primary and `also=` tags when `push` is true.
 
 OCI tags: office CD `dev-${CI_COMMIT_SHA}`; HK CD `${CI_COMMIT_TAG#v}` (git tag `vX.Y.Z` → `X.Y.Z`). `latest` is a pointer at the same digest. `${CI_COMMIT_TAG#v}` is expanded in the pipe (Woodpecker only interpolates `${CI_COMMIT_TAG}`).
 

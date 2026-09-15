@@ -22,13 +22,18 @@ cleanup_secrets() {
 }
 trap cleanup_secrets EXIT
 
-if [[ -n "${NPM_TOKEN:-}" ]]; then
+add_bk_secret() {
+	local id="$1" value="$2"
+	[[ -z "$value" ]] && return 0
+	local src
 	src="$(mktemp)"
 	secret_files+=("$src")
-	printf '%s' "$NPM_TOKEN" >"$src"
+	printf '%s' "$value" >"$src"
 	chmod 600 "$src"
-	secret_args+=(--secret "id=npm_token,src=${src}")
-fi
+	secret_args+=(--secret "id=${id},src=${src}")
+}
+add_bk_secret npm_token "${NPM_TOKEN:-}"
+add_bk_secret codeup_netrc "${CODEUP_NETRC:-}"
 
 build_one() {
 	local primary="$1"
