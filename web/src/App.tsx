@@ -1,10 +1,11 @@
-import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom"
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { I18nProvider } from "@/i18n/i18n"
 import { SessionProvider } from "@/lib/session"
 import { AdminHomePage } from "@/pages/admin-home"
+import { AdminSecretsPage } from "@/pages/admin-secrets"
 import { AdminTeamPage, AdminTeamsPage } from "@/pages/admin-teams"
 import { BoardPage } from "@/pages/board"
 import { LoginPage } from "@/pages/login"
@@ -20,6 +21,7 @@ import { RepoFilesPage } from "@/pages/repo-files"
 import { RepoLayout } from "@/pages/repo-layout"
 import { RepoPipelinesPage } from "@/pages/repo-pipelines"
 import { RepoAccessPage } from "@/pages/repo-access"
+import { RepoSecretsPage } from "@/pages/repo-secrets"
 import { RepoPullsPage } from "@/pages/repo-pulls"
 import { RepoTagsPage } from "@/pages/repo-tags"
 import { ReposPage } from "@/pages/repos"
@@ -28,11 +30,6 @@ import { ConsentPage } from "@/pages/consent"
 import { JoinPage } from "@/pages/join"
 import { UsePage } from "@/pages/use"
 import { UsersPage } from "@/pages/users"
-
-function LegacyPipelineRedirect() {
-  const { owner = "", name = "", number = "" } = useParams()
-  return <Navigate to={`/repos/${owner}/${name}/pipelines/${number}`} replace />
-}
 
 export default function App() {
   return (
@@ -59,13 +56,14 @@ export default function App() {
                   <Route path="pipelines" element={<RepoPipelinesPage />} />
                   <Route path="pipelines/:number" element={<PipelinePage />} />
                   <Route path="access" element={<RepoAccessPage />} />
+                  <Route path="secrets" element={<RepoSecretsPage />} />
                 </Route>
                 <Route path="/pipelines" element={<PipelinesPage />} />
-                <Route path="/pipelines/:owner/:name/:number" element={<LegacyPipelineRedirect />} />
                 <Route path="/packages" element={<PackagesPage />} />
                 <Route path="/packages/:kind/*" element={<PackageDetailPage />} />
                 <Route element={<AdminGate />}>
                   <Route path="/admin" element={<AdminHomePage />} />
+                  <Route path="/admin/secrets" element={<AdminSecretsPage />} />
                   <Route path="/admin/teams" element={<AdminTeamsPage />} />
                   <Route path="/admin/teams/:name" element={<AdminTeamPage />} />
                   <Route path="/admin/users" element={<UsersPage />} />

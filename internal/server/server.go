@@ -19,6 +19,7 @@ import (
 	"acahti/internal/invite"
 	"acahti/internal/mcp"
 	"acahti/internal/oauth"
+	"acahti/internal/pipeline"
 	"acahti/internal/store"
 	"acahti/internal/web"
 	"acahti/internal/woodpecker"
@@ -81,6 +82,12 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 	mux.HandleFunc("GET /ui/repos/{owner}/{name}", pages.Repo)
 	mux.HandleFunc("GET /ui/repos/{owner}/{name}/access", pages.RepoAccess)
 	mux.HandleFunc("PUT /ui/repos/{owner}/{name}/grant", pages.RepoTeamGrant)
+	mux.HandleFunc("GET /ui/secrets", pages.OrgSecrets)
+	mux.HandleFunc("PUT /ui/secrets/{name}", pages.OrgSecrets)
+	mux.HandleFunc("DELETE /ui/secrets/{name}", pages.OrgSecrets)
+	mux.HandleFunc("GET /ui/repos/{owner}/{name}/secrets", pages.RepoSecrets)
+	mux.HandleFunc("PUT /ui/repos/{owner}/{name}/secrets/{secret}", pages.RepoSecrets)
+	mux.HandleFunc("DELETE /ui/repos/{owner}/{name}/secrets/{secret}", pages.RepoSecrets)
 	mux.HandleFunc("PUT /ui/repos/{owner}/{name}/collaborators/{login}", pages.RepoCollaborator)
 	mux.HandleFunc("DELETE /ui/repos/{owner}/{name}/collaborators/{login}", pages.RepoCollaborator)
 	mux.HandleFunc("GET /ui/repos/{owner}/{name}/contents", pages.RepoContents)
@@ -127,6 +134,7 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 		}
 		pages.Index(w, r)
 	})
+	mux.HandleFunc("POST /hooks/pipeline-config", pipeline.HandleConfig(cfg.ConfigToken))
 	mux.HandleFunc("POST /hooks/woodpecker", func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
 		if p, ok := cat.IngestWoodpecker(raw); ok {

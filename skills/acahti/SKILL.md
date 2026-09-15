@@ -44,16 +44,32 @@ Protection is per repository, not a global train. Before push: `repo_get` `{owne
 
 ## After push
 
+## Write a pipeline
+
+Put YAML in `.acahti/pipelines/`. Call official pipes with `pipe: <name>@v1` and `with:`. One-offs use `commands:`. Do not vendor `.acahti/scripts`. Do not write `uses:` or `KIND=`.
+
+Git tags are `vX.Y.Z`. OCI / helm `image.tag` never includes `v` (office `dev-{sha}`; HK `${CI_COMMIT_TAG#v}` → `X.Y.Z`; `latest` is a pointer). Do not write `image.tag=${CI_COMMIT_TAG}`.
+
 Trigger CI with `git push`, a tag, or opening a PR. Do not use `pipeline_trigger` as a substitute for official release.
 
 1. `git rev-parse HEAD`
 2. `checks_wait` `{owner, name, sha}` — snapshot of the latest pipeline round. Poll until `done` is true. Do not pass `timeout_sec`
-3. Failed: `pipeline_list` `{repo: owner/name, sha}` (sha prefix) → `pipeline_get` → `pipeline_log` (omit `step`)
+3. Failed: `pipeline_list` `{repo: owner/name, sha}` (sha prefix) → `pipeline_get` (jobs and steps) → `pipeline_log` (omit `step`)
 4. Fix and push, or `pipeline_rerun`. `pipeline_cancel` only for a stuck run
 5. Green (`ok` and `done`): `pr_merge`. `blocked`: `deploy_approve`
 6. Island triage: `inbox` `{section: pipes|prs}` (default pipes: latest blocked/failed per repo)
 
 `pr_merge` succeeds when the newest pipeline number on the head SHA is green. Close leftover heads with `pr_close` then `ref_delete` (`dev`, `heads/dev`, or `refs/heads/dev`).
+
+## Pipeline secrets
+
+YAML only names secrets (`secrets: [acahti_publish_token]` or mapped `KUBECONFIG: kubeconfig_office`). Do not put values in git, chat, or `with:`.
+
+Admin agent: `repo_get.can_manage_secrets` (or `whoami.org_admin`) → `secret_list` → `secret_put`. Never print `value`. There is no `secret_get`. Do not slurp workspace `secrets/` unless the operator names a file.
+
+Non-admin agent: do not call `secret_*`. If a pipe fails missing a secret, tell the operator to add it under Repo → Pipeline secrets (or Admin → Pipeline secrets for org names). Do not ask the human to paste a token into the chat.
+
+Laptop `secrets/` is operator tooling (Cloudflare, dash.env download), not Runner or pipeline state.
 
 ## Packages
 
@@ -63,4 +79,4 @@ Trigger CI with `git push`, a tag, or opening a PR. Do not use `pipeline_trigger
 
 ## Tools
 
-`whoami` `repo_list` `repo_get` `repo_create` `branch_list` `ref_delete` `pr_create` `pr_list` `pr_get` `pr_comment` `pr_comments` `pr_merge` `pr_close` `checks_wait` `pipeline_list` `pipeline_get` `pipeline_log` `pipeline_rerun` `pipeline_trigger` `pipeline_cancel` `pipeline_delete` `inbox` `pkg_list` `pkg_publish` `agent_status` `deploy_approve`
+`whoami` `repo_list` `repo_get` `repo_create` `branch_list` `ref_delete` `pr_create` `pr_list` `pr_get` `pr_comment` `pr_comments` `pr_merge` `pr_close` `checks_wait` `pipeline_list` `pipeline_get` `pipeline_log` `pipeline_rerun` `pipeline_trigger` `pipeline_cancel` `pipeline_delete` `inbox` `pkg_list` `pkg_publish` `agent_status` `deploy_approve` `secret_list` `secret_put` `secret_delete`

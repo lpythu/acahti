@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Dispatch an official Acahti pipe. Installed on the Runner as /usr/local/bin/acahti-pipe.
+set -euo pipefail
+name="${1:?usage: acahti-pipe <name>}"
+root="${ACAHTI_PIPES:-/usr/local/lib/acahti/pipes}"
+run="${root}/${name}/run.sh"
+if [[ ! -f "$run" ]]; then
+	echo "error: unknown pipe ${name}" >&2
+	exit 1
+fi
+exec bash "$run"

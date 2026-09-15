@@ -133,6 +133,20 @@ CREATE INDEX IF NOT EXISTS repo_collaborators_login_idx ON repo_collaborators (l
 ALTER TABLE repos ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT false;
 ALTER TABLE team_repos ADD COLUMN IF NOT EXISTS granted boolean NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS team_repos_granted_idx ON team_repos (team) WHERE granted;
+UPDATE pipelines SET jobs = (
+  SELECT COALESCE(jsonb_agg(x.elem ORDER BY x.ord), '[]'::jsonb)
+  FROM (
+    SELECT ordinality AS ord,
+      CASE
+        WHEN jsonb_typeof(elem) = 'object' AND elem ? 'children' THEN
+          (elem - 'children') || jsonb_build_object('steps', COALESCE(elem->'steps', elem->'children', '[]'::jsonb))
+        ELSE elem
+      END AS elem
+    FROM jsonb_array_elements(CASE WHEN jsonb_typeof(jobs) = 'array' THEN jobs ELSE '[]'::jsonb END)
+      WITH ORDINALITY AS t(elem, ordinality)
+  ) x
+)
+WHERE jsonb_typeof(jobs) = 'array' AND jobs::text LIKE '%"children"%';
 `)
 	return err
 }

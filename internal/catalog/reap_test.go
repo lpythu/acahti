@@ -50,14 +50,14 @@ func TestRunningSteps(t *testing.T) {
 		Jobs: []woodpecker.Job{{
 			Name:  "cd.hk",
 			State: "running",
-			Children: []woodpecker.Step{
+			Steps: []woodpecker.Step{
 				{PID: 3, Name: "clone", State: "success"},
 				{ID: 466, PID: 4, Name: "cd", State: "running"},
 			},
 		}, {
 			Name:  "ci",
 			State: "success",
-			Children: []woodpecker.Step{
+			Steps: []woodpecker.Step{
 				{PID: 6, Name: "ci", State: "success"},
 			},
 		}},

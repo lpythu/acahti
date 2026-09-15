@@ -2,11 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"acahti/internal/auth"
+	"acahti/internal/catalog"
 	"acahti/internal/config"
 	"acahti/internal/events"
 	"acahti/internal/httperr"
@@ -68,7 +70,14 @@ func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := a.MCP.CallForAPI(login, tool, args)
 	if err != nil {
-		httperr.Write(w, http.StatusUnprocessableEntity, "failed_precondition", err.Error())
+		switch {
+		case errors.Is(err, catalog.ErrNotFound):
+			httperr.Write(w, http.StatusNotFound, "not_found", err.Error())
+		case errors.Is(err, catalog.ErrInvalid):
+			httperr.Write(w, http.StatusBadRequest, "bad_request", err.Error())
+		default:
+			httperr.Write(w, http.StatusUnprocessableEntity, "failed_precondition", err.Error())
+		}
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -98,6 +107,20 @@ func route(path, method string, args map[string]any) (string, map[string]any) {
 		rest := parts[3:]
 		if len(rest) == 0 && method == http.MethodGet {
 			return "repo_get", extra
+		}
+		if len(rest) == 1 && rest[0] == "secrets" && method == http.MethodGet {
+			extra["scope"] = "repo"
+			return "secret_list", extra
+		}
+		if len(rest) == 2 && rest[0] == "secrets" {
+			extra["scope"] = "repo"
+			extra["secret"] = rest[1]
+			if method == http.MethodPut {
+				return "secret_put", extra
+			}
+			if method == http.MethodDelete {
+				return "secret_delete", extra
+			}
 		}
 		if len(rest) == 1 && rest[0] == "branches" {
 			return "branch_list", extra
@@ -165,6 +188,20 @@ func route(path, method string, args map[string]any) (string, map[string]any) {
 					return "pipeline_delete", extra
 				}
 			}
+		}
+	}
+	if len(parts) == 1 && parts[0] == "secrets" && method == http.MethodGet {
+		extra["scope"] = "org"
+		return "secret_list", extra
+	}
+	if len(parts) == 2 && parts[0] == "secrets" {
+		extra["scope"] = "org"
+		extra["name"] = parts[1]
+		if method == http.MethodPut {
+			return "secret_put", extra
+		}
+		if method == http.MethodDelete {
+			return "secret_delete", extra
 		}
 	}
 	if len(parts) == 1 && parts[0] == "inbox" && method == http.MethodGet {

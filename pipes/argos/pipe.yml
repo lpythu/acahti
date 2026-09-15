@@ -1,0 +1,7 @@
+name: argos
+inputs:
+  env:
+    required: true
+  selectors:
+    required: true
+    description: Semicolon-separated argos run invocations (pack:… tag:…)

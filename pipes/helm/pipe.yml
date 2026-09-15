@@ -1,0 +1,21 @@
+name: helm
+inputs:
+  release:
+    required: true
+  namespace:
+    required: true
+  chart:
+    required: false
+    description: Chart path relative to the workspace (default chart)
+  files:
+    required: false
+    description: Extra -f values files, one per line, relative to the workspace
+  set:
+    required: false
+    description: Extra --set lines (foo=bar or --set foo=bar)
+  timeout:
+    required: false
+    description: Helm --timeout (default 5m)
+  take_ownership:
+    required: false
+    description: "true to pass --take-ownership"

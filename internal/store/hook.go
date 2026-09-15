@@ -37,7 +37,8 @@ func ParseWoodpecker(raw []byte) (hookPipe, bool) {
 		return hookPipe{}, false
 	}
 	var p woodpecker.Pipeline
-	if json.Unmarshal(body.Pipeline, &p) != nil || p.Number == 0 {
+	p, err := woodpecker.DecodeKernel(body.Pipeline)
+	if err != nil || p.Number == 0 {
 		return hookPipe{}, false
 	}
 	p.Repo = repo

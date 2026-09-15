@@ -11,6 +11,7 @@ import {
   ShieldIcon,
   TagIcon,
   UsersIcon,
+  KeyRoundIcon,
   LockIcon,
   WorkflowIcon,
 } from "lucide-react"
@@ -30,7 +31,10 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { useT } from "@/i18n/i18n"
+import { useLoad } from "@/hooks/use-load"
+import { api } from "@/lib/api"
 import { repoBase, sectionOf } from "@/lib/nav"
+import { useSession } from "@/lib/session"
 
 function SidebarCollapseToggle() {
   const t = useT()
@@ -69,17 +73,20 @@ function secondaryItems(
       | "tabPulls"
       | "tabPipes"
       | "access"
+      | "tabSecrets"
       | "adminHome"
+      | "adminSecrets"
       | "users"
       | "teams"
       | "pipelines"
       | "prs",
   ) => string,
+  canManageSecrets: boolean,
 ): NavItem[] {
   const base = repoBase(path)
   const q = ref ? `?ref=${encodeURIComponent(ref)}` : ""
   if (base) {
-    return [
+    const items: NavItem[] = [
       { title: t("files"), url: `${base}${q}`, icon: <Code2Icon />, end: true },
       { title: t("commits"), url: `${base}/commits${q}`, icon: <GitCommitVerticalIcon /> },
       { title: t("branches"), url: `${base}/branches`, icon: <GitBranchIcon /> },
@@ -88,6 +95,10 @@ function secondaryItems(
       { title: t("tabPipes"), url: `${base}/pipelines`, icon: <WorkflowIcon /> },
       { title: t("access"), url: `${base}/access`, icon: <LockIcon /> },
     ]
+    if (canManageSecrets) {
+      items.push({ title: t("tabSecrets"), url: `${base}/secrets`, icon: <KeyRoundIcon /> })
+    }
+    return items
   }
   if (path === "/board") {
     return [
@@ -109,6 +120,7 @@ function secondaryItems(
   if (path.startsWith("/admin")) {
     return [
       { title: t("adminHome"), url: "/admin", icon: <ShieldIcon />, end: true },
+      { title: t("adminSecrets"), url: "/admin/secrets", icon: <KeyRoundIcon /> },
       { title: t("teams"), url: "/admin/teams", icon: <FolderIcon /> },
       { title: t("users"), url: "/admin/users", icon: <UsersIcon /> },
     ]
@@ -118,9 +130,21 @@ function secondaryItems(
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const t = useT()
+  const { me } = useSession()
   const { pathname, search } = useLocation()
   const [sp] = useSearchParams()
-  const items = secondaryItems(pathname, sp.get("ref") || "", sp.get("section") || "", t)
+  const base = repoBase(pathname)
+  const repoLoad = useLoad(
+    () => {
+      if (!base) return Promise.resolve(null)
+      const parts = base.split("/")
+      return api.repo(parts[2], parts[3])
+    },
+    [base],
+    Boolean(base),
+  )
+  const canManageSecrets = Boolean(me?.admin || repoLoad.data?.repo.can_manage_secrets)
+  const items = secondaryItems(pathname, sp.get("ref") || "", sp.get("section") || "", t, canManageSecrets)
   const { isMobile } = useSidebar()
 
   return (

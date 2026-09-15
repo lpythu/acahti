@@ -1,0 +1,5 @@
+name: pypi-publish
+inputs:
+  registry:
+    required: true
+    description: uv --publish-url, e.g. https://acahti.example.com/api/packages/acme/pypi

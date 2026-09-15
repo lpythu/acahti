@@ -37,7 +37,7 @@ export type PipelineJob = {
   name: string
   state: string
   pid?: number
-  children?: Step[]
+  steps?: Step[]
 }
 
 export type Pipeline = {
@@ -57,7 +57,6 @@ export type Pipeline = {
   started?: number
   finished?: number
   jobs?: PipelineJob[]
-  steps?: Step[]
 }
 
 export type Agent = {
@@ -92,6 +91,7 @@ export type Repo = {
   updated?: number
   archived?: boolean
   permissions?: Perm
+  can_manage_secrets?: boolean
 }
 
 export type AccessPerson = { login: string; author?: string; permission: string }
@@ -222,9 +222,13 @@ export type PRDetail = {
 
 export type PipelineDetail = {
   pipeline: Pipeline
-  steps: Step[]
   team?: string
   files?: FileBlob[]
+}
+
+export type PipelineSecret = {
+  name: string
+  events?: string[]
 }
 
 export type NavTeam = {
@@ -404,6 +408,25 @@ export const api = {
     req<Pipeline>(`/ui/pipelines/${owner}/${name}/trigger`, {
       method: "POST",
       body: JSON.stringify({ ref: ref || "dev" }),
+    }),
+  orgSecrets: (q?: PageQuery) => req<Page<PipelineSecret>>(`/ui/secrets${pageQS(q)}`),
+  putOrgSecret: (name: string, value: string, events?: string[]) =>
+    req<PipelineSecret>(`/ui/secrets/${encodeURIComponent(name)}`, {
+      method: "PUT",
+      body: JSON.stringify({ value, events }),
+    }),
+  deleteOrgSecret: (name: string) =>
+    req<{ ok: boolean }>(`/ui/secrets/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  repoSecrets: (owner: string, name: string, q?: PageQuery) =>
+    req<Page<PipelineSecret>>(`/ui/repos/${owner}/${name}/secrets${pageQS(q)}`),
+  putRepoSecret: (owner: string, name: string, secret: string, value: string, events?: string[]) =>
+    req<PipelineSecret>(`/ui/repos/${owner}/${name}/secrets/${encodeURIComponent(secret)}`, {
+      method: "PUT",
+      body: JSON.stringify({ value, events }),
+    }),
+  deleteRepoSecret: (owner: string, name: string, secret: string) =>
+    req<{ ok: boolean }>(`/ui/repos/${owner}/${name}/secrets/${encodeURIComponent(secret)}`, {
+      method: "DELETE",
     }),
 }
 

@@ -11,18 +11,18 @@ import (
 )
 
 func TestPipelineJobsFromKernelWorkflows(t *testing.T) {
-	var p Pipeline
-	if err := json.Unmarshal([]byte(`{"number":2,"status":"success","workflows":[{"name":"ci","state":"success"}]}`), &p); err != nil {
+	p, err := DecodeKernel([]byte(`{"number":2,"status":"success","workflows":[{"name":"ci","state":"success","children":[{"pid":2,"name":"check","state":"success"}]}]}`))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if len(p.Jobs) != 1 || p.Jobs[0].Name != "ci" {
+	if len(p.Jobs) != 1 || p.Jobs[0].Name != "ci" || len(p.Jobs[0].Steps) != 1 || p.Jobs[0].Steps[0].Name != "check" {
 		t.Fatalf("jobs=%v", p.Jobs)
 	}
 	out, err := json.Marshal(p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(out), `"jobs"`) || strings.Contains(string(out), `"workflows"`) {
+	if !strings.Contains(string(out), `"jobs"`) || !strings.Contains(string(out), `"steps"`) || strings.Contains(string(out), `"workflows"`) || strings.Contains(string(out), `"children"`) {
 		t.Fatalf("public json=%s", out)
 	}
 }
@@ -149,5 +149,3 @@ func TestDeletePath(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
-
-

@@ -19,6 +19,7 @@ const SECTION_KEY: Record<string, MessageKey> = {
   pulls: "tabPulls",
   pipelines: "tabPipes",
   access: "access",
+  secrets: "tabSecrets",
 }
 
 function RepoBreadcrumb({ owner, name, team }: { owner: string; name: string; team: string }) {

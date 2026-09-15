@@ -53,7 +53,7 @@ export function AdminHomePage() {
         <section className="flex flex-col gap-2">
           <h2 className="text-sm font-medium">{t("stack")}</h2>
           <p className="text-sm">
-            Acahti {stack.version} · Forgejo {stack.forgejo} · {t("ci")} {stack.ci} · Postgres {stack.postgres}
+            Acahti {stack.version} · {t("git")} {stack.forgejo} · {t("ci")} {stack.ci} · Postgres {stack.postgres}
           </p>
           <CopyField label={t("upgradeHint")} value={stack.upgrade_hint} />
         </section>
@@ -101,6 +101,9 @@ export function AdminHomePage() {
       </section>
 
       <div className="flex flex-wrap gap-4">
+        <Link className="text-sm underline-offset-4 hover:underline" to="/admin/secrets">
+          {t("adminSecrets")}
+        </Link>
         <Link className="text-sm underline-offset-4 hover:underline" to="/admin/teams">
           {t("teams")}
         </Link>

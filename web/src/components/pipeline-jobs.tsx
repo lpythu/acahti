@@ -1,9 +1,72 @@
+import { useState } from "react"
+import { ChevronRightIcon, FileIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { RunStatusIcon } from "@/components/run-status-icon"
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
+import {
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+} from "@/components/ui/sidebar"
 import { useT } from "@/i18n/i18n"
 import type { FileBlob, Step } from "@/lib/api"
 import type { Job } from "@/lib/pipeline"
+
+function JobNode({
+  job,
+  activeStep,
+  activeFile,
+  onStep,
+}: {
+  job: Job
+  activeStep?: Step | null
+  activeFile?: FileBlob | null
+  onStep: (step: Step) => void
+}) {
+  const [open, setOpen] = useState(true)
+
+  return (
+    <SidebarMenuItem>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <SidebarMenuButton tooltip={job.name} onClick={() => setOpen(!open)}>
+          <ChevronRightIcon className={cn("size-4 transition-transform", open && "rotate-90")} />
+          <RunStatusIcon status={job.state} />
+          <span>{job.name}</span>
+        </SidebarMenuButton>
+        <CollapsibleContent>
+          <SidebarMenuSub>
+            {job.steps.map((s) => {
+              const selected = !activeFile && activeStep?.pid === s.pid && activeStep.name === s.name
+              return (
+                <SidebarMenuSubItem key={`${s.pid}-${s.name}`}>
+                  <SidebarMenuSubButton
+                    isActive={selected}
+                    render={
+                      <button
+                        type="button"
+                        onClick={() => onStep(s)}
+                      />
+                    }
+                  >
+                    <RunStatusIcon status={s.state} />
+                    <span>{s.name || `#${s.pid}`}</span>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+              )
+            })}
+          </SidebarMenuSub>
+        </CollapsibleContent>
+      </Collapsible>
+    </SidebarMenuItem>
+  )
+}
 
 export function PipelineJobs({
   jobs,
@@ -23,66 +86,46 @@ export function PipelineJobs({
   const t = useT()
 
   return (
-    <div className="flex flex-col gap-4 p-2">
-      <section>
-        <h3 className="px-2 pb-1 text-xs font-medium text-muted-foreground">{t("jobs")}</h3>
-        <ol className="flex flex-col gap-1">
-          {jobs.map((job) => (
-            <li key={job.name}>
-              <div className="flex items-center gap-2 px-2 py-1 text-sm font-medium">
-                <RunStatusIcon status={job.state} />
-                <span className="min-w-0 truncate">{job.name}</span>
-              </div>
-              <ol className="ml-4 border-l pl-2">
-                {job.steps.map((s) => {
-                  const selected = !activeFile && activeStep?.pid === s.pid && activeStep.name === s.name
-                  return (
-                    <li key={`${s.pid}-${s.name}`}>
-                      <button
-                        type="button"
-                        onClick={() => onStep(s)}
-                        className={cn(
-                          "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm",
-                          selected ? "bg-muted" : "hover:bg-muted/60",
-                        )}
-                      >
-                        <RunStatusIcon status={s.state} />
-                        <span className="min-w-0 truncate">{s.name || `#${s.pid}`}</span>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ol>
-            </li>
-          ))}
-        </ol>
-      </section>
-      <section>
-        <h3 className="px-2 pb-1 text-xs font-medium text-muted-foreground">{t("pipelineFiles")}</h3>
-        {files.length ? (
-          <ul className="flex flex-col gap-0.5">
-            {files.map((f) => {
-              const selected = activeFile?.path === f.path
-              return (
-                <li key={f.path}>
-                  <button
-                    type="button"
-                    onClick={() => onFile(f)}
-                    className={cn(
-                      "flex w-full items-center rounded-md px-2 py-1 text-left text-sm",
-                      selected ? "bg-muted" : "hover:bg-muted/60",
-                    )}
+    <div className="flex flex-col">
+      <SidebarGroup>
+        <SidebarGroupLabel>{t("jobs")}</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {jobs.map((job) => (
+              <JobNode
+                key={job.name}
+                job={job}
+                activeStep={activeStep}
+                activeFile={activeFile}
+                onStep={onStep}
+              />
+            ))}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+      <SidebarGroup>
+        <SidebarGroupLabel>{t("pipelineFiles")}</SidebarGroupLabel>
+        <SidebarGroupContent>
+          {files.length ? (
+            <SidebarMenu>
+              {files.map((f) => (
+                <SidebarMenuItem key={f.path}>
+                  <SidebarMenuButton
+                    isActive={activeFile?.path === f.path}
+                    tooltip={f.path}
+                    render={<button type="button" onClick={() => onFile(f)} />}
                   >
-                    <span className="min-w-0 truncate">{f.path}</span>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        ) : (
-          <p className="px-2 text-xs text-muted-foreground">{t("noPipelineFiles")}</p>
-        )}
-      </section>
+                    <FileIcon />
+                    <span>{f.name || f.path}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          ) : (
+            <p className="px-2 text-xs text-muted-foreground">{t("noPipelineFiles")}</p>
+          )}
+        </SidebarGroupContent>
+      </SidebarGroup>
     </div>
   )
 }

@@ -78,7 +78,7 @@ func TestHTTPHandshake(t *testing.T) {
 		t.Fatalf("notification: %d %s", status, raw)
 	}
 	status, _, raw = request(t, hs.URL, token, "POST", `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
-	if status != 200 || !strings.Contains(string(raw), `"whoami"`) || !strings.Contains(string(raw), `"inbox"`) {
+	if status != 200 || !strings.Contains(string(raw), `"whoami"`) || !strings.Contains(string(raw), `"inbox"`) || !strings.Contains(string(raw), `"secret_list"`) {
 		t.Fatalf("tools: %d %s", status, raw)
 	}
 	for _, method := range []string{"GET", "DELETE"} {

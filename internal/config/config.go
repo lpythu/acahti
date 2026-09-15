@@ -25,6 +25,7 @@ type Config struct {
 	PostgresVersion   string
 	DataDir           string
 	DatabaseURL       string
+	ConfigToken       string
 }
 
 func getenv(key, fallback string) string {
@@ -52,5 +53,6 @@ func Load() Config {
 		PostgresVersion:   getenv("POSTGRES_VERSION", "16-alpine"),
 		DataDir:           getenv("ACAHTI_DATA", "/var/lib/acahti"),
 		DatabaseURL:       getenv("ACAHTI_DATABASE_URL", ""),
+		ConfigToken:       getenv("ACAHTI_CONFIG_TOKEN", ""),
 	}
 }

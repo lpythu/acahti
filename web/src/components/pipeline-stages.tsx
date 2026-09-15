@@ -3,15 +3,14 @@ import { statusText } from "@/components/status-badge"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useT } from "@/i18n/i18n"
-import type { Stage } from "@/lib/pipeline"
 
 const VISIBLE = 4
 
-export function PipelineStages({ stages }: { stages: Stage[] }) {
+export function PipelineJobDots({ jobs }: { jobs: { name: string; state: string }[] }) {
   const t = useT()
-  if (!stages.length) return null
+  if (!jobs.length) return null
 
-  const named = stages.filter((s) => s.name.trim() && s.name !== ".")
+  const named = jobs.filter((s) => s.name.trim() && s.name !== ".")
   if (!named.length) return null
   const shown = named.slice(0, VISIBLE)
   const extra = named.slice(VISIBLE)

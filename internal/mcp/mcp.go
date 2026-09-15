@@ -85,7 +85,7 @@ func tools() []toolSpec {
 		{Name: "pr_close", Description: "Close a pull request", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
 		{Name: "checks_wait", Description: "Snapshot of commit checks for the latest pipeline round. Poll this tool; it does not block", InputSchema: obj(map[string]any{"owner": str, "name": str, "sha": str}, "owner", "name", "sha")},
 		{Name: "pipeline_list", Description: "List pipelines for a repo. sha is a commit prefix", InputSchema: obj(map[string]any{"repo": str, "sha": str, "branch": str, "status": str, "page": num, "page_size": num}, "repo")},
-		{Name: "pipeline_get", Description: "Get one pipeline and its steps", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
+		{Name: "pipeline_get", Description: "Get one pipeline with jobs and steps", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 		{Name: "pipeline_log", Description: "Fetch pipeline logs. Omit step for failed steps only", InputSchema: obj(map[string]any{"repo": str, "number": num, "step": num, "tail_lines": num}, "repo", "number")},
 		{Name: "pipeline_rerun", Description: "Rerun a pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 		{Name: "pipeline_trigger", Description: "Manual run on a ref. Official release is still git push", InputSchema: obj(map[string]any{"repo": str, "ref": str}, "repo")},
@@ -94,9 +94,12 @@ func tools() []toolSpec {
 		{Name: "inbox", Description: "Island inbox: open PRs or pipelines needing attention (blocked/failed latest per repo)", InputSchema: obj(map[string]any{"section": str, "page": num, "page_size": num})},
 		{Name: "pkg_publish", Description: "Publish a language package (pypi wheel URL or npm tarball URL)", InputSchema: obj(map[string]any{"kind": str, "url": str, "filename": str}, "kind", "url")},
 		{Name: "pkg_list", Description: "List language packages", InputSchema: obj(map[string]any{"owner": str, "kind": str, "page": num, "page_size": num})},
-		{Name: "whoami", Description: "Acahti git identity. git_name is the admin-set commit author (default login). Also git_email, clone_url_template, skill_url, skill_sha, apply_when_remote_host, setup_local", InputSchema: obj(map[string]any{})},
+		{Name: "whoami", Description: "Acahti git identity. git_name is the admin-set commit author (default login). Also git_email, clone_url_template, skill_url, skill_sha, apply_when_remote_host, setup_local, org_admin", InputSchema: obj(map[string]any{})},
 		{Name: "agent_status", Description: "Host agent last contact", InputSchema: obj(pg)},
 		{Name: "deploy_approve", Description: "Approve a gated deploy pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
+		{Name: "secret_list", Description: "List pipeline secret names. Admin only. Values are never returned. scope is org or repo", InputSchema: obj(map[string]any{"scope": str, "repo": str, "owner": str, "name": str, "page": num, "page_size": num})},
+		{Name: "secret_put", Description: "Create or replace a pipeline secret. Admin only. Does not echo value. name is the secret. repo or owner+name for repo scope", InputSchema: obj(map[string]any{"scope": str, "name": str, "secret": str, "value": str, "events": map[string]any{"type": "array", "items": str}, "repo": str, "owner": str}, "value")},
+		{Name: "secret_delete", Description: "Delete a pipeline secret. Admin only", InputSchema: obj(map[string]any{"scope": str, "name": str, "secret": str, "repo": str, "owner": str})},
 	}
 }
 
@@ -167,10 +170,14 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 	switch name {
 	case "whoami":
 		u, err := s.FJ.UserSudo(token)
+		var v map[string]any
 		if err != nil {
-			return identity.View(token, "", s.Cfg.RootURL, s.Cfg.Domain, org), nil
+			v = identity.View(token, "", s.Cfg.RootURL, s.Cfg.Domain, org)
+		} else {
+			v = identity.View(u.Login, u.FullName, s.Cfg.RootURL, s.Cfg.Domain, org)
 		}
-		return identity.View(u.Login, u.FullName, s.Cfg.RootURL, s.Cfg.Domain, org), nil
+		v["org_admin"] = s.Cat != nil && s.Cat.IsOrgAdmin(token)
+		return v, nil
 	case "repo_list":
 		return s.Cat.ListRepos(token, "", pq)
 	case "repo_get":
@@ -178,7 +185,11 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return s.Cat.PublicRepo(repo), nil
+		if s.Cat != nil {
+			repo = s.Cat.PublicRepo(repo)
+			repo.CanManageSecrets = s.Cat.IsOrgAdmin(token) || repo.Permissions.Admin
+		}
+		return repo, nil
 	case "repo_create":
 		repo, err := s.FJ.CreateOrgRepo(org, str("name"), true)
 		if err != nil {
@@ -285,6 +296,12 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 			return map[string]any{"ok": true, "pipeline": pipe}, nil
 		}
 		return map[string]any{"ok": true}, nil
+	case "secret_list":
+		return s.listSecrets(token, str, pq)
+	case "secret_put":
+		return s.putSecret(token, str, a)
+	case "secret_delete":
+		return s.deleteSecret(token, str)
 	default:
 		return nil, fmt.Errorf("unknown tool %s", name)
 	}
@@ -319,6 +336,105 @@ func repoArg(str func(string) string) string {
 		return o + "/" + n
 	}
 	return ""
+}
+
+func asStrings(v any) []string {
+	switch x := v.(type) {
+	case []string:
+		return x
+	case []any:
+		out := make([]string, 0, len(x))
+		for _, e := range x {
+			s, _ := e.(string)
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	case string:
+		if strings.TrimSpace(x) == "" {
+			return nil
+		}
+		parts := strings.FieldsFunc(x, func(r rune) bool { return r == ',' || r == ' ' })
+		return parts
+	default:
+		return nil
+	}
+}
+
+func (s *Server) secretScope(str func(string) string) (scope, repo, secret string) {
+	scope = strings.ToLower(str("scope"))
+	repo = repoArg(str)
+	secret = str("secret")
+	if secret == "" && (scope == "org" || (scope == "" && repo == "")) {
+		secret = str("name")
+	}
+	if scope == "" {
+		if repo != "" {
+			scope = "repo"
+		} else {
+			scope = "org"
+		}
+	}
+	return scope, repo, secret
+}
+
+func (s *Server) listSecrets(token string, str func(string) string, q page.Query) (any, error) {
+	scope, repo, _ := s.secretScope(str)
+	if s.Cat == nil {
+		return nil, catalog.ErrNotFound
+	}
+	if scope == "repo" {
+		owner, name, _ := strings.Cut(repo, "/")
+		if owner == "" || name == "" {
+			return nil, fmt.Errorf("%w: repo required", catalog.ErrInvalid)
+		}
+		return s.Cat.ListRepoSecrets(token, owner, name, q)
+	}
+	return s.Cat.ListOrgSecrets(token, q)
+}
+
+func (s *Server) putSecret(token string, str func(string) string, a map[string]any) (any, error) {
+	scope, repo, secret := s.secretScope(str)
+	if s.Cat == nil {
+		return nil, catalog.ErrNotFound
+	}
+	events := asStrings(a["events"])
+	if scope == "repo" {
+		owner, name, _ := strings.Cut(repo, "/")
+		if owner == "" || name == "" {
+			return nil, fmt.Errorf("%w: repo required", catalog.ErrInvalid)
+		}
+		if secret == "" {
+			secret = str("name")
+		}
+		return s.Cat.PutRepoSecret(token, owner, name, secret, str("value"), events)
+	}
+	return s.Cat.PutOrgSecret(token, secret, str("value"), events)
+}
+
+func (s *Server) deleteSecret(token string, str func(string) string) (any, error) {
+	scope, repo, secret := s.secretScope(str)
+	if s.Cat == nil {
+		return nil, catalog.ErrNotFound
+	}
+	if scope == "repo" {
+		owner, name, _ := strings.Cut(repo, "/")
+		if owner == "" || name == "" {
+			return nil, fmt.Errorf("%w: repo required", catalog.ErrInvalid)
+		}
+		if secret == "" {
+			secret = str("name")
+		}
+		if err := s.Cat.DeleteRepoSecret(token, owner, name, secret); err != nil {
+			return nil, err
+		}
+		return map[string]any{"ok": true}, nil
+	}
+	if err := s.Cat.DeleteOrgSecret(token, secret); err != nil {
+		return nil, err
+	}
+	return map[string]any{"ok": true}, nil
 }
 
 func (s *Server) seeRepo(token, repo string) error {

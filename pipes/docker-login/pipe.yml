@@ -1,0 +1,7 @@
+name: docker-login
+inputs:
+  registry:
+    required: true
+  username:
+    required: false
+    description: Registry user; password is DOCKER_PASSWORD (or DOCKER_USERNAME + DOCKER_PASSWORD)

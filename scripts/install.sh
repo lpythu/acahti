@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Agent install contract. Non-interactive. Run on the acahti host as a sudoer.
+# Runner install contract. Non-interactive. Run on the acahti host as a sudoer.
 # Required in the environment or .env: DOMAIN, ROOT_URL.
 set -euo pipefail
 # shellcheck source=lib.sh
@@ -30,26 +30,6 @@ bash "${root}/scripts/up.sh"
 set -a
 source "${root}/.env"
 set +a
-secret="$(sudo cat "${ACAHTI_DATA}/agent.secret")"
-acahti_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
-acahti_ip="${ACAHTI_GRPC_HOST:-${acahti_ip}}"
-
-install_remote() {
-  local spec="$1" role="$2"
-  [[ -z "${spec}" ]] && return 0
-  echo "==> agent ${role} on ${spec}"
-  ssh -o BatchMode=yes "${spec}" "mkdir -p /tmp/acahti-scripts"
-  scp -o BatchMode=yes "${root}/scripts/agent.sh" "${spec}:/tmp/acahti-scripts/agent.sh"
-  ssh -o BatchMode=yes "${spec}" \
-    "sudo -E ROLE=${role} SERVER=${acahti_ip}:9000 SECRET=${secret} bash /tmp/acahti-scripts/agent.sh"
-}
-
-# Default: one ROLE=both on buildof (ACAHTI_BUILD). Do not install on the control plane.
-if [[ -n "${ACAHTI_BUILD:-}" ]]; then
-  install_remote "${ACAHTI_BUILD}" both
-elif [[ -n "${ACAHTI_DEPLOY:-}" ]]; then
-  install_remote "${ACAHTI_DEPLOY}" both
-fi
 
 echo
 echo "Install ${ROOT_URL}/skill.md"

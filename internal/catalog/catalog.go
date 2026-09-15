@@ -83,7 +83,6 @@ type PRDetail struct {
 
 type PipelineDetail struct {
 	Pipeline woodpecker.Pipeline `json:"pipeline"`
-	Steps    []woodpecker.Step   `json:"steps"`
 	Team     string              `json:"team"`
 	Files    []FileBlob          `json:"files"`
 }
@@ -186,8 +185,10 @@ func (c *Catalog) RepoHeader(user, owner, name, ref string) (RepoHeader, error) 
 			ref = "dev"
 		}
 	}
+	repo = c.PublicRepo(repo)
+	repo.CanManageSecrets = c.IsOrgAdmin(user) || repo.Permissions.Admin
 	return RepoHeader{
-		Repo:       c.PublicRepo(repo),
+		Repo:       repo,
 		CloneHTTPS: c.CloneHTTPS(repo.FullName),
 		Ref:        ref,
 	}, nil
@@ -863,10 +864,10 @@ func (c *Catalog) mergeLogTails(p woodpecker.Pipeline) woodpecker.Pipeline {
 		}
 	}
 	for i := range p.Jobs {
-		for j := range p.Jobs[i].Children {
-			id := stepID(p.Jobs[i].Children[j])
-			if p.Jobs[i].Children[j].LogTail == "" {
-				p.Jobs[i].Children[j].LogTail = prev[id]
+		for j := range p.Jobs[i].Steps {
+			id := stepID(p.Jobs[i].Steps[j])
+			if p.Jobs[i].Steps[j].LogTail == "" {
+				p.Jobs[i].Steps[j].LogTail = prev[id]
 			}
 		}
 	}
@@ -878,8 +879,8 @@ func (c *Catalog) captureTerminalLogs(p woodpecker.Pipeline) woodpecker.Pipeline
 		return p
 	}
 	for i := range p.Jobs {
-		for j := range p.Jobs[i].Children {
-			s := &p.Jobs[i].Children[j]
+		for j := range p.Jobs[i].Steps {
+			s := &p.Jobs[i].Steps[j]
 			if s.LogTail != "" || !stepFailed(s.State) {
 				continue
 			}
@@ -1071,7 +1072,7 @@ func (c *Catalog) PipelineDetail(user, repo string, number int64) (PipelineDetai
 	}
 	p.Repo = repo
 	p = c.Remember(p)
-	return PipelineDetail{Pipeline: p, Steps: p.Steps(), Team: head.Team, Files: c.pipelineFiles(p)}, nil
+	return PipelineDetail{Pipeline: p, Team: head.Team, Files: c.pipelineFiles(p)}, nil
 }
 
 func (c *Catalog) StepLog(user, repo string, number, step int64) (string, error) {
@@ -1127,16 +1128,16 @@ func (c *Catalog) PipelineLogs(user, repo string, number, step, tail int64) (map
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"log": tailLog(text, tail), "steps": detail.Steps}, nil
+		return map[string]any{"log": tailLog(text, tail)}, nil
 	}
 	var failed []woodpecker.Step
-	for _, s := range detail.Steps {
+	for _, s := range detail.Pipeline.Steps() {
 		if stepFailed(s.State) {
 			failed = append(failed, s)
 		}
 	}
 	if len(failed) == 0 {
-		return map[string]any{"log": detail.Pipeline.Error, "steps": detail.Steps}, nil
+		return map[string]any{"log": detail.Pipeline.Error}, nil
 	}
 	var b strings.Builder
 	for _, s := range failed {
@@ -1156,7 +1157,7 @@ func (c *Catalog) PipelineLogs(user, repo string, number, step, tail int64) (map
 		}
 		fmt.Fprintf(&b, "=== %s (step %d) %s ===\n%s\n", s.Name, id, s.State, tailLog(text, tail))
 	}
-	return map[string]any{"log": b.String(), "steps": failed}, nil
+	return map[string]any{"log": b.String()}, nil
 }
 
 func (c *Catalog) fillPRHeads(items []forgejo.PR) {

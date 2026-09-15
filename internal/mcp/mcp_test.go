@@ -2,13 +2,18 @@ package mcp
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"acahti/internal/catalog"
+	"acahti/internal/config"
 	"acahti/internal/forgejo"
 	"acahti/internal/httperr"
+	"acahti/internal/woodpecker"
 )
 
 func TestToolSet(t *testing.T) {
@@ -20,6 +25,7 @@ func TestToolSet(t *testing.T) {
 		"checks_wait", "pipeline_list", "pipeline_get", "pipeline_log",
 		"pipeline_rerun", "pipeline_trigger", "pipeline_cancel", "pipeline_delete", "inbox",
 		"pkg_publish", "pkg_list", "agent_status", "deploy_approve",
+		"secret_list", "secret_put", "secret_delete",
 	}
 	have := map[string]bool{}
 	for _, n := range ToolNames() {
@@ -127,5 +133,104 @@ func TestWaitChecksSnapshot(t *testing.T) {
 	}
 	if _, ok := m["timeout"]; ok {
 		t.Fatalf("snapshot must not set timeout: %v", out)
+	}
+}
+
+func secretCatalog(t *testing.T) *catalog.Catalog {
+	t.Helper()
+	fj := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sudo := r.Header.Get("Sudo")
+		switch {
+		case r.URL.Path == "/api/v1/user":
+			_ = json.NewEncoder(w).Encode(map[string]any{"login": sudo, "is_admin": sudo == "alice"})
+		case strings.HasPrefix(r.URL.Path, "/api/v1/repos/saidc/tm-web"):
+			admin := sudo == "alice" || sudo == "repoadmin"
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"name": "tm-web", "full_name": "saidc/tm-web",
+				"permissions": map[string]bool{"admin": admin, "push": true, "pull": true},
+			})
+		case strings.HasPrefix(r.URL.Path, "/api/v1/orgs/saidc/teams"):
+			_ = json.NewEncoder(w).Encode([]any{})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(fj.Close)
+	wp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/web-config.js"):
+			_, _ = w.Write([]byte(`WOODPECKER_CSRF = "tok";`))
+		case r.URL.Path == "/api/orgs/lookup/saidc":
+			_, _ = w.Write([]byte(`{"id":1,"name":"saidc"}`))
+		case r.URL.Path == "/api/orgs/1/secrets":
+			_, _ = w.Write([]byte(`[{"name":"harbor_password","value":"nope","events":["push"]}]`))
+		case strings.Contains(r.URL.Path, "/api/repos/") && strings.HasSuffix(r.URL.Path, "/secrets"):
+			_, _ = w.Write([]byte(`[{"name":"svc_token","value":"nope"}]`))
+		case r.URL.Path == "/api/repos/lookup/saidc/tm-web":
+			_, _ = w.Write([]byte(`{"id":9,"full_name":"saidc/tm-web"}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(wp.Close)
+	fjClient := forgejo.New(fj.URL, "t")
+	return catalog.New(config.Config{Org: "saidc", AdminUser: "alice"}, fjClient, woodpecker.New(wp.URL, "t"), nil)
+}
+
+func TestSecretListMemberNotFound(t *testing.T) {
+	cat := secretCatalog(t)
+	s := &Server{Cfg: ConfigView{Org: "saidc", RootURL: "https://acahti.example"}, FJ: cat.FJ, Cat: cat}
+
+	if _, err := s.CallForAPI("bob", "secret_list", map[string]any{"scope": "org"}); !errors.Is(err, catalog.ErrNotFound) {
+		t.Fatalf("member org list: %v", err)
+	}
+	if _, err := s.CallForAPI("bob", "secret_list", map[string]any{"scope": "repo", "repo": "saidc/tm-web"}); !errors.Is(err, catalog.ErrNotFound) {
+		t.Fatalf("member repo list: %v", err)
+	}
+
+	listed, err := s.CallForAPI("alice", "secret_list", map[string]any{"scope": "org"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(listed)
+	if strings.Contains(string(raw), "nope") || strings.Contains(string(raw), `"value"`) {
+		t.Fatalf("value leaked: %s", raw)
+	}
+	if !strings.Contains(string(raw), "harbor_password") {
+		t.Fatalf("missing name: %s", raw)
+	}
+
+	who, err := s.CallForAPI("alice", "whoami", map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, _ := who.(map[string]any)
+	if m["org_admin"] != true {
+		t.Fatalf("alice org_admin=%v", m["org_admin"])
+	}
+	who, err = s.CallForAPI("bob", "whoami", map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, _ = who.(map[string]any)
+	if m["org_admin"] != false {
+		t.Fatalf("bob org_admin=%v", m["org_admin"])
+	}
+
+	repo, err := s.CallForAPI("bob", "repo_get", map[string]any{"owner": "saidc", "name": "tm-web"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, _ := repo.(forgejo.Repo)
+	if r.CanManageSecrets {
+		t.Fatal("pusher must not manage secrets")
+	}
+	repo, err = s.CallForAPI("repoadmin", "repo_get", map[string]any{"owner": "saidc", "name": "tm-web"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, _ = repo.(forgejo.Repo)
+	if !r.CanManageSecrets {
+		t.Fatal("repo admin can_manage_secrets")
 	}
 }

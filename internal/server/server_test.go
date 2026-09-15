@@ -192,7 +192,7 @@ func TestSkillAndOAuth(t *testing.T) {
 		t.Fatalf("skill %d", rr.Code)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "Install http://127.0.0.1/skill.md") || !strings.Contains(body, "Join    http://127.0.0.1/join") {
+	if !strings.Contains(body, "Install http://127.0.0.1/skill.md") || !strings.Contains(body, "Join    http://127.0.0.1/join") || !strings.Contains(body, "Pipeline secrets") || !strings.Contains(body, "secret_put") {
 		t.Fatalf("skill contract missing: %s", body)
 	}
 

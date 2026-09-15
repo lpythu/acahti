@@ -1,7 +1,6 @@
 package woodpecker
 
 import (
-	"encoding/json"
 	"testing"
 )
 
@@ -38,9 +37,8 @@ func TestHydrateJobsSkipsErrorWithoutFile(t *testing.T) {
 }
 
 func TestPipelineErrorsBecomeJobs(t *testing.T) {
-	var p Pipeline
-	raw := `{"number":4,"status":"error","title":"","errors":[{"type":"linter","message":"invalid depends_on","data":{"file":".acahti/pipelines/ci.yaml"}}]}`
-	if err := json.Unmarshal([]byte(raw), &p); err != nil {
+	p, err := DecodeKernel([]byte(`{"number":4,"status":"error","title":"","errors":[{"type":"linter","message":"invalid depends_on","data":{"file":".acahti/pipelines/ci.yaml"}}]}`))
+	if err != nil {
 		t.Fatal(err)
 	}
 	if p.Error != "invalid depends_on" {
@@ -50,8 +48,8 @@ func TestPipelineErrorsBecomeJobs(t *testing.T) {
 	if len(p.Jobs) != 1 || p.Jobs[0].Name != "ci" || p.Jobs[0].State != "error" {
 		t.Fatalf("jobs=%+v", p.Jobs)
 	}
-	if p.Jobs[0].Children[0].Error != "invalid depends_on" {
-		t.Fatalf("step=%+v", p.Jobs[0].Children)
+	if p.Jobs[0].Steps[0].Error != "invalid depends_on" {
+		t.Fatalf("step=%+v", p.Jobs[0].Steps)
 	}
 }
 
@@ -135,7 +133,7 @@ func TestMergeDeclaredKeepsRuntimeFailure(t *testing.T) {
 		Jobs: []Job{{
 			Name:  "ci",
 			State: "failure",
-			Children: []Step{{
+			Steps: []Step{{
 				PID:   2,
 				Name:  "check",
 				State: "failure",
@@ -144,7 +142,7 @@ func TestMergeDeclaredKeepsRuntimeFailure(t *testing.T) {
 		}},
 	}
 	got := MergeDeclaredJobs(p, []string{"ci", "cd.office"})
-	if got.Jobs[0].State != "failure" || got.Jobs[0].Children[0].Name != "check" {
+	if got.Jobs[0].State != "failure" || got.Jobs[0].Steps[0].Name != "check" {
 		t.Fatalf("ci=%+v", got.Jobs[0])
 	}
 	if got.Jobs[1].Name != "cd.office" || got.Jobs[1].State != "skipped" {

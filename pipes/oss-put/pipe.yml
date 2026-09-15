@@ -1,0 +1,12 @@
+name: oss-put
+inputs:
+  endpoint:
+    required: true
+  bucket:
+    required: true
+  prefix:
+    required: true
+    description: Object key prefix (no oss://)
+  files:
+    required: true
+    description: Local files to upload, one per line (workspace-relative)

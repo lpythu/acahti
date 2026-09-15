@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install a Woodpecker local/host agent on a build or deploy machine (or both).
+# Install an Acahti Runner (local/host executor) on a build or deploy machine (or both).
 #
 # Required:
 #   SERVER=192.0.2.10:9000     # acahti host gRPC
@@ -97,18 +97,20 @@ if [[ ! -x "${bindir}/plugin-git" ]]; then
   fi
 fi
 
-runner_dst=/usr/local/lib/acahti/runner
-runner_src="$(cd "$(dirname "$0")/../runner" && pwd)"
-if [[ -f "${runner_src}/run.sh" ]]; then
-  install -d -m 0755 "${runner_dst}"
-  cp -a "${runner_src}/." "${runner_dst}/"
-  ACAHTI_RUNNER="${runner_dst}"
+install -d -m 0755 /usr/local/lib/acahti/pipes
+pipes_src=""
+here="$(cd "$(dirname "$0")" && pwd)"
+if [[ -d "${here}/pipes" ]]; then
+  pipes_src="${here}/pipes"
+elif [[ -d "${here}/../pipes" ]]; then
+  pipes_src="$(cd "${here}/../pipes" && pwd)"
 fi
-ACAHTI_RUNNER="${ACAHTI_RUNNER:-}"
-if [[ -z "$ACAHTI_RUNNER" || ! -f "${ACAHTI_RUNNER}/run.sh" ]]; then
-  echo "error: run agent.sh from an acahti tree so it can install runner/" >&2
+if [[ -z "${pipes_src}" ]]; then
+  echo "error: official pipes not next to agent.sh (expected pipes/)" >&2
   exit 1
 fi
+cp -a "${pipes_src}/." /usr/local/lib/acahti/pipes/
+install -m 0755 /usr/local/lib/acahti/pipes/acahti-pipe /usr/local/bin/acahti-pipe
 
 install -d -m 0755 /etc/woodpecker
 cat >/etc/woodpecker/agent.env <<EOF
@@ -119,7 +121,6 @@ WOODPECKER_HOSTNAME=${AGENT_NAME}
 WOODPECKER_AGENT_LABELS=${LABELS}
 WOODPECKER_MAX_WORKFLOWS=4
 WOODPECKER_HEALTHCHECK=false
-ACAHTI_RUNNER=${ACAHTI_RUNNER}
 EOF
 chmod 600 /etc/woodpecker/agent.env
 chown root:root /etc/woodpecker/agent.env
@@ -133,7 +134,7 @@ chmod 600 /etc/woodpecker/agent.conf
 
 cat >/etc/systemd/system/woodpecker-agent.service <<EOF
 [Unit]
-Description=Acahti CI agent (${AGENT_NAME})
+Description=Acahti Runner (${AGENT_NAME})
 After=network-online.target
 Wants=network-online.target
 
@@ -155,4 +156,4 @@ systemctl daemon-reload
 systemctl enable woodpecker-agent.service
 systemctl restart woodpecker-agent.service
 systemctl --no-pager --full status woodpecker-agent.service || true
-echo "OK: agent ${AGENT_NAME} mode=${MODE} -> ${SERVER} labels=${LABELS}"
+echo "OK: runner ${AGENT_NAME} mode=${MODE} -> ${SERVER} labels=${LABELS} pipes=/usr/local/lib/acahti/pipes"

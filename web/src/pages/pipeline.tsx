@@ -13,12 +13,12 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useEvents } from "@/hooks/use-events"
 import { useLoad } from "@/hooks/use-load"
 import { useT } from "@/i18n/i18n"
-import type { FileBlob, PipelineDetail, Step } from "@/lib/api"
+import type { FileBlob, Step } from "@/lib/api"
 import { api } from "@/lib/api"
 import { formatUnix } from "@/lib/format"
 import { langOf } from "@/lib/lang"
 import { pipelineHref } from "@/lib/nav"
-import { asPipeline, declaredJobNames, jobsOf, triggerKey, triggerVars } from "@/lib/pipeline"
+import { asPipeline, jobsOf, triggerKey, triggerVars } from "@/lib/pipeline"
 
 export function PipelinePage() {
   const t = useT()
@@ -37,25 +37,20 @@ export function PipelinePage() {
     if (ev.type !== "pipeline.updated") return
     const next = asPipeline(ev.data)
     if (!next || next.repo !== `${owner}/${name}` || next.number !== n) return
-    apply((cur) => (cur ? ({ ...cur, pipeline: next, steps: next.steps || cur.steps } satisfies PipelineDetail) : cur))
+    apply((cur) => (cur ? { ...cur, pipeline: next } : cur))
   })
 
-  const jobs = useMemo(
-    () => (p ? jobsOf(p, data?.steps, declaredJobNames(files, p.event, p.branch || p.ref)) : []),
-    [p, data?.steps, files],
-  )
+  const jobs = useMemo(() => (p ? jobsOf(p) : []), [p])
+  const activeStep = useMemo(() => {
+    if (step && jobs.some((j) => j.steps.some((s) => s.pid === step.pid && s.name === step.name))) {
+      return step
+    }
+    return jobs[0]?.steps[0] ?? null
+  }, [jobs, step])
+  const stepLogId = activeStep?.id || activeStep?.pid || 0
 
   useEffect(() => {
-    if (!jobs.length) return
-    setStep((cur) => {
-      if (cur && jobs.some((j) => j.steps.some((s) => s.pid === cur.pid))) return cur
-      return jobs[0].steps[0] || null
-    })
-    setFile(null)
-  }, [jobs])
-
-  useEffect(() => {
-    if (file || !step) {
+    if (file || !stepLogId) {
       setLog("")
       setLogLoading(false)
       return
@@ -63,11 +58,11 @@ export function PipelinePage() {
     setLog("")
     setLogLoading(true)
     api
-      .pipelineLog(owner, name, n, step.id || step.pid)
+      .pipelineLog(owner, name, n, stepLogId)
       .then((r) => setLog(r.log || ""))
       .catch(() => setLog(""))
       .finally(() => setLogLoading(false))
-  }, [owner, name, n, step, file])
+  }, [owner, name, n, stepLogId, file])
 
   async function rerun() {
     setBusy(true)
@@ -180,7 +175,7 @@ export function PipelinePage() {
             <PipelineJobs
               jobs={jobs}
               files={files ?? []}
-              activeStep={step}
+              activeStep={activeStep}
               activeFile={file}
               onStep={(s) => {
                 setFile(null)
@@ -205,9 +200,9 @@ export function PipelinePage() {
               <Skeleton className="h-4 w-5/6" />
               <Skeleton className="h-4 w-4/6" />
             </div>
-          ) : log || step?.error || p.error ? (
+          ) : log || activeStep?.error || p.error ? (
             <AutoHideScroll className="min-h-0 flex-1">
-              <pre className="p-4 font-mono text-xs whitespace-pre-wrap">{log || step?.error || p.error}</pre>
+              <pre className="p-4 font-mono text-xs whitespace-pre-wrap">{log || activeStep?.error || p.error}</pre>
             </AutoHideScroll>
           ) : (
             <EmptyState>{t("noLog")}</EmptyState>

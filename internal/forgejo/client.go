@@ -71,19 +71,20 @@ func (p Perm) Level() string {
 }
 
 type Repo struct {
-	ID            int64  `json:"id"`
-	Name          string `json:"name"`
-	FullName      string `json:"full_name"`
-	Private       bool   `json:"private"`
-	Archived      bool   `json:"archived,omitempty"`
-	DefaultBranch string `json:"default_branch"`
-	CloneURL      string `json:"clone_url"`
-	HTMLURL       string `json:"html_url"`
-	Repo          string `json:"repo,omitempty"`
-	Team          string `json:"team,omitempty"`
-	Updated       int64  `json:"updated,omitempty"`
-	UpdatedUnix   int64  `json:"updated_unix,omitempty"`
-	Permissions   Perm   `json:"permissions"`
+	ID               int64  `json:"id"`
+	Name             string `json:"name"`
+	FullName         string `json:"full_name"`
+	Private          bool   `json:"private"`
+	Archived         bool   `json:"archived,omitempty"`
+	DefaultBranch    string `json:"default_branch"`
+	CloneURL         string `json:"clone_url"`
+	HTMLURL          string `json:"html_url"`
+	Repo             string `json:"repo,omitempty"`
+	Team             string `json:"team,omitempty"`
+	Updated          int64  `json:"updated,omitempty"`
+	UpdatedUnix      int64  `json:"updated_unix,omitempty"`
+	Permissions      Perm   `json:"permissions"`
+	CanManageSecrets bool   `json:"can_manage_secrets,omitempty"`
 }
 
 type Team struct {

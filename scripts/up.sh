@@ -29,6 +29,7 @@ fi
 compose_args
 "${COMPOSE[@]}" up -d --build
 bash "${root}/scripts/configure.sh"
+sync_runner
 "${COMPOSE[@]}" ps
 echo "OK: gateway ${GATEWAY_BIND}  public ${ROOT_URL}"
 echo "    git HTTPS ${ROOT_URL}   woodpecker grpc :9000"

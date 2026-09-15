@@ -1,0 +1,8 @@
+name: oci-gc
+inputs:
+  repos:
+    required: true
+    description: OCI repositories to prune (no tag), one per line
+  keep:
+    required: false
+    description: Non-latest tags to keep (default 2). latest is always kept.

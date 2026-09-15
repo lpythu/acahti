@@ -21,6 +21,10 @@ func TestRoute(t *testing.T) {
 		{"/repos/acme/demo/pulls/3/comments", http.MethodGet, "pr_comments", map[string]any{"owner": "acme", "name": "demo", "number": 3}},
 		{"/repos/acme/demo/pulls/3/comments", http.MethodPost, "pr_comment", map[string]any{"owner": "acme", "name": "demo", "number": 3}},
 		{"/repos/acme/demo/checks/abc", http.MethodGet, "checks_wait", map[string]any{"owner": "acme", "name": "demo", "sha": "abc"}},
+		{"/repos/acme/demo/secrets", http.MethodGet, "secret_list", map[string]any{"owner": "acme", "name": "demo", "scope": "repo"}},
+		{"/repos/acme/demo/secrets/kubeconfig_office", http.MethodPut, "secret_put", map[string]any{"owner": "acme", "name": "demo", "scope": "repo", "secret": "kubeconfig_office"}},
+		{"/secrets", http.MethodGet, "secret_list", map[string]any{"scope": "org"}},
+		{"/secrets/harbor_password", http.MethodDelete, "secret_delete", map[string]any{"scope": "org", "name": "harbor_password"}},
 		{"/inbox", http.MethodGet, "inbox", map[string]any{}},
 		{"/pipelines/acme/12/log", http.MethodGet, "", nil},
 	}

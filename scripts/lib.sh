@@ -89,17 +89,55 @@ ensure_env() {
     ACAHTI_SESSION_SECRET="$(gen_secret)"
     _upsert_env ACAHTI_SESSION_SECRET "${ACAHTI_SESSION_SECRET}"
   fi
+  if [[ -z "${ACAHTI_CONFIG_TOKEN:-}" ]]; then
+    ACAHTI_CONFIG_TOKEN="$(gen_secret)"
+    _upsert_env ACAHTI_CONFIG_TOKEN "${ACAHTI_CONFIG_TOKEN}"
+  fi
   export DOMAIN ROOT_URL ACAHTI_ORG ACAHTI_DATA ACAHTI_ADMIN_USER ACAHTI_ADMIN_EMAIL
   export GATEWAY_BIND
   export ACAHTI_ADMIN_PASSWORD POSTGRES_PASSWORD WOODPECKER_AGENT_SECRET WOODPECKER_GRPC_SECRET
   export WOODPECKER_FORGEJO_CLIENT WOODPECKER_FORGEJO_SECRET WOODPECKER_TOKEN
-  export ACAHTI_ADMIN_TOKEN ACAHTI_SESSION_SECRET
+  export ACAHTI_ADMIN_TOKEN ACAHTI_SESSION_SECRET ACAHTI_CONFIG_TOKEN
   export FORGEJO_UID="${FORGEJO_UID:-$(id -u)}"
   export FORGEJO_GID="${FORGEJO_GID:-$(id -g)}"
+  export ACAHTI_BUILD="${ACAHTI_BUILD:-}"
+  export ACAHTI_DEPLOY="${ACAHTI_DEPLOY:-}"
+  export ACAHTI_GRPC_HOST="${ACAHTI_GRPC_HOST:-}"
   _upsert_env FORGEJO_UID "${FORGEJO_UID}"
   _upsert_env FORGEJO_GID "${FORGEJO_GID}"
   _upsert_env DOMAIN "${DOMAIN}"
   _upsert_env ROOT_URL "${ROOT_URL}"
   _upsert_env ACAHTI_ORG "${ACAHTI_ORG}"
   _upsert_env GATEWAY_BIND "${GATEWAY_BIND}"
+}
+
+# Copy official pipes and restart the Runner on ACAHTI_BUILD (or ACAHTI_DEPLOY).
+# Control plane and Runner must share the same train; tag upgrades call this from up.sh.
+sync_runner() {
+  local spec="${ACAHTI_BUILD:-${ACAHTI_DEPLOY:-}}"
+  [[ -n "$spec" ]] || return 0
+  local root secret host
+  root="$(acahti_root)"
+  secret="${WOODPECKER_AGENT_SECRET:-}"
+  if [[ -z "$secret" ]]; then
+    echo "error: WOODPECKER_AGENT_SECRET missing; cannot sync Runner" >&2
+    return 1
+  fi
+  if [[ ! -d "${root}/pipes" || ! -f "${root}/scripts/agent.sh" ]]; then
+    echo "error: official pipes missing next to agent.sh" >&2
+    return 1
+  fi
+  host="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  host="${ACAHTI_GRPC_HOST:-${host}}"
+  if [[ -z "$host" ]]; then
+    echo "error: set ACAHTI_GRPC_HOST (acahti LAN IP for Runner gRPC)" >&2
+    return 1
+  fi
+  echo "==> runner pipes on ${spec}"
+  ssh -o BatchMode=yes "${spec}" "mkdir -p /tmp/acahti-scripts"
+  tar -C "${root}" -czf /tmp/acahti-runner.tgz scripts/agent.sh pipes
+  scp -o BatchMode=yes /tmp/acahti-runner.tgz "${spec}:/tmp/acahti-runner.tgz"
+  rm -f /tmp/acahti-runner.tgz
+  ssh -o BatchMode=yes "${spec}" \
+    "tar -C /tmp/acahti-scripts --strip-components=0 -xzf /tmp/acahti-runner.tgz && sudo -E ROLE=both SERVER=${host}:9000 SECRET=${secret} bash /tmp/acahti-scripts/scripts/agent.sh"
 }

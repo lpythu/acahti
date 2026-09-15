@@ -49,16 +49,16 @@ type Repo struct {
 }
 
 type Pipeline struct {
-	ID       int64  `json:"id"`
-	Number   int64  `json:"number"`
-	Status   string `json:"status"`
-	Event    string `json:"event"`
-	Branch   string `json:"branch"`
-	Ref      string `json:"ref"`
-	Title    string `json:"title"`
-	Message  string `json:"message"`
-	Author   string `json:"author"`
-	Avatar   string `json:"avatar"`
+	ID       int64       `json:"id"`
+	Number   int64       `json:"number"`
+	Status   string      `json:"status"`
+	Event    string      `json:"event"`
+	Branch   string      `json:"branch"`
+	Ref      string      `json:"ref"`
+	Title    string      `json:"title"`
+	Message  string      `json:"message"`
+	Author   string      `json:"author"`
+	Avatar   string      `json:"avatar"`
 	Commit   string      `json:"commit"`
 	Error    string      `json:"error"`
 	Errors   []PipeError `json:"errors,omitempty"`
@@ -76,12 +76,13 @@ type PipeError struct {
 	Data      any    `json:"data,omitempty"`
 }
 
+// Job is one `.acahti/pipelines/*.yaml` file in a run (ci, cd.office, …).
 type Job struct {
-	ID       int64  `json:"id"`
-	PID      int64  `json:"pid"`
-	Name     string `json:"name"`
-	State    string `json:"state"`
-	Children []Step `json:"children"`
+	ID    int64  `json:"id,omitempty"`
+	PID   int64  `json:"pid,omitempty"`
+	Name  string `json:"name"`
+	State string `json:"state"`
+	Steps []Step `json:"steps,omitempty"`
 }
 
 type Step struct {
@@ -95,34 +96,10 @@ type Step struct {
 	LogTail string `json:"log_tail,omitempty"`
 }
 
-func (p *Pipeline) UnmarshalJSON(data []byte) error {
-	type alias Pipeline
-	aux := struct {
-		alias
-		Workflows []Job `json:"workflows"`
-	}{}
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
-	}
-	*p = Pipeline(aux.alias)
-	if len(p.Jobs) == 0 {
-		p.Jobs = aux.Workflows
-	}
-	p.flattenError()
-	return nil
-}
-
 func (p Pipeline) Steps() []Step {
 	var out []Step
-	for _, job := range p.Jobs {
-		if len(job.Children) == 0 && job.PID > 0 {
-			out = append(out, Step{PID: job.PID, Name: job.Name, State: job.State})
-			continue
-		}
-		out = append(out, job.Children...)
-	}
-	if len(out) == 0 {
-		out = []Step{{PID: 1, Name: "", State: p.Status, Error: p.Error}}
+	for _, j := range p.Jobs {
+		out = append(out, j.Steps...)
 	}
 	return out
 }
@@ -346,8 +323,8 @@ func (c *Client) ListPipelines(fullName string, q page.Query) (page.Result[Pipel
 	if err != nil {
 		return page.Result[Pipeline]{}, err
 	}
-	var out []Pipeline
-	if err := json.Unmarshal(b, &out); err != nil {
+	out, err := DecodeKernelList(b)
+	if err != nil {
 		return page.Result[Pipeline]{}, err
 	}
 	for i := range out {
@@ -365,8 +342,8 @@ func (c *Client) GetPipeline(fullName string, number int64) (Pipeline, error) {
 	if err != nil {
 		return Pipeline{}, err
 	}
-	var p Pipeline
-	if err := json.Unmarshal(b, &p); err != nil {
+	p, err := DecodeKernel(b)
+	if err != nil {
 		return Pipeline{}, err
 	}
 	p.Repo = fullName
@@ -422,9 +399,12 @@ func (c *Client) Trigger(fullName, branch string) (Pipeline, error) {
 	if err != nil {
 		return Pipeline{}, err
 	}
-	var p Pipeline
+	p, err := DecodeKernel(b)
+	if err != nil {
+		return Pipeline{}, err
+	}
 	p.Repo = fullName
-	return p, json.Unmarshal(b, &p)
+	return p, nil
 }
 
 func (c *Client) Rerun(fullName string, number int64) (Pipeline, error) {
@@ -436,9 +416,12 @@ func (c *Client) Rerun(fullName string, number int64) (Pipeline, error) {
 	if err != nil {
 		return Pipeline{}, err
 	}
-	var p Pipeline
+	p, err := DecodeKernel(b)
+	if err != nil {
+		return Pipeline{}, err
+	}
 	p.Repo = fullName
-	return p, json.Unmarshal(b, &p)
+	return p, nil
 }
 
 func (c *Client) Approve(fullName string, number int64) error {

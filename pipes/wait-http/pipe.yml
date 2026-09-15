@@ -1,0 +1,10 @@
+name: wait-http
+inputs:
+  urls:
+    required: true
+    description: URLs to poll, newline or semicolon separated
+  timeout:
+    required: false
+    description: Seconds to wait (default 180)
+  user_agent:
+    required: false

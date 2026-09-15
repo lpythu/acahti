@@ -88,7 +88,7 @@ func syntheticJob(name, state, err string) Job {
 	return Job{
 		Name:  name,
 		State: state,
-		Children: []Step{{
+		Steps: []Step{{
 			PID:   1,
 			Name:  name,
 			State: state,

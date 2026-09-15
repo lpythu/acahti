@@ -34,6 +34,7 @@ services:
       WOODPECKER_VERSION: ${WOODPECKER_VERSION:-3.18.1}
       POSTGRES_VERSION: ${POSTGRES_VERSION:-16-alpine}
       ACAHTI_DATA: /var/lib/acahti
+      ACAHTI_CONFIG_TOKEN: ${ACAHTI_CONFIG_TOKEN:?set ACAHTI_CONFIG_TOKEN in .env}
     volumes:
       - ${ACAHTI_DATA:-/var/lib/acahti}/gateway:/var/lib/acahti
     mem_limit: 256m
@@ -134,6 +135,7 @@ services:
       WOODPECKER_AGENT_SECRET: ${WOODPECKER_AGENT_SECRET:?set WOODPECKER_AGENT_SECRET in .env}
       WOODPECKER_GRPC_SECRET: ${WOODPECKER_GRPC_SECRET:?set WOODPECKER_GRPC_SECRET in .env}
       WOODPECKER_DEFAULT_PIPELINE_CONFIGS: ".acahti/pipelines/"
+      WOODPECKER_CONFIG_SERVICE_ENDPOINT: http://gateway:8080/hooks/pipeline-config?token=${ACAHTI_CONFIG_TOKEN}
       WOODPECKER_GRPC_ADDR: ${WOODPECKER_GRPC_ADDR:-:9000}
       WOODPECKER_SERVER_ADDR: ":8000"
     volumes:

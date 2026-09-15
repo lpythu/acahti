@@ -1,7 +1,7 @@
 import { CalendarIcon, ClockIcon, GitBranchIcon, PlayIcon } from "lucide-react"
 import { Link } from "react-router-dom"
 
-import { PipelineStages } from "@/components/pipeline-stages"
+import { PipelineJobDots } from "@/components/pipeline-stages"
 import { RunStatusIcon } from "@/components/run-status-icon"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -62,7 +62,7 @@ export function PipelineRunRow({
           <span className="mt-0.5 block truncate text-xs text-muted-foreground">{meta}</span>
         </span>
       </Link>
-      <PipelineStages stages={jobs} />
+      <PipelineJobDots jobs={jobs} />
       <div className="flex w-40 shrink-0 flex-col items-end gap-0.5 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1.5" title={exact}>
           <CalendarIcon className="size-3.5" />
