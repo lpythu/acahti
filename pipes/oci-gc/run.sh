@@ -55,7 +55,16 @@ gc_repo() {
 			continue
 		fi
 		echo "    delete ${tag}"
-		crane delete "${repo}:${tag}"
+		# ACR (and some other registries) reject tag-delete with DIGEST_INVALID.
+		# Delete by digest; a refused delete must not fail a finished deploy.
+		digest="$(crane digest "${repo}:${tag}" 2>/dev/null || true)"
+		if [[ -n "$digest" ]] && crane delete "${repo}@${digest}"; then
+			continue
+		fi
+		if crane delete "${repo}:${tag}"; then
+			continue
+		fi
+		echo "    skip ${tag}"
 	done
 	if ((has_latest == 1)); then
 		echo "    keep latest"
