@@ -66,14 +66,7 @@ Skills: [skills/acahti-install/SKILL.md](skills/acahti-install/SKILL.md) (stand 
 
 ## Web preview
 
-Do not tag to look at UI. `scripts/web-dev.sh` proxies `/ui` to the host `:8080` (`192.168.0.180` or Tailscale). Not `acahti.saidc.ai` (Cloudflare).
-
-```bash
-bash scripts/web-dev.sh
-# http://127.0.0.1:5173  — log in with an acahti account
-```
-
-Override: `ACAHTI_DEV_ORIGIN=http://192.168.0.180:8080 bash scripts/web-dev.sh`. Confirm locally, then bump `ACAHTI_VERSION` and `bash scripts/tag-release.sh`.
+Do not tag to look at UI. Local Vite HMR lives outside this repo (saidc-ws `./dev-acahti`): proxies `/ui` to the host `:8080` (LAN / Tailscale), not Cloudflare. Confirm there, then bump `ACAHTI_VERSION` and `bash scripts/tag-release.sh`.
 
 ## Usage
 
@@ -86,7 +79,7 @@ Give the first line to any coding agent. It GET `$ROOT_URL/skill.md` this turn, 
 
 Plugins: [lpythu/acahti-plugin](https://github.com/lpythu/acahti-plugin) (`cursor/` for Cursor, `codex/` for Codex). Do not put `acahti` in `~/.cursor/mcp.json`.
 
-- Git: `https://acahti.example.com/acme/<repo>.git` — username `whoami.login`, password is the OAuth `access_token` the client already holds
+- Git: `https://acahti.example.com/acme/<repo>.git` — username is the Acahti login; password is the account password (same as `/login`) or the OAuth `access_token` the MCP client already holds
 - Packages: `https://acahti.example.com/api/packages/acme/pypi/simple/` and `…/npm/`
 - REST: `/acahti/v1/…` same verbs as MCP
 - Not public: Woodpecker `/ci`, Forgejo UI, Forgejo `/api/v1`

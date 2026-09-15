@@ -232,13 +232,6 @@ func (c *Client) UserSudo(login string) (User, error) {
 	return c.user(login, "")
 }
 
-func (c *Client) UserByToken(token string) (User, error) {
-	if token == "" {
-		return User{}, fmt.Errorf("empty token")
-	}
-	return c.user("", token)
-}
-
 func (c *Client) user(sudo, token string) (User, error) {
 	b, _, err := c.do(http.MethodGet, "/api/v1/user", token, sudo, nil)
 	if err != nil {
@@ -578,6 +571,54 @@ func (c *Client) CreateOrgRepo(org, name string, private bool) (Repo, error) {
 	return r, json.Unmarshal(b, &r)
 }
 
+func (c *Client) EditRepo(owner, name string, body map[string]any) (Repo, error) {
+	b, _, err := c.do(http.MethodPatch, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name), "", "", body)
+	if err != nil {
+		return Repo{}, err
+	}
+	var r Repo
+	return r, json.Unmarshal(b, &r)
+}
+
+func (c *Client) SetDefaultBranch(owner, name, branch string) (Repo, error) {
+	return c.EditRepo(owner, name, map[string]any{"default_branch": branch})
+}
+
+func (c *Client) ProtectBranch(owner, name, branch string) error {
+	body := map[string]any{
+		"rule_name":                         branch,
+		"enable_push":                       false,
+		"enable_force_push":                 false,
+		"enable_merge_whitelist":            false,
+		"enable_status_check":               false,
+		"status_check_contexts":             []string{},
+		"block_on_rejected_reviews":         false,
+		"block_on_official_review_requests": false,
+		"block_on_outdated_branch":          false,
+		"dismiss_stale_approvals":           false,
+		"require_signed_commits":            false,
+		"protected_file_patterns":           "",
+		"unprotected_file_patterns":         "",
+	}
+	_, code, err := c.do(http.MethodPost, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/branch_protections", "", "", body)
+	if err == nil {
+		return nil
+	}
+	if code != http.StatusConflict && code != http.StatusUnprocessableEntity {
+		return err
+	}
+	_, _, err = c.do(http.MethodPatch, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/branch_protections/"+url.PathEscape(branch), "", "", body)
+	return err
+}
+
+func (c *Client) UnprotectBranch(owner, name, branch string) error {
+	_, code, err := c.do(http.MethodDelete, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/branch_protections/"+url.PathEscape(branch), "", "", nil)
+	if err != nil && code != http.StatusNotFound {
+		return err
+	}
+	return nil
+}
+
 func (c *Client) GetRepo(owner, name string, sudo string) (Repo, error) {
 	b, _, err := c.do(http.MethodGet, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name), "", sudo, nil)
 	if err != nil {
@@ -603,6 +644,7 @@ type CommitPerson struct {
 
 type CommitUser struct {
 	Login     string `json:"login"`
+	FullName  string `json:"full_name"`
 	AvatarURL string `json:"avatar_url"`
 }
 
@@ -748,45 +790,6 @@ func (c *Client) DeleteRef(owner, name, ref string) error {
 		return err
 	}
 	_, _, err = c.do(http.MethodDelete, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/branches/"+url.PathEscape(branch), "", "", nil)
-	return err
-}
-
-func (c *Client) ProtectTrains(owner, name string) error {
-	for _, b := range []string{"dev", "test"} {
-		if err := c.ProtectDefault(owner, name, b); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (c *Client) ProtectDefault(owner, name, branch string) error {
-	if branch == "" {
-		branch = "dev"
-	}
-	body := map[string]any{
-		"rule_name":                         branch,
-		"enable_push":                       false,
-		"enable_force_push":                 false,
-		"enable_merge_whitelist":            false,
-		"enable_status_check":               false,
-		"status_check_contexts":             []string{},
-		"block_on_rejected_reviews":         false,
-		"block_on_official_review_requests": false,
-		"block_on_outdated_branch":          false,
-		"dismiss_stale_approvals":           false,
-		"require_signed_commits":            false,
-		"protected_file_patterns":           "",
-		"unprotected_file_patterns":         "",
-	}
-	_, code, err := c.do(http.MethodPost, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/branch_protections", "", "", body)
-	if err == nil {
-		return nil
-	}
-	if code != http.StatusConflict && code != http.StatusUnprocessableEntity {
-		return err
-	}
-	_, _, err = c.do(http.MethodPatch, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/branch_protections/"+url.PathEscape(branch), "", "", body)
 	return err
 }
 

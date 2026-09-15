@@ -240,6 +240,36 @@ func (c *Catalog) RepoContents(user, owner, name, ref, path string, q page.Query
 	return out, nil
 }
 
+func (c *Catalog) SetDefaultBranch(user, owner, name, branch string) error {
+	if _, err := c.requireRepoAdmin(user, owner, name); err != nil {
+		return err
+	}
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return fmt.Errorf("%w: branch", ErrInvalid)
+	}
+	repo, err := c.FJ.SetDefaultBranch(owner, name, branch)
+	if err != nil {
+		return err
+	}
+	c.RememberRepo(repo)
+	return nil
+}
+
+func (c *Catalog) SetBranchProtected(user, owner, name, branch string, protected bool) error {
+	if _, err := c.requireRepoAdmin(user, owner, name); err != nil {
+		return err
+	}
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return fmt.Errorf("%w: branch", ErrInvalid)
+	}
+	if protected {
+		return c.FJ.ProtectBranch(owner, name, branch)
+	}
+	return c.FJ.UnprotectBranch(owner, name, branch)
+}
+
 func (c *Catalog) ListBranches(user, owner, name string, q page.Query) (page.Result[BranchInfo], error) {
 	repo, err := c.FJ.GetRepo(owner, name, user)
 	if err != nil {
@@ -718,12 +748,14 @@ func (c *Catalog) paintPipes(pipes []woodpecker.Pipeline) []woodpecker.Pipeline 
 	out := append([]woodpecker.Pipeline(nil), pipes...)
 	for i := range out {
 		out[i].HydrateJobs()
+		out[i].Author = c.authorOf(out[i].Author)
 	}
 	return out
 }
 
 func (c *Catalog) decoratePipe(p woodpecker.Pipeline) woodpecker.Pipeline {
 	p.HydrateJobs()
+	p.Author = c.authorOf(p.Author)
 	return woodpecker.MergeDeclaredJobs(p, c.declaredJobNames(p))
 }
 

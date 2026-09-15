@@ -20,7 +20,7 @@ If the browser has no account, open `$ROOT_URL/join` with the admin invite, pick
 
 ## Git
 
-HTTPS only. Clone `$ROOT_URL/$ACAHTI_ORG/<repo>.git`. Username `whoami.login`. Password is the OAuth access_token the MCP client already holds — use the system git credential helper. On 401, tell the user to complete MCP OAuth. Do not read `secrets/` or ask them to paste a token.
+HTTPS only. Clone `$ROOT_URL/$ACAHTI_ORG/<repo>.git`. Username is the Acahti login. Password is either the account password (same as `/login`) or the OAuth `access_token` the MCP client already holds — agents use the system git credential helper with the token. On 401 for a human, check the login password; for an agent, complete MCP OAuth. Do not read `secrets/` or ask them to paste a token.
 
 Clone is always `$ACAHTI_ORG/<repo>`. A team (Platform, ModelCamp, …) is access only; do not clone `modelcamp/<repo>`.
 
@@ -39,7 +39,7 @@ Before any `git commit` in the current repo:
 
 `git_name` is the commit author the admin set on the user (default `login`). `git_email` is `{login}@noreply.$DOMAIN`. Run `setup_local` with `whoami.git_name` and `whoami.git_email`. Do not ask the user for a name or email.
 
-`dev` and `test` are protected. If push is declined, open a PR. Do not push `main` / `release`; open a PR.
+Protection is per repository, not a global train. Before push: `repo_get` `{owner, name}` and `branch_list` `{owner, name}`. Direct-push branches with `protected: false`. For `protected: true`, open a PR (`pr_create`; `base` defaults to `repo_get.default_branch`). Do not assume `dev` / `test` / `main` / `release`. If the remote declines a push, open a PR to the default branch. Operators set default / protection on the repo **Branches** page in the web UI (or Forgejo settings).
 
 ## After push
 

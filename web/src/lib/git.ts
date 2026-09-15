@@ -10,5 +10,5 @@ export function commitTitle(message?: string) {
 }
 
 export function commitAuthor(c?: Commit | null) {
-  return c?.author?.login || c?.commit?.author?.name || "—"
+  return c?.commit?.author?.name || c?.author?.full_name || c?.author?.login || "—"
 }

@@ -70,7 +70,7 @@ export function SiteHeader({
             admin={me.admin}
             user={{
               name: me.git_name || me.user,
-              email: me.git_email || (me.admin ? t("admin") : me.user),
+              username: me.user,
             }}
           />
         </div>

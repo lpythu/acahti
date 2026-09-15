@@ -19,7 +19,7 @@ func TestAcahtiFillsIslandURLs(t *testing.T) {
 		"pipeline_list",
 		"checks_wait",
 		"git fetch --all",
-		"`dev` and `test` are protected",
+		"Protection is per repository",
 		"GET `https://acahti.example.com/skill.md` now",
 		"`git_name` is the commit author",
 	} {

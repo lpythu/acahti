@@ -8,6 +8,7 @@ import { useLoad } from "@/hooks/use-load"
 import { useT } from "@/i18n/i18n"
 import type { MessageKey } from "@/i18n/messages"
 import { api, type User } from "@/lib/api"
+import { displayName } from "@/lib/user"
 
 const PERMS = ["read", "write", "admin"] as const
 
@@ -80,7 +81,10 @@ export function AddPersonMenu({
   const users = useLoad(() => loadUsers(), [], open)
   const taken = useMemo(() => new Set(exclude), [exclude])
   const options = useMemo(
-    () => (users.data ?? []).filter((u) => u.login && !taken.has(u.login)).sort((a, b) => a.login.localeCompare(b.login)),
+    () =>
+      (users.data ?? [])
+        .filter((u) => u.login && !taken.has(u.login))
+        .sort((a, b) => displayName(a).localeCompare(displayName(b), undefined, { sensitivity: "base" })),
     [users.data, taken],
   )
 
@@ -116,7 +120,7 @@ export function AddPersonMenu({
         <form onSubmit={(e) => void submit(e)}>
           <FieldGroup>
             <Field>
-              <FieldLabel>{t("username")}</FieldLabel>
+              <FieldLabel>{t("selectUser")}</FieldLabel>
               <Select value={login || null} onValueChange={(v) => setLogin(String(v ?? ""))}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder={t("selectUser")} />
@@ -124,7 +128,7 @@ export function AddPersonMenu({
                 <SelectContent>
                   {options.map((u) => (
                     <SelectItem key={u.login} value={u.login}>
-                      {u.full_name && u.full_name !== u.login ? `${u.login} (${u.full_name})` : u.login}
+                      {displayName(u)}
                     </SelectItem>
                   ))}
                 </SelectContent>

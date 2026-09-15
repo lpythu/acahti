@@ -13,9 +13,10 @@ type stamp[T any] struct {
 }
 
 type memo struct {
-	mu    sync.Mutex
-	admin map[string]stamp[bool]
-	files map[string][]FileBlob
+	mu      sync.Mutex
+	admin   map[string]stamp[bool]
+	authors stamp[map[string]string]
+	files   map[string][]FileBlob
 }
 
 func newMemo() *memo {
@@ -43,6 +44,35 @@ func (m *memo) adminOf(user string) (bool, bool) {
 func (m *memo) setAdmin(user string, ok bool) {
 	m.mu.Lock()
 	m.admin[user] = stamp[bool]{at: time.Now(), v: ok}
+	m.mu.Unlock()
+}
+
+func (m *memo) authorsOf() (map[string]string, bool) {
+	if m == nil {
+		return nil, false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.authors.v == nil || time.Since(m.authors.at) > memoTTL {
+		return nil, false
+	}
+	out := make(map[string]string, len(m.authors.v))
+	for k, v := range m.authors.v {
+		out[k] = v
+	}
+	return out, true
+}
+
+func (m *memo) setAuthors(names map[string]string) {
+	if m == nil {
+		return
+	}
+	cp := make(map[string]string, len(names))
+	for k, v := range names {
+		cp[k] = v
+	}
+	m.mu.Lock()
+	m.authors = stamp[map[string]string]{at: time.Now(), v: cp}
 	m.mu.Unlock()
 }
 
@@ -75,11 +105,24 @@ func (m *memo) setFiles(repo, ref string, files []FileBlob) {
 func (m *memo) drop() {
 	m.mu.Lock()
 	m.admin = map[string]stamp[bool]{}
+	m.authors = stamp[map[string]string]{}
+	m.mu.Unlock()
+}
+
+func (m *memo) dropAuthors() {
+	m.mu.Lock()
+	m.authors = stamp[map[string]string]{}
 	m.mu.Unlock()
 }
 
 func (c *Catalog) forget() {
 	if c.mem != nil {
 		c.mem.drop()
+	}
+}
+
+func (c *Catalog) ForgetAuthors() {
+	if c != nil && c.mem != nil {
+		c.mem.dropAuthors()
 	}
 }

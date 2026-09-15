@@ -14,6 +14,7 @@ import { useLoad } from "@/hooks/use-load"
 import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api, splitRepo } from "@/lib/api"
+import { displayName } from "@/lib/user"
 
 function CreateTeamMenu({ onCreated }: { onCreated: (name: string) => void }) {
   const t = useT()
@@ -226,7 +227,7 @@ export function AdminTeamPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>{t("username")}</TableHead>
+                    <TableHead>{t("gitName")}</TableHead>
                     <TableHead>{t("permission")}</TableHead>
                     {manage ? <TableHead /> : null}
                   </TableRow>
@@ -234,7 +235,7 @@ export function AdminTeamPage() {
                 <TableBody>
                   {data.members.map((m) => (
                     <TableRow key={m.login}>
-                      <TableCell>{m.login}</TableCell>
+                      <TableCell>{displayName(m)}</TableCell>
                       <TableCell>
                         {manage ? (
                           <PermSelect

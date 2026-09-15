@@ -10,6 +10,7 @@ import { useLoad } from "@/hooks/use-load"
 import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api } from "@/lib/api"
+import { displayName } from "@/lib/user"
 
 export function PullPage() {
   const t = useT()
@@ -50,7 +51,7 @@ export function PullPage() {
               #{pr.number} {pr.title}
             </h2>
             <p className="text-sm text-muted-foreground">
-              {pr.user?.login} · {pr.head?.ref} → {pr.base?.ref}
+              {displayName(pr.user)} · {pr.head?.ref} → {pr.base?.ref}
             </p>
           </div>
           {pr.body ? <p className="whitespace-pre-wrap text-sm">{pr.body}</p> : null}
@@ -92,7 +93,7 @@ export function PullPage() {
                 {comments.items.map((c) => (
                   <li key={c.id} className="rounded-md border p-3 text-sm">
                     <p className="text-muted-foreground">
-                      {c.user?.login} · {c.created_at}
+                      {displayName(c.user)} · {c.created_at}
                     </p>
                     <p className="mt-1 whitespace-pre-wrap">{c.body}</p>
                   </li>

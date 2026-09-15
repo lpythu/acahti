@@ -100,8 +100,13 @@ func TestPublicAllowlist(t *testing.T) {
 
 	hit = ""
 	forge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/v1/user" && r.Header.Get("Authorization") == "token forge-oauth" {
-			_ = json.NewEncoder(w).Encode(map[string]string{"login": "acahti"})
+		if r.URL.Path == "/api/v1/user" {
+			u, p, ok := r.BasicAuth()
+			if ok && u == "alice" && p == "secret" {
+				_ = json.NewEncoder(w).Encode(map[string]string{"login": "alice"})
+				return
+			}
+			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 		hit = r.URL.Path
@@ -115,12 +120,31 @@ func TestPublicAllowlist(t *testing.T) {
 		ForgejoURL:    forge.URL,
 		DataDir:       t.TempDir(),
 	}, forgejo.New(forge.URL, ""), woodpecker.New("http://127.0.0.1:9", ""), events.New())
-	gitForge := httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs", nil)
-	gitForge.SetBasicAuth("acahti", "forge-oauth")
+
+	gitPw := httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs", nil)
+	gitPw.SetBasicAuth("alice", "secret")
 	rr = httptest.NewRecorder()
-	hForge.ServeHTTP(rr, gitForge)
+	hForge.ServeHTTP(rr, gitPw)
 	if hit != "/acme/demo.git/info/refs" || rr.Code != http.StatusTeapot {
-		t.Fatalf("git forge token hit=%q code=%d", hit, rr.Code)
+		t.Fatalf("git password hit=%q code=%d", hit, rr.Code)
+	}
+
+	hit = ""
+	gitBad := httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs", nil)
+	gitBad.SetBasicAuth("alice", "wrong")
+	rr = httptest.NewRecorder()
+	hForge.ServeHTTP(rr, gitBad)
+	if hit != "" || rr.Code != http.StatusUnauthorized {
+		t.Fatalf("git bad password hit=%q code=%d", hit, rr.Code)
+	}
+
+	hit = ""
+	gitAlias := httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs", nil)
+	gitAlias.SetBasicAuth("git", "secret")
+	rr = httptest.NewRecorder()
+	hForge.ServeHTTP(rr, gitAlias)
+	if hit != "" || rr.Code != http.StatusUnauthorized {
+		t.Fatalf("git alias password hit=%q code=%d", hit, rr.Code)
 	}
 
 	hit = ""

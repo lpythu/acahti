@@ -13,6 +13,7 @@ import { useLoad } from "@/hooks/use-load"
 import { useT } from "@/i18n/i18n"
 import { api, type AccessPerson } from "@/lib/api"
 import { useSession } from "@/lib/session"
+import { displayName } from "@/lib/user"
 import { useRepo } from "@/pages/repo-layout"
 
 function MoveTeamMenu({
@@ -194,7 +195,7 @@ function PeopleTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>{t("username")}</TableHead>
+          <TableHead>{t("gitName")}</TableHead>
           <TableHead>{t("permission")}</TableHead>
           {manage ? <TableHead /> : null}
         </TableRow>
@@ -202,7 +203,7 @@ function PeopleTable({
       <TableBody>
         {people.map((p) => (
           <TableRow key={p.login}>
-            <TableCell>{p.login}</TableCell>
+            <TableCell>{displayName(p)}</TableCell>
             <TableCell>
               {manage && onPerm ? (
                 <PermSelect value={p.permission} onChange={(perm) => onPerm(p.login, perm)} />

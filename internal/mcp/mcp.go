@@ -88,10 +88,10 @@ func tools() []toolSpec {
 	return []toolSpec{
 		{Name: "repo_list", Description: "List repositories the token can see", InputSchema: obj(pg)},
 		{Name: "repo_get", Description: "Get one repository", InputSchema: obj(map[string]any{"owner": str, "name": str}, "owner", "name")},
-		{Name: "repo_create", Description: "Create a private org repo and protect dev and test. Optional team attaches access", InputSchema: obj(map[string]any{"name": str, "team": str}, "name")},
-		{Name: "branch_list", Description: "List branches", InputSchema: obj(map[string]any{"owner": str, "name": str, "page": num, "page_size": num}, "owner", "name")},
+		{Name: "repo_create", Description: "Create a private org repo. Optional team attaches access. Does not set branch protection", InputSchema: obj(map[string]any{"name": str, "team": str}, "name")},
+		{Name: "branch_list", Description: "List branches with default and protected flags from repo settings", InputSchema: obj(map[string]any{"owner": str, "name": str, "page": num, "page_size": num}, "owner", "name")},
 		{Name: "ref_delete", Description: "Delete a git ref. ref is dev, heads/dev, or refs/heads/dev", InputSchema: obj(map[string]any{"owner": str, "name": str, "ref": str}, "owner", "name", "ref")},
-		{Name: "pr_create", Description: "Open a pull request. base defaults to dev", InputSchema: obj(map[string]any{"owner": str, "name": str, "title": str, "head": str, "base": str, "body": str}, "owner", "name", "title", "head")},
+		{Name: "pr_create", Description: "Open a pull request. base defaults to the repo default_branch", InputSchema: obj(map[string]any{"owner": str, "name": str, "title": str, "head": str, "base": str, "body": str}, "owner", "name", "title", "head")},
 		{Name: "pr_list", Description: "List pull requests", InputSchema: obj(map[string]any{"owner": str, "name": str, "state": str, "page": num, "page_size": num}, "owner", "name")},
 		{Name: "pr_get", Description: "Get a pull request with latest commit checks per context", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
 		{Name: "pr_comment", Description: "Comment on a pull request", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num, "body": str}, "owner", "name", "number", "body")},
@@ -246,19 +246,22 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 			}
 			repo.Team = team
 		}
-		_ = s.FJ.ProtectTrains(org, repo.Name)
 		if s.WP.Ready() {
 			_ = s.WP.Activate(org+"/"+repo.Name, strconv.FormatInt(repo.ID, 10))
 		}
 		return s.Cat.PublicRepo(repo), nil
 	case "branch_list":
-		return s.FJ.ListBranches(str("owner"), str("name"), pq)
+		return s.Cat.ListBranches(token, str("owner"), str("name"), pq)
 	case "ref_delete":
 		return map[string]any{"ok": true}, s.FJ.DeleteRef(str("owner"), str("name"), str("ref"))
 	case "pr_create":
 		base := str("base")
 		if base == "" {
-			base = "dev"
+			repo, err := s.FJ.GetRepo(str("owner"), str("name"), token)
+			if err != nil {
+				return nil, err
+			}
+			base = repo.DefaultBranch
 		}
 		return s.FJ.CreatePR(str("owner"), str("name"), str("title"), str("head"), base, str("body"), token)
 	case "pr_list":

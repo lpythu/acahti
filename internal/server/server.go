@@ -86,6 +86,7 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 	mux.HandleFunc("GET /ui/repos/{owner}/{name}/commits", pages.RepoCommits)
 	mux.HandleFunc("GET /ui/repos/{owner}/{name}/commits/{sha}", pages.Commit)
 	mux.HandleFunc("GET /ui/repos/{owner}/{name}/branches", pages.RepoBranches)
+	mux.HandleFunc("PATCH /ui/repos/{owner}/{name}/branches/{branch}", pages.RepoBranches)
 	mux.HandleFunc("GET /ui/repos/{owner}/{name}/tags", pages.RepoTags)
 	mux.HandleFunc("GET /ui/repos/{owner}/{name}/pulls", pages.RepoPulls)
 	mux.HandleFunc("GET /ui/repos/{owner}/{name}/pulls/{n}", pages.Pull)
@@ -178,11 +179,11 @@ func gitAs(a *auth.Service, fj *forgejo.Client, admin string, p *httputil.Revers
 
 func gitLogin(a *auth.Service, fj *forgejo.Client, r *http.Request) string {
 	if u, pass, ok := r.BasicAuth(); ok {
-		if user, valid := a.Parse(pass); valid && (u == user || u == "git") {
+		if user, valid := a.Parse(pass); valid && u == user {
 			return user
 		}
 		if fj != nil {
-			if fu, err := fj.UserByToken(pass); err == nil && fu.Login != "" && (u == fu.Login || u == "git" || u == "oauth2") {
+			if fu, err := fj.BasicUser(u, pass); err == nil && fu.Login == u {
 				return fu.Login
 			}
 		}

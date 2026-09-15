@@ -4,8 +4,8 @@ import {
   Code2Icon,
   FolderIcon,
   GitBranchIcon,
+  GitCommitVerticalIcon,
   GitPullRequestIcon,
-  HistoryIcon,
   PanelLeftCloseIcon,
   PanelLeftIcon,
   ShieldIcon,
@@ -81,7 +81,7 @@ function secondaryItems(
   if (base) {
     return [
       { title: t("files"), url: `${base}${q}`, icon: <Code2Icon />, end: true },
-      { title: t("commits"), url: `${base}/commits${q}`, icon: <HistoryIcon /> },
+      { title: t("commits"), url: `${base}/commits${q}`, icon: <GitCommitVerticalIcon /> },
       { title: t("branches"), url: `${base}/branches`, icon: <GitBranchIcon /> },
       { title: t("tags"), url: `${base}/tags`, icon: <TagIcon /> },
       { title: t("tabPulls"), url: `${base}/pulls`, icon: <GitPullRequestIcon /> },

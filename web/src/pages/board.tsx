@@ -10,6 +10,7 @@ import { useT } from "@/i18n/i18n"
 import { api, repoName, splitRepo, type Pipeline } from "@/lib/api"
 import { pipelineHref } from "@/lib/nav"
 import { asPipeline, upsertRun } from "@/lib/pipeline"
+import { displayName } from "@/lib/user"
 
 type BoardSection = "pipes" | "prs"
 
@@ -77,7 +78,7 @@ export function BoardPage() {
           <ul className="divide-y rounded-md border">
             {items.map((pr) => {
               const { owner, name } = splitRepo(pr.repo)
-              const author = pr.user?.login || ""
+              const author = displayName(pr.user)
               const head = pr.head?.ref || ""
               const base = pr.base?.ref || ""
               return (

@@ -112,7 +112,41 @@ func (p *Pages) RepoBranches(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	out, err := p.Cat.ListBranches(user, r.PathValue("owner"), r.PathValue("name"), page.Parse(r))
+	owner, name := r.PathValue("owner"), r.PathValue("name")
+	branch := r.PathValue("branch")
+	if r.Method == http.MethodPatch && branch != "" {
+		var body struct {
+			Default   *bool `json:"default"`
+			Protected *bool `json:"protected"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+		if body.Default == nil && body.Protected == nil {
+			writeErr(w, http.StatusBadRequest, "default or protected required")
+			return
+		}
+		if body.Default != nil {
+			if !*body.Default {
+				writeErr(w, http.StatusBadRequest, "cannot unset default; set another branch")
+				return
+			}
+			if err := p.Cat.SetDefaultBranch(user, owner, name, branch); err != nil {
+				writeCatErr(w, err)
+				return
+			}
+		}
+		if body.Protected != nil {
+			if err := p.Cat.SetBranchProtected(user, owner, name, branch, *body.Protected); err != nil {
+				writeCatErr(w, err)
+				return
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		return
+	}
+	out, err := p.Cat.ListBranches(user, owner, name, page.Parse(r))
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return

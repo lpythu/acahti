@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api, type PR } from "@/lib/api"
+import { displayName } from "@/lib/user"
 import { useRepo } from "@/pages/repo-layout"
 
 type PullState = "open" | "closed"
@@ -68,7 +69,7 @@ export function RepoPullsPage() {
         <ul className="divide-y rounded-md border">
           {items.map((pr) => {
             const status = prStatus(pr)
-            const author = pr.user?.login || ""
+            const author = displayName(pr.user)
             const head = pr.head?.ref || ""
             const base = pr.base?.ref || ""
             return (

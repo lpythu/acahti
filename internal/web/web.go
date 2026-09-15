@@ -234,6 +234,7 @@ func (p *Pages) PatchUser(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
+	p.Cat.ForgetAuthors()
 	writeJSON(w, http.StatusOK, identity.View(login, name, p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
 }
 

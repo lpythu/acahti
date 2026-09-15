@@ -6,12 +6,14 @@ import (
 	"strings"
 
 	"acahti/internal/forgejo"
+	"acahti/internal/identity"
 	"acahti/internal/page"
 	"acahti/internal/store"
 )
 
 type AccessPerson struct {
 	Login      string `json:"login"`
+	Author     string `json:"author"`
 	Permission string `json:"permission"`
 }
 
@@ -104,7 +106,7 @@ func (c *Catalog) membersOf(t teamRoles) ([]AccessPerson, error) {
 	for _, m := range rows {
 		out = append(out, AccessPerson{Login: m.Login, Permission: forgejo.NormalizePerm(m.Role)})
 	}
-	return out, nil
+	return c.withAuthors(out), nil
 }
 
 func strongerPerm(a, b string) string {
@@ -360,9 +362,10 @@ func (c *Catalog) RepoAccess(user, owner, name string) (RepoAccess, error) {
 		if p, err := c.FJ.CollaboratorPerm(owner, name, u.Login); err == nil && p != "" {
 			perm = p
 		}
-		direct = append(direct, AccessPerson{Login: u.Login, Permission: perm})
+		direct = append(direct, AccessPerson{Login: u.Login, Author: identity.Name(u.Login, u.FullName), Permission: perm})
 	}
 	sort.Slice(direct, func(i, j int) bool { return direct[i].Login < direct[j].Login })
+	direct = c.withAuthors(direct)
 	return RepoAccess{
 		Team:      repo.Team,
 		CanManage: c.IsOrgAdmin(user) || repo.Permissions.Admin,

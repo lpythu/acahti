@@ -19,7 +19,7 @@ export type PR = {
   html_url?: string
   mergeable?: boolean
   merged?: boolean
-  user?: { login: string }
+  user?: { login: string; full_name?: string }
   head?: { ref: string; sha: string }
   base?: { ref: string }
 }
@@ -94,7 +94,7 @@ export type Repo = {
   permissions?: Perm
 }
 
-export type AccessPerson = { login: string; permission: string }
+export type AccessPerson = { login: string; author?: string; permission: string }
 
 export type TeamAccess = {
   name: string
@@ -129,7 +129,7 @@ export type Status = {
 export type Comment = {
   id: number
   body: string
-  user: { login: string }
+  user: { login: string; full_name?: string }
   created_at: string
 }
 
@@ -149,7 +149,7 @@ export type TagInfo = {
 
 export type CommitPerson = { name: string; email?: string; date: string }
 
-export type CommitUser = { login: string; avatar_url?: string }
+export type CommitUser = { login: string; full_name?: string; avatar_url?: string }
 
 export type CommitFile = {
   filename: string
@@ -355,6 +355,11 @@ export const api = {
     req<Page<Commit>>(`/ui/repos/${owner}/${name}/commits${pageQS(opts, { ref: opts?.ref })}`),
   branches: (owner: string, name: string, q?: PageQuery) =>
     req<Page<BranchInfo>>(`/ui/repos/${owner}/${name}/branches${pageQS(q)}`),
+  patchBranch: (owner: string, name: string, branch: string, body: { default?: boolean; protected?: boolean }) =>
+    req<{ ok: boolean }>(`/ui/repos/${owner}/${name}/branches/${encodeURIComponent(branch)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   tags: (owner: string, name: string, q?: PageQuery) =>
     req<Page<TagInfo>>(`/ui/repos/${owner}/${name}/tags${pageQS(q)}`),
   pulls: (owner: string, name: string, q?: PageQuery & { state?: string }) =>
