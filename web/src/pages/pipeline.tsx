@@ -98,6 +98,16 @@ export function PipelinePage() {
     }
   }
 
+  async function remove() {
+    setBusy(true)
+    try {
+      await api.deletePipeline(owner, name, n)
+      nav(`/repos/${owner}/${name}/pipelines`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (loading && !data) {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
@@ -139,6 +149,11 @@ export function PipelinePage() {
           {p.status === "running" || p.status === "pending" ? (
             <Button size="sm" variant="outline" disabled={busy} onClick={() => void cancel()}>
               {t("cancel")}
+            </Button>
+          ) : null}
+          {p.status !== "running" && p.status !== "pending" && p.status !== "blocked" ? (
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => void remove()}>
+              {t("deletePipeline")}
             </Button>
           ) : null}
           <Button size="sm" variant="outline" disabled={busy} onClick={() => void rerun()}>

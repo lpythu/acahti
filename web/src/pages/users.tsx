@@ -388,7 +388,7 @@ export function UsersPage() {
                     {userTeams(u, membership.data).map((name) => (
                       <Link
                         key={name}
-                        to={`/repos?team=${encodeURIComponent(name)}`}
+                        to={`/admin/teams/${encodeURIComponent(name)}`}
                         className="inline-flex rounded-md bg-background px-2 py-0.5 text-xs shadow-sm ring-1 ring-foreground/10 hover:bg-muted"
                       >
                         {name}

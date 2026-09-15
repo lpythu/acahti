@@ -167,6 +167,16 @@ created, started, finished, jobs FROM pipelines WHERE repo = ANY($1) ORDER BY re
 	return items, rows.Err()
 }
 
+func (s *Store) DeletePipeline(repo string, number int64) error {
+	if !s.ready() || repo == "" || number == 0 {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := s.pool.Exec(ctx, `DELETE FROM pipelines WHERE repo = $1 AND number = $2`, repo, number)
+	return err
+}
+
 type row interface {
 	Scan(dest ...any) error
 }

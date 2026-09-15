@@ -100,9 +100,14 @@ export function AdminHomePage() {
         )}
       </section>
 
-      <Link className="text-sm underline-offset-4 hover:underline" to="/admin/users">
-        {t("users")}
-      </Link>
+      <div className="flex flex-wrap gap-4">
+        <Link className="text-sm underline-offset-4 hover:underline" to="/admin/teams">
+          {t("teams")}
+        </Link>
+        <Link className="text-sm underline-offset-4 hover:underline" to="/admin/users">
+          {t("users")}
+        </Link>
+      </div>
     </PageFrame>
   )
 }

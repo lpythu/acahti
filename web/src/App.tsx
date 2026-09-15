@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { I18nProvider } from "@/i18n/i18n"
 import { SessionProvider } from "@/lib/session"
 import { AdminHomePage } from "@/pages/admin-home"
+import { AdminTeamPage, AdminTeamsPage } from "@/pages/admin-teams"
 import { BoardPage } from "@/pages/board"
 import { LoginPage } from "@/pages/login"
 import { PackageDetailPage } from "@/pages/package-detail"
@@ -63,6 +64,8 @@ export default function App() {
                 <Route path="/packages/:kind/*" element={<PackageDetailPage />} />
                 <Route element={<AdminGate />}>
                   <Route path="/admin" element={<AdminHomePage />} />
+                  <Route path="/admin/teams" element={<AdminTeamsPage />} />
+                  <Route path="/admin/teams/:name" element={<AdminTeamPage />} />
                   <Route path="/admin/users" element={<UsersPage />} />
                 </Route>
               </Route>

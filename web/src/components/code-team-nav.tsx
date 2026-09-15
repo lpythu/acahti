@@ -1,9 +1,9 @@
 import { useMemo, useState, type ReactNode } from "react"
 import { Link, useLocation, useSearchParams } from "react-router-dom"
-import { BookMarkedIcon, ChevronRightIcon, FolderIcon, ListChevronsDownUpIcon, ListChevronsUpDownIcon, WorkflowIcon } from "lucide-react"
 import { cn } from "cn"
+import { BookMarkedIcon, ChevronRightIcon, FolderIcon, ListChevronsDownUpIcon, ListChevronsUpDownIcon, WorkflowIcon } from "lucide-react"
 
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
 import {
   SidebarGroup,
   SidebarGroupAction,
@@ -24,11 +24,6 @@ import { api, repoName, splitRepo, type NavTeam, type Repo } from "@/lib/api"
 import { parsePipelinePath, repoBase } from "@/lib/nav"
 
 export type CodeTeamSection = "repos" | "pipelines"
-
-function teamHref(section: CodeTeamSection, team: string) {
-  const base = section === "pipelines" ? "/pipelines" : "/repos"
-  return `${base}?team=${encodeURIComponent(team)}`
-}
 
 function itemHref(section: CodeTeamSection, owner: string, name: string) {
   if (section === "pipelines") {
@@ -130,20 +125,15 @@ function TeamNode({
   return (
     <SidebarMenuItem>
       <Collapsible open={open} onOpenChange={onOpenChange}>
-        <div className="flex min-w-0 items-center">
-          <SidebarMenuButton tooltip={team} isActive={teamActive} className="flex-1" render={<Link to={teamHref(section, team)} />}>
-            <FolderIcon />
-            <span>{team}</span>
-          </SidebarMenuButton>
-          <CollapsibleTrigger
-            className={cn(
-              "flex size-8 shrink-0 items-center justify-center rounded-md text-sidebar-foreground ring-sidebar-ring outline-hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 group-data-[collapsible=icon]:hidden",
-            )}
-            aria-label={team}
-          >
-            <ChevronRightIcon className={cn("size-4 transition-transform", open && "rotate-90")} />
-          </CollapsibleTrigger>
-        </div>
+        <SidebarMenuButton
+          tooltip={team}
+          isActive={teamActive}
+          onClick={() => onOpenChange(!open)}
+        >
+          <FolderIcon />
+          <span className="flex-1 truncate">{team}</span>
+          <ChevronRightIcon className={cn("ml-auto size-4 shrink-0 transition-transform", open && "rotate-90")} />
+        </SidebarMenuButton>
         <CollapsibleContent>
           <SidebarMenuSub>
             {repos.map((r) => (

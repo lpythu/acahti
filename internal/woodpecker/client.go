@@ -459,6 +459,15 @@ func (c *Client) Cancel(fullName string, number int64) error {
 	return err
 }
 
+func (c *Client) Delete(fullName string, number int64) error {
+	key, err := c.repoKey(fullName)
+	if err != nil {
+		return err
+	}
+	_, _, err = c.do(http.MethodDelete, fmt.Sprintf("/api/repos/%s/pipelines/%d", key, number), nil)
+	return err
+}
+
 func (c *Client) Agents() ([]Agent, error) {
 	b, _, err := c.do(http.MethodGet, "/api/agents", nil)
 	if err != nil {

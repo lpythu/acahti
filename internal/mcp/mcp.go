@@ -105,6 +105,7 @@ func tools() []toolSpec {
 		{Name: "pipeline_rerun", Description: "Rerun a pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 		{Name: "pipeline_trigger", Description: "Manual run on a ref. Official release is still git push", InputSchema: obj(map[string]any{"repo": str, "ref": str}, "repo")},
 		{Name: "pipeline_cancel", Description: "Cancel a running pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
+		{Name: "pipeline_delete", Description: "Delete a finished pipeline run", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 		{Name: "inbox", Description: "Island inbox: open PRs or pipelines needing attention (blocked/failed latest per repo)", InputSchema: obj(map[string]any{"section": str, "page": num, "page_size": num})},
 		{Name: "pkg_publish", Description: "Publish a language package (pypi wheel URL or npm tarball URL)", InputSchema: obj(map[string]any{"kind": str, "url": str, "filename": str}, "kind", "url")},
 		{Name: "pkg_list", Description: "List language packages", InputSchema: obj(map[string]any{"owner": str, "kind": str, "page": num, "page_size": num})},
@@ -306,6 +307,11 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 			return nil, err
 		}
 		return map[string]any{"ok": true, "pipeline": pipe}, nil
+	case "pipeline_delete":
+		if err := s.Cat.DeletePipeline(token, repoArg(str), num("number")); err != nil {
+			return nil, err
+		}
+		return map[string]any{"ok": true}, nil
 	case "inbox":
 		section := str("section")
 		if section == "prs" {

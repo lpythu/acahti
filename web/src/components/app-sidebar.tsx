@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import { useLocation, useSearchParams } from "react-router-dom"
 import {
   FileIcon,
+  FolderIcon,
   GitBranchIcon,
   GitPullRequestIcon,
   HistoryIcon,
@@ -68,6 +69,7 @@ function secondaryItems(
       | "access"
       | "adminHome"
       | "users"
+      | "teams"
       | "pipelines"
       | "prs",
   ) => string,
@@ -104,6 +106,7 @@ function secondaryItems(
   if (path.startsWith("/admin")) {
     return [
       { title: t("adminHome"), url: "/admin", icon: <ShieldIcon />, end: true },
+      { title: t("teams"), url: "/admin/teams", icon: <FolderIcon /> },
       { title: t("users"), url: "/admin/users", icon: <UsersIcon /> },
     ]
   }

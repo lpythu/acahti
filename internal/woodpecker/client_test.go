@@ -133,4 +133,21 @@ func TestCancelPostsPath(t *testing.T) {
 	}
 }
 
+func TestDeletePath(t *testing.T) {
+	var got string
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Method + " " + r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(s.Close)
+	c := New(s.URL, "t")
+	c.ids["acme/demo"] = 7
+	if err := c.Delete("acme/demo", 12); err != nil {
+		t.Fatal(err)
+	}
+	if got != "DELETE /api/repos/7/pipelines/12" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 

@@ -47,6 +47,11 @@ func InFlight(state string) bool {
 	return false
 }
 
+// DeleteAllowed mirrors Woodpecker: finished pipelines only.
+func DeleteAllowed(state string) bool {
+	return !InFlight(state)
+}
+
 func (p *Pipeline) flattenError() {
 	if strings.TrimSpace(p.Error) != "" {
 		return

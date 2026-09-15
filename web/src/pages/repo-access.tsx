@@ -136,7 +136,7 @@ export function RepoAccessPage() {
             </div>
             <p className="text-sm">
               {data.team ? (
-                <Link className="hover:underline" to={`/repos?team=${encodeURIComponent(data.team)}`}>
+                <Link className="hover:underline" to={`/admin/teams/${encodeURIComponent(data.team)}`}>
                   {data.team}
                 </Link>
               ) : (

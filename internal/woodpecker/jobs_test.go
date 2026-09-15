@@ -12,6 +12,9 @@ func TestInFlight(t *testing.T) {
 	if InFlight("success") || InFlight("failure") || InFlight("killed") {
 		t.Fatal("settled")
 	}
+	if !DeleteAllowed("error") || !DeleteAllowed("failure") || DeleteAllowed("running") || DeleteAllowed("blocked") {
+		t.Fatal("delete allowed")
+	}
 }
 
 func TestJobNameFromFileEmptyIsNotDot(t *testing.T) {

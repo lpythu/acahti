@@ -62,4 +62,4 @@ Trigger CI with `git push`, a tag, or opening a PR. Do not use `pipeline_trigger
 
 ## Tools
 
-`whoami` `repo_list` `repo_get` `repo_create` `branch_list` `ref_delete` `pr_create` `pr_list` `pr_get` `pr_comment` `pr_comments` `pr_merge` `pr_close` `checks_wait` `pipeline_list` `pipeline_get` `pipeline_log` `pipeline_rerun` `pipeline_trigger` `pipeline_cancel` `inbox` `pkg_list` `pkg_publish` `agent_status` `deploy_approve`
+`whoami` `repo_list` `repo_get` `repo_create` `branch_list` `ref_delete` `pr_create` `pr_list` `pr_get` `pr_comment` `pr_comments` `pr_merge` `pr_close` `checks_wait` `pipeline_list` `pipeline_get` `pipeline_log` `pipeline_rerun` `pipeline_trigger` `pipeline_cancel` `pipeline_delete` `inbox` `pkg_list` `pkg_publish` `agent_status` `deploy_approve`

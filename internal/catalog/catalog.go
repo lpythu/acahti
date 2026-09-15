@@ -874,6 +874,29 @@ func (c *Catalog) CancelPipeline(user, repo string, number int64) (woodpecker.Pi
 	return c.Refresh(repo, number)
 }
 
+func (c *Catalog) DeletePipeline(user, repo string, number int64) error {
+	if user != "" {
+		owner, name, _ := strings.Cut(repo, "/")
+		if _, err := c.seeRepo(user, owner, name); err != nil {
+			return err
+		}
+	}
+	fresh, err := c.Refresh(repo, number)
+	if err != nil {
+		return err
+	}
+	if !woodpecker.DeleteAllowed(fresh.Status) {
+		return fmt.Errorf("cannot delete pipeline with status %s", fresh.Status)
+	}
+	if err := c.WP.Delete(repo, number); err != nil {
+		return err
+	}
+	if c.Idx != nil {
+		_ = c.Idx.DeletePipeline(repo, number)
+	}
+	return nil
+}
+
 func (c *Catalog) Refresh(repo string, number int64) (woodpecker.Pipeline, error) {
 	if c.WP == nil || !c.WP.Ready() {
 		return woodpecker.Pipeline{}, fmt.Errorf("ci unavailable")

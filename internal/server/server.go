@@ -95,6 +95,7 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 	mux.HandleFunc("GET /ui/pipelines/{owner}/{name}/{n}/log", pages.Pipeline)
 	mux.HandleFunc("POST /ui/pipelines/{owner}/{name}/{n}/rerun", pages.Pipeline)
 	mux.HandleFunc("POST /ui/pipelines/{owner}/{name}/{n}/cancel", pages.Pipeline)
+	mux.HandleFunc("DELETE /ui/pipelines/{owner}/{name}/{n}", pages.Pipeline)
 	mux.HandleFunc("POST /ui/pipelines/{owner}/{name}/{n}/approve", pages.Pipeline)
 	mux.HandleFunc("GET /ui/packages", pages.Packages)
 	mux.HandleFunc("GET /ui/packages/{kind}/{name...}", pages.Packages)

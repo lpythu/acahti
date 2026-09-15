@@ -283,6 +283,12 @@ func (p *Pages) Pipeline(w http.ResponseWriter, r *http.Request) {
 		}
 		p.publishPipe(pipe)
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "pipeline": pipe})
+	case r.Method == http.MethodDelete:
+		if err := p.Cat.DeletePipeline(user, repo, n); err != nil {
+			writeErr(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/approve"):
 		if _, err := p.Cat.RepoHeader(user, owner, name, ""); err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())

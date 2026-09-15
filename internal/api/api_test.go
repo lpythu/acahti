@@ -16,6 +16,7 @@ func TestRoute(t *testing.T) {
 		{"/repos/acme/demo/pipelines/12/log", http.MethodGet, "pipeline_log", map[string]any{"owner": "acme", "name": "demo", "repo": "acme/demo", "number": int64(12)}},
 		{"/repos/acme/demo/pipelines/12/rerun", http.MethodPost, "pipeline_rerun", map[string]any{"owner": "acme", "name": "demo", "repo": "acme/demo", "number": int64(12)}},
 		{"/repos/acme/demo/pipelines/12/cancel", http.MethodPost, "pipeline_cancel", map[string]any{"owner": "acme", "name": "demo", "repo": "acme/demo", "number": int64(12)}},
+		{"/repos/acme/demo/pipelines/12", http.MethodDelete, "pipeline_delete", map[string]any{"owner": "acme", "name": "demo", "repo": "acme/demo", "number": int64(12)}},
 		{"/repos/acme/demo/pipelines/12/approve", http.MethodPost, "deploy_approve", map[string]any{"owner": "acme", "name": "demo", "repo": "acme/demo", "number": int64(12)}},
 		{"/repos/acme/demo/pulls/3/comments", http.MethodGet, "pr_comments", map[string]any{"owner": "acme", "name": "demo", "number": 3}},
 		{"/repos/acme/demo/pulls/3/comments", http.MethodPost, "pr_comment", map[string]any{"owner": "acme", "name": "demo", "number": 3}},

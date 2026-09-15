@@ -161,6 +161,9 @@ func route(path, method string, args map[string]any) (string, map[string]any) {
 				if len(rest) == 3 && rest[2] == "approve" {
 					return "deploy_approve", extra
 				}
+				if len(rest) == 2 && method == http.MethodDelete {
+					return "pipeline_delete", extra
+				}
 			}
 		}
 	}

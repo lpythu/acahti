@@ -7,7 +7,7 @@ export function isMarkdownPath(name: string) {
 
 export function Markdown({ children }: { children: string }) {
   return (
-    <div className="typeset typeset-docs max-w-[37em]">
+    <div className="typeset typeset-docs w-full">
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>
     </div>
   )

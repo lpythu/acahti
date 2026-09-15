@@ -370,6 +370,8 @@ export const api = {
     req<Pipeline>(`/ui/pipelines/${owner}/${name}/${n}/rerun`, { method: "POST" }),
   cancel: (owner: string, name: string, n: number) =>
     req<{ ok: boolean }>(`/ui/pipelines/${owner}/${name}/${n}/cancel`, { method: "POST" }),
+  deletePipeline: (owner: string, name: string, n: number) =>
+    req<{ ok: boolean }>(`/ui/pipelines/${owner}/${name}/${n}`, { method: "DELETE" }),
   approve: (owner: string, name: string, n: number) =>
     req<{ ok: boolean }>(`/ui/pipelines/${owner}/${name}/${n}/approve`, { method: "POST" }),
   packages: (q?: PageQuery, kind?: string) =>
