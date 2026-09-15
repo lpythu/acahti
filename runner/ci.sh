@@ -30,6 +30,7 @@ require_repo
 commit_id
 harbor_login
 npm_token_file
+codeup_netrc_file
 
 want_acr=0
 if [[ "${ENV:-}" == "hk" || -n "${CI_COMMIT_TAG:-}" ]]; then
@@ -72,6 +73,9 @@ build_one() {
   )
   if [[ -n "${NPM_TOKEN_FILE:-}" ]]; then
     args+=(--secret "id=npm_token,src=${NPM_TOKEN_FILE}")
+  fi
+  if [[ -n "${CODEUP_NETRC_FILE:-}" ]]; then
+    args+=(--secret "id=codeup_netrc,src=${CODEUP_NETRC_FILE}")
   fi
   local pair
   while IFS= read -r pair; do

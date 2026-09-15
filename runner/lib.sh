@@ -53,6 +53,36 @@ npm_token_file() {
   export NPM_TOKEN_FILE
 }
 
+codeup_netrc_file() {
+  local user="" pass="" f line
+  if [[ -n "${CODEUP_NETRC_FILE:-}" && -f "${CODEUP_NETRC_FILE}" ]]; then
+    export CODEUP_NETRC_FILE
+    return 0
+  fi
+  if [[ -n "${CODEUP_USER:-}" && -n "${CODEUP_PASSWORD:-}" ]]; then
+    user="${CODEUP_USER}"
+    pass="${CODEUP_PASSWORD}"
+  else
+    for f in /root/.harbor/codeup.env "${HOME}/.harbor/codeup.env" /home/saidc/.harbor/codeup.env; do
+      if [[ -f "$f" ]]; then
+        # shellcheck disable=SC1090
+        set -a && source "$f" && set +a
+        user="${CODEUP_USER:-}"
+        pass="${CODEUP_PASSWORD:-}"
+        break
+      fi
+    done
+  fi
+  unset CODEUP_USER CODEUP_PASSWORD
+  if [[ -z "$user" || -z "$pass" ]]; then
+    return 0
+  fi
+  CODEUP_NETRC_FILE="$(mktemp)"
+  chmod 0600 "$CODEUP_NETRC_FILE"
+  printf 'machine codeup.aliyun.com login %s password %s\n' "$user" "$pass" >"$CODEUP_NETRC_FILE"
+  export CODEUP_NETRC_FILE
+}
+
 npm_build() {
   : "${PKG_PATH:?set PKG_PATH (package directory)}"
   : "${PKG_BUILD:?set PKG_BUILD in .acahti/repo.env}"
