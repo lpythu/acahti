@@ -19,6 +19,7 @@ import (
 	"acahti/internal/invite"
 	"acahti/internal/mcp"
 	"acahti/internal/oauth"
+	"acahti/internal/passwd"
 	"acahti/internal/pipeline"
 	"acahti/internal/store"
 	"acahti/internal/web"
@@ -32,6 +33,10 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 		log.Fatalf("invite store: %v", err)
 	}
 	oa, _ := oauth.Open(cfg.DataDir, cfg.RootURL, a)
+	passwords, err := passwd.Open(cfg.DataDir)
+	if err != nil {
+		log.Fatalf("password store: %v", err)
+	}
 	idx, err := store.Open(cfg.DatabaseURL)
 	if err != nil {
 		log.Printf("pipeline index: %v", err)
@@ -44,6 +49,7 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 		cat.WatchPipelines()
 	}()
 	pages := web.New(cfg, cat, fj, wp, a, inv, oa, hub)
+	pages.Passwords = passwords
 	mc := mcp.New(cfg, a, fj, wp, cat)
 	rest := &api.API{Cfg: cfg, Auth: a, Hub: hub, MCP: mc}
 	fjProxy := reverse(cfg.ForgejoURL)

@@ -15,6 +15,7 @@ import (
 	"acahti/internal/invite"
 	"acahti/internal/oauth"
 	"acahti/internal/page"
+	"acahti/internal/passwd"
 	"acahti/internal/woodpecker"
 	"acahti/skills"
 )
@@ -28,6 +29,7 @@ type Pages struct {
 	Auth        *auth.Service
 	InviteStore *invite.Store
 	OAuth       *oauth.Server
+	Passwords   *passwd.Store
 	files       fs.FS
 }
 
@@ -189,6 +191,8 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = p.FJ.AddOrgMember(p.Cfg.Org, u.Login)
 		u.FullName = identity.Name(u.Login, u.FullName)
+		_ = p.rememberPassword(u.Login, pw)
+		u.Password = pw
 		writeJSON(w, http.StatusOK, map[string]any{"user": u})
 		return
 	}
@@ -229,6 +233,7 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 		out.Items[i].Repos = dst
+		out.Items[i].Password = p.Passwords.Get(out.Items[i].Login)
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -337,6 +342,7 @@ func (p *Pages) Join(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = p.InviteStore.Delete(code)
 	_ = p.FJ.AddOrgMember(p.Cfg.Org, u.Login)
+	_ = p.rememberPassword(u.Login, body.Password)
 	p.SetSession(w, u.Login)
 	writeJSON(w, http.StatusOK, identity.Session(u.Login, u.FullName, false, p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
 }
@@ -399,14 +405,51 @@ func (p *Pages) Password(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Password == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password required"})
+		if !admin {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password required"})
+			return
+		}
+		pw, err := p.ensurePassword(target)
+		if err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "password": pw})
 		return
 	}
 	if err := p.FJ.SetPassword(target, body.Password); err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	if err := p.rememberPassword(target, body.Password); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "password": body.Password})
+}
+
+func (p *Pages) rememberPassword(login, password string) error {
+	if p.Passwords == nil {
+		return nil
+	}
+	return p.Passwords.Set(login, password)
+}
+
+func (p *Pages) ensurePassword(login string) (string, error) {
+	if pw := p.Passwords.Get(login); pw != "" {
+		return pw, nil
+	}
+	pw, err := passwd.Random()
+	if err != nil {
+		return "", err
+	}
+	if err := p.FJ.SetPassword(login, pw); err != nil {
+		return "", err
+	}
+	if err := p.rememberPassword(login, pw); err != nil {
+		return "", err
+	}
+	return pw, nil
 }
 
 func (p *Pages) Stack(w http.ResponseWriter, r *http.Request) {

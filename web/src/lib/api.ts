@@ -75,7 +75,15 @@ export type Stack = {
   upgrade_hint: string
 }
 
-export type User = { login: string; email: string; is_admin: boolean; full_name: string; teams?: string[]; repos?: UserRepoPerm[] }
+export type User = {
+  login: string
+  email: string
+  is_admin: boolean
+  full_name: string
+  password?: string
+  teams?: string[]
+  repos?: UserRepoPerm[]
+}
 
 export type Invite = { code: string }
 
@@ -290,9 +298,14 @@ export const api = {
   stack: () => req<Stack>("/ui/stack"),
   agents: (q?: PageQuery) => req<Page<Agent>>(`/ui/agents${pageQS(q)}`),
   setPassword: (username: string, password: string) =>
-    req<{ ok: boolean }>("/ui/password", {
+    req<{ ok: boolean; password: string }>("/ui/password", {
       method: "POST",
       body: JSON.stringify({ username, password }),
+    }),
+  ensurePassword: (username: string) =>
+    req<{ ok: boolean; password: string }>("/ui/password", {
+      method: "POST",
+      body: JSON.stringify({ username }),
     }),
   setGitName: (username: string, git_name: string) =>
     req<{ git_name: string }>(`/ui/users/${encodeURIComponent(username)}`, {

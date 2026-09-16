@@ -81,7 +81,6 @@ function AuthorInput({
 
 function PasswordInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const t = useT()
-  const [focused, setFocused] = useState(false)
   const [copied, setCopied] = useState(false)
   const known = value.trim() !== ""
 
@@ -99,21 +98,20 @@ function PasswordInput({ value, onChange }: { value: string; onChange: (v: strin
         type="password"
         autoComplete="new-password"
         aria-label={t("password")}
-        value={known || focused ? value : "••••••••"}
-        className="pr-7"
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
+        value={value}
+        className={known ? "pr-7" : undefined}
         onChange={(e) => onChange(e.target.value)}
       />
-      <button
-        type="button"
-        disabled={!known}
-        aria-label={t("copy")}
-        className="absolute top-1/2 right-1.5 -translate-y-1/2 text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
-        onClick={() => void copy()}
-      >
-        {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
-      </button>
+      {known ? (
+        <button
+          type="button"
+          aria-label={t("copy")}
+          className="absolute top-1/2 right-1.5 z-10 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          onClick={() => void copy()}
+        >
+          {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+        </button>
+      ) : null}
     </div>
   )
 }
@@ -370,23 +368,24 @@ function UserReposMenu({
 function OnboardMenu({
   login,
   root,
-  password,
+  onPassword,
 }: {
   login: string
   root: string
-  password: string
+  onPassword: (pw: string) => void
 }) {
   const t = useT()
   const [pw, setPw] = useState("")
 
   async function prepare() {
-    const next = password.trim()
-    if (!next) {
-      toast.error(t("passwordRequired"))
-      return
+    try {
+      const r = await api.ensurePassword(login)
+      onPassword(r.password)
+      setPw(r.password)
+      await copyText(onboardNote(root, login, r.password), t("copied"), t("copyFailed"))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("loadError"))
     }
-    setPw(next)
-    await copyText(onboardNote(root, login, next), t("copied"), t("copyFailed"))
   }
 
   return (
@@ -433,14 +432,15 @@ export function UsersPage() {
     return r.user.login
   }
 
-  async function resetRow(login: string) {
-    const pw = resets[login]?.trim() || ""
+  async function resetRow(login: string, current: string) {
+    const pw = (resets[login] ?? current).trim()
     if (!pw) {
       toast.error(t("passwordRequired"))
       return
     }
     try {
-      await api.setPassword(login, pw)
+      const r = await api.setPassword(login, pw)
+      setResets((m) => ({ ...m, [login]: r.password }))
       toast.success(t("resetPasswordSuccess"))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("resetPasswordFailed"))
@@ -498,6 +498,7 @@ export function UsersPage() {
           <TableBody>
             {users.map((u) => {
               const teams = u.teams || []
+              const password = resets[u.login] ?? u.password ?? ""
               return (
                 <TableRow key={u.login}>
                   <TableCell>{u.login}</TableCell>
@@ -531,16 +532,16 @@ export function UsersPage() {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <PasswordInput
-                        value={resets[u.login] || ""}
+                        value={password}
                         onChange={(v) => setResets((m) => ({ ...m, [u.login]: v }))}
                       />
-                      <Button type="button" size="sm" variant="outline" onClick={() => void resetRow(u.login)}>
+                      <Button type="button" size="sm" variant="outline" onClick={() => void resetRow(u.login, u.password || "")}>
                         {t("resetPassword")}
                       </Button>
                       <OnboardMenu
                         login={u.login}
                         root={root}
-                        password={resets[u.login] || ""}
+                        onPassword={(pw) => setResets((m) => ({ ...m, [u.login]: pw }))}
                       />
                     </div>
                   </TableCell>

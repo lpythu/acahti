@@ -45,6 +45,7 @@ type User struct {
 	Permissions Perm       `json:"permissions"`
 	Teams       []string   `json:"teams,omitempty"`
 	Repos       []UserRepo `json:"repos,omitempty"`
+	Password    string     `json:"password,omitempty"`
 }
 
 type UserRepo struct {
