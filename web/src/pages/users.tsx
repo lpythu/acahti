@@ -347,7 +347,7 @@ function UserReposMenu({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger render={<Button type="button" size="sm" variant="outline" />}>
-        {t("userRepos")}
+        {t("reposCount", { n: rows.length })}
       </PopoverTrigger>
       <PopoverContent align="start" className="flex max-h-80 w-[min(24rem,calc(100vw-2rem))] flex-col gap-2 overflow-y-auto">
         {isAdmin ? <p className="text-sm text-muted-foreground">{t("orgAdminRepos")}</p> : null}
