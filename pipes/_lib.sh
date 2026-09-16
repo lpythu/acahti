@@ -80,6 +80,7 @@ persist_buildx_config() {
 }
 
 ACAHTI_BUILDER="${ACAHTI_BUILDER:-acahti}"
+ACAHTI_BUILDKITD_CONFIG="${ACAHTI_BUILDKITD_CONFIG:-/etc/woodpecker/buildkitd.toml}"
 
 # docker-container inspect prints `network: "host"` or `network=host`, not `Network: host`.
 builder_uses_host_network() {
@@ -90,6 +91,16 @@ builder_uses_host_network() {
 		return 0
 	fi
 	printf '%s\n' "$info" | grep -qiE 'network[[:space:]]*[=:][[:space:]]*"?host'
+}
+
+create_acahti_builder() {
+	local name="${1:-$ACAHTI_BUILDER}"
+	local -a args=(--name "$name" --driver docker-container --driver-opt network=host)
+	if [[ -f "$ACAHTI_BUILDKITD_CONFIG" ]]; then
+		args+=(--config "$ACAHTI_BUILDKITD_CONFIG")
+	fi
+	echo "==> buildx create ${name} docker-container network=host"
+	docker buildx create "${args[@]}" >/dev/null
 }
 
 ensure_acahti_builder() {
@@ -103,6 +114,5 @@ ensure_acahti_builder() {
 		echo "==> rebuild ${name} docker-container network=host"
 		docker buildx rm -f "$name" >/dev/null 2>&1 || true
 	fi
-	echo "==> buildx create ${name} docker-container network=host"
-	docker buildx create --name "$name" --driver docker-container --driver-opt network=host >/dev/null
+	create_acahti_builder "$name"
 }
