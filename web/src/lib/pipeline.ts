@@ -44,6 +44,28 @@ export function asPipeline(data: unknown): Pipeline | null {
   return p
 }
 
+const FAILED = new Set(["failure", "error", "killed", "declined"])
+
+export function failedStatus(status?: string) {
+  return FAILED.has((status || "").toLowerCase())
+}
+
+export function pipeFilterMatch(status: string, filter: string) {
+  const s = (status || "").toLowerCase()
+  switch (filter) {
+    case "failed":
+      return FAILED.has(s)
+    case "blocked":
+      return s === "blocked"
+    case "running":
+      return s === "running" || s === "pending"
+    case "success":
+      return s === "success"
+    default:
+      return true
+  }
+}
+
 export function upsertRun<T extends { items?: Pipeline[] }>(page: T | null, next: Pipeline, pageNo: number): T | null {
   if (!page) return page
   const items = [...(page.items || [])]

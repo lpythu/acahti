@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/url"
 	"path"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -553,7 +552,6 @@ func (c *Catalog) ListRepoPipelines(user, repo, sha, branch, status string, q pa
 	if !c.canSeeIndexedRepo(user, repo) {
 		return page.Of([]woodpecker.Pipeline{}, q, false), nil
 	}
-	c.syncRecentPipelines([]string{repo})
 	f := store.Filter{Repos: []string{repo}, SHA: sha, Branch: branch}
 	if status != "" {
 		f.Status = []string{status}
@@ -566,29 +564,53 @@ func (c *Catalog) ListRepoPipelines(user, repo, sha, branch, status string, q pa
 	return res, nil
 }
 
-func (c *Catalog) ListPipelines(user, repo, team string, q page.Query) (page.Result[woodpecker.Pipeline], error) {
-	f := store.Filter{}
+func expandPipeStatus(status string) []string {
+	var out []string
+	for _, part := range strings.Split(status, ",") {
+		switch strings.ToLower(strings.TrimSpace(part)) {
+		case "", "all":
+			continue
+		case "failed":
+			out = append(out, "failure", "error", "killed", "declined")
+		case "blocked":
+			out = append(out, "blocked")
+		case "running":
+			out = append(out, "running", "pending")
+		case "success":
+			out = append(out, "success")
+		default:
+			out = append(out, strings.ToLower(strings.TrimSpace(part)))
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func (c *Catalog) ListPipelines(user, repo, team, status string, q page.Query) (page.Result[woodpecker.Pipeline], error) {
+	var names []string
 	if repo != "" {
 		if !c.canSeeIndexedRepo(user, repo) {
 			return page.Of([]woodpecker.Pipeline{}, q, false), nil
 		}
-		f.Repos = []string{repo}
+		names = []string{repo}
 	} else {
-		names, err := c.visiblePipeRepos(user, team)
+		var err error
+		names, err = c.visiblePipeRepos(user, team)
 		if err != nil {
 			return page.Result[woodpecker.Pipeline]{}, err
 		}
-		f.Repos = names
 	}
-	c.syncRecentPipelines(f.Repos)
 	if c.Idx == nil {
 		return page.Of([]woodpecker.Pipeline{}, q, false), nil
 	}
-	latest, err := c.Idx.LatestByRepo(f.Repos)
+	res, err := c.Idx.LatestByRepo(names, expandPipeStatus(status), q)
 	if err != nil {
 		return page.Result[woodpecker.Pipeline]{}, err
 	}
-	return c.pagePipes(latest, q), nil
+	res.Items = c.paintPipes(res.Items)
+	return res, nil
 }
 
 func (c *Catalog) visiblePipeRepos(user, team string) ([]string, error) {
@@ -629,31 +651,6 @@ func (c *Catalog) listIndexed(f store.Filter, q page.Query) (page.Result[woodpec
 		return page.Of([]woodpecker.Pipeline{}, q, false), nil
 	}
 	return c.Idx.List(f, q)
-}
-
-func (c *Catalog) syncRecentPipelines(repos []string) {
-	if c.WP == nil || !c.WP.Ready() {
-		return
-	}
-	for _, repo := range repos {
-		if repo == "" {
-			continue
-		}
-		res, err := c.WP.ListPipelines(repo, page.Query{Page: 1, Size: 20})
-		if err != nil {
-			continue
-		}
-		for _, p := range res.Items {
-			p.Repo = repo
-			if len(p.Jobs) == 0 {
-				if d, err := c.WP.GetPipeline(repo, p.Number); err == nil {
-					p = d
-					p.Repo = repo
-				}
-			}
-			c.Remember(p)
-		}
-	}
 }
 
 func permFromRole(role string) forgejo.Perm {
@@ -758,14 +755,7 @@ func (c *Catalog) paintPipes(pipes []woodpecker.Pipeline) []woodpecker.Pipeline 
 			out[i].HydrateJobs()
 			out[i].SortJobs()
 			out[i] = c.applyCommitAuthor(out[i])
-			p := out[i]
-			if q.Fetched && woodpecker.InFlight(p.Status) && !woodpecker.InQueue(p, q) {
-				if fresh, err := c.Refresh(p.Repo, p.Number); err == nil {
-					out[i] = fresh
-					return
-				}
-			}
-			out[i] = woodpecker.Annotate(p, q)
+			out[i] = woodpecker.Annotate(out[i], q)
 		}(i)
 	}
 	wg.Wait()
@@ -1256,18 +1246,14 @@ func (c *Catalog) BoardPRs(user string, q page.Query) (page.Result[forgejo.PR], 
 	if !c.FJ.Ready() {
 		return page.Of([]forgejo.PR{}, q, false), nil
 	}
-	if c.IsOrgAdmin(user) {
-		res, err := c.FJ.SearchPRs(c.Cfg.Org, "open", q)
-		if err == nil {
-			c.fillPRHeads(res.Items)
+	var allow map[string]bool
+	if !c.IsOrgAdmin(user) {
+		visible, err := c.userRepos(user)
+		if err != nil {
+			return page.Result[forgejo.PR]{}, err
 		}
-		return res, err
+		allow = visibleSet(visible)
 	}
-	visible, err := c.userRepos(user)
-	if err != nil {
-		return page.Result[forgejo.PR]{}, err
-	}
-	allow := visibleSet(visible)
 	var matched []forgejo.PR
 	need := q.Norm().Page*q.Norm().Size + 1
 	pq := page.Query{Page: 1, Size: page.MaxSize}
@@ -1276,76 +1262,55 @@ func (c *Catalog) BoardPRs(user string, q page.Query) (page.Result[forgejo.PR], 
 		if err != nil {
 			return page.Result[forgejo.PR]{}, err
 		}
-		for _, p := range res.Items {
-			if allow[p.Repo] {
-				matched = append(matched, p)
+		batch := res.Items
+		if allow != nil {
+			var vis []forgejo.PR
+			for _, p := range batch {
+				if allow[p.Repo] {
+					vis = append(vis, p)
+				}
 			}
+			batch = vis
 		}
+		c.fillPRHeads(batch)
+		matched = append(matched, c.mergeReadyPRs(batch)...)
 		if !res.HasMore {
 			break
 		}
 		pq.Page++
 	}
-	c.fillPRHeads(matched)
 	return page.Take(matched, q), nil
 }
 
-func (c *Catalog) latestPipes(user string) ([]woodpecker.Pipeline, error) {
-	names, err := c.visiblePipeRepos(user, "")
-	if err != nil {
-		return nil, err
-	}
-	c.syncRecentPipelines(names)
-	if c.Idx == nil {
-		return []woodpecker.Pipeline{}, nil
-	}
-	latest, err := c.Idx.LatestByRepo(names)
-	if err != nil {
-		return nil, err
-	}
-	if latest == nil {
-		return []woodpecker.Pipeline{}, nil
-	}
-	return latest, nil
+func commitStatusKey(repo, sha string) string {
+	return repo + "\n" + strings.ToLower(strings.TrimSpace(sha))
 }
 
-func sortPipesRecent(items []woodpecker.Pipeline) {
-	sort.SliceStable(items, func(i, j int) bool {
-		if items[i].Created != items[j].Created {
-			return items[i].Created > items[j].Created
+func (c *Catalog) mergeReadyPRs(prs []forgejo.PR) []forgejo.PR {
+	if c.Idx == nil || len(prs) == 0 {
+		return nil
+	}
+	repos := make([]string, 0, len(prs))
+	shas := make([]string, 0, len(prs))
+	for _, p := range prs {
+		if p.Repo == "" || strings.TrimSpace(p.Head.SHA) == "" {
+			continue
 		}
-		return items[i].Number > items[j].Number
-	})
-}
-
-func (c *Catalog) pagePipes(items []woodpecker.Pipeline, q page.Query) page.Result[woodpecker.Pipeline] {
-	sortPipesRecent(items)
-	res := page.Take(items, q)
-	res.Items = c.paintPipes(res.Items)
-	return res
-}
-
-func (c *Catalog) BoardPipes(user string, q page.Query) (page.Result[woodpecker.Pipeline], error) {
-	latest, err := c.latestPipes(user)
+		repos = append(repos, p.Repo)
+		shas = append(shas, p.Head.SHA)
+	}
+	st, err := c.Idx.LatestStatusByCommit(repos, shas)
 	if err != nil {
-		return page.Result[woodpecker.Pipeline]{}, err
+		return nil
 	}
-	var attention []woodpecker.Pipeline
-	for _, p := range latest {
-		if boardPipeAttention(p) {
-			attention = append(attention, p)
+	var out []forgejo.PR
+	for _, p := range prs {
+		if !strings.EqualFold(st[commitStatusKey(p.Repo, p.Head.SHA)], "success") {
+			continue
 		}
+		out = append(out, p)
 	}
-	return c.pagePipes(attention, q), nil
-}
-
-func boardPipeAttention(p woodpecker.Pipeline) bool {
-	switch strings.ToLower(p.Status) {
-	case "blocked", "failure", "error", "killed", "declined":
-		return true
-	default:
-		return woodpecker.BlockedOnFailed(p)
-	}
+	return out
 }
 
 func (c *Catalog) ListAgents(q page.Query) (page.Result[woodpecker.Agent], error) {

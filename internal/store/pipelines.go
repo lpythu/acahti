@@ -140,42 +140,70 @@ func (s *Store) List(f Filter, q page.Query) (page.Result[woodpecker.Pipeline], 
 	return page.Clip(items, q), nil
 }
 
-// LatestByRepo returns the newest pipeline for each repo (by number).
-func (s *Store) LatestByRepo(repos []string) ([]woodpecker.Pipeline, error) {
+// LatestByRepo returns the newest pipeline for each repo (by number), optionally
+// filtered by status, already paginated.
+func (s *Store) LatestByRepo(repos, status []string, q page.Query) (page.Result[woodpecker.Pipeline], error) {
 	if !s.ready() {
-		return nil, nil
+		return page.Of([]woodpecker.Pipeline{}, q, false), nil
 	}
 	if repos != nil && len(repos) == 0 {
-		return nil, nil
+		return page.Of([]woodpecker.Pipeline{}, q, false), nil
 	}
+	q = q.Norm()
+	var b strings.Builder
+	args := []any{}
+	fmt.Fprintf(&b, `SELECT %s FROM (SELECT DISTINCT ON (repo) %s FROM pipelines WHERE 1=1`, pipeSelect, pipeSelect)
+	if repos != nil {
+		args = append(args, repos)
+		fmt.Fprintf(&b, ` AND repo = ANY($%d)`, len(args))
+	}
+	b.WriteString(` ORDER BY repo, number DESC) latest WHERE 1=1`)
+	if len(status) > 0 {
+		args = append(args, status)
+		fmt.Fprintf(&b, ` AND status = ANY($%d)`, len(args))
+	}
+	b.WriteString(` ORDER BY created DESC, number DESC`)
+	args = append(args, q.LimitPlus(), (q.Page-1)*q.Size)
+	fmt.Fprintf(&b, ` LIMIT $%d OFFSET $%d`, len(args)-1, len(args))
+	items, err := s.queryPipes(b.String(), args)
+	if err != nil {
+		return page.Result[woodpecker.Pipeline]{}, err
+	}
+	return page.Clip(items, q), nil
+}
+
+// LatestStatusByCommit maps repo+"\n"+lower(sha) to the newest pipeline status
+// whose commit starts with that sha. Missing rows are omitted.
+func (s *Store) LatestStatusByCommit(repos, shas []string) (map[string]string, error) {
+	out := map[string]string{}
+	if !s.ready() || len(repos) == 0 || len(shas) == 0 {
+		return out, nil
+	}
+	n := min(len(repos), len(shas))
+	repos, shas = repos[:n], shas[:n]
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	var (
-		q    string
-		args []any
-	)
-	if repos == nil {
-		q = `SELECT DISTINCT ON (repo) repo, number, status, event, branch, ref, title, message, author, avatar, commit, error,
-created, started, finished, jobs FROM pipelines ORDER BY repo, number DESC`
-	} else {
-		args = append(args, repos)
-		q = `SELECT DISTINCT ON (repo) repo, number, status, event, branch, ref, title, message, author, avatar, commit, error,
-created, started, finished, jobs FROM pipelines WHERE repo = ANY($1) ORDER BY repo, number DESC`
-	}
-	rows, err := s.pool.Query(ctx, q, args...)
+	rows, err := s.pool.Query(ctx, `
+SELECT DISTINCT ON (w.repo, w.sha) w.repo, w.sha, COALESCE(p.status, '')
+FROM unnest($1::text[], $2::text[]) AS w(repo, sha)
+LEFT JOIN pipelines p ON p.repo = w.repo AND lower(p.commit) LIKE lower(w.sha) || '%'
+ORDER BY w.repo, w.sha, p.number DESC NULLS LAST
+`, repos, shas)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []woodpecker.Pipeline
 	for rows.Next() {
-		p, err := scanPipe(rows)
-		if err != nil {
+		var repo, sha, status string
+		if err := rows.Scan(&repo, &sha, &status); err != nil {
 			return nil, err
 		}
-		items = append(items, p)
+		if status == "" {
+			continue
+		}
+		out[repo+"\n"+strings.ToLower(sha)] = status
 	}
-	return items, rows.Err()
+	return out, rows.Err()
 }
 
 func (s *Store) DeletePipeline(repo string, number int64) error {

@@ -63,7 +63,6 @@ type NavItem = { title: string; url: string; icon?: ReactNode; end?: boolean; ac
 function secondaryItems(
   path: string,
   ref: string,
-  section: string,
   t: (
     k:
       | "files"
@@ -77,9 +76,7 @@ function secondaryItems(
       | "adminHome"
       | "adminSecrets"
       | "users"
-      | "teams"
-      | "pipelines"
-      | "prs",
+      | "teams",
   ) => string,
   canManageSecrets: boolean,
 ): NavItem[] {
@@ -99,23 +96,6 @@ function secondaryItems(
       items.push({ title: t("tabSecrets"), url: `${base}/secrets`, icon: <KeyRoundIcon /> })
     }
     return items
-  }
-  if (path === "/board") {
-    return [
-      {
-        title: t("pipelines"),
-        url: "/board",
-        icon: <WorkflowIcon />,
-        end: true,
-        active: section !== "prs",
-      },
-      {
-        title: t("prs"),
-        url: "/board?section=prs",
-        icon: <GitPullRequestIcon />,
-        active: section === "prs",
-      },
-    ]
   }
   if (path.startsWith("/admin")) {
     return [
@@ -144,7 +124,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     Boolean(base),
   )
   const canManageSecrets = Boolean(me?.admin || repoLoad.data?.repo.can_manage_secrets)
-  const items = secondaryItems(pathname, sp.get("ref") || "", sp.get("section") || "", t, canManageSecrets)
+  const items = secondaryItems(pathname, sp.get("ref") || "", t, canManageSecrets)
   const { isMobile } = useSidebar()
 
   return (
@@ -171,7 +151,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
 export function sidebarHasNav(path: string): boolean {
   return (
-    path.startsWith("/board") ||
     path.startsWith("/repos") ||
     path.startsWith("/pipelines") ||
     path.startsWith("/packages") ||

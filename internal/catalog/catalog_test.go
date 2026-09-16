@@ -132,19 +132,32 @@ func TestLiveAgentsDropsStale(t *testing.T) {
 	}
 }
 
-func TestBoardPipeAttentionIncludesFailedCI(t *testing.T) {
-	p := woodpecker.Pipeline{
-		Status: "running",
-		Jobs: []woodpecker.Job{
-			{Name: "ci", State: "failure"},
-			{Name: "cd.office", State: "pending"},
-		},
+func TestExpandPipeStatus(t *testing.T) {
+	if got := expandPipeStatus(""); got != nil {
+		t.Fatalf("%v", got)
 	}
-	if !boardPipeAttention(p) {
-		t.Fatal("failed ci with leftover cd must be on the board")
+	if got := expandPipeStatus("all"); got != nil {
+		t.Fatalf("%v", got)
 	}
-	if boardPipeAttention(woodpecker.Pipeline{Status: "running", Jobs: []woodpecker.Job{{Name: "ci", State: "running"}}}) {
-		t.Fatal("running ci is not inbox")
+	got := expandPipeStatus("failed")
+	if len(got) != 4 || got[0] != "failure" || got[3] != "declined" {
+		t.Fatalf("%v", got)
+	}
+	got = expandPipeStatus("failed,blocked")
+	if len(got) != 5 || got[4] != "blocked" {
+		t.Fatalf("%v", got)
+	}
+	if got := expandPipeStatus("running"); len(got) != 2 || got[0] != "running" || got[1] != "pending" {
+		t.Fatalf("%v", got)
+	}
+}
+
+func TestMergeReadyPRsNilIndex(t *testing.T) {
+	c := New(config.Config{}, nil, nil, nil)
+	p := forgejo.PR{Repo: "saidc/acahti"}
+	p.Head.SHA = "abc"
+	if got := c.mergeReadyPRs([]forgejo.PR{p}); got != nil {
+		t.Fatalf("%+v", got)
 	}
 }
 
@@ -179,7 +192,7 @@ func TestPresentInfersWait(t *testing.T) {
 	}
 }
 
-func TestPaintPipesRefreshesAbsentFromQueue(t *testing.T) {
+func TestPaintPipesSkipsKernelRefresh(t *testing.T) {
 	var gotGet bool
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -189,9 +202,7 @@ func TestPaintPipesRefreshesAbsentFromQueue(t *testing.T) {
 			_, _ = w.Write([]byte(`{"id":1,"full_name":"saidc/tm-cs"}`))
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/pipelines/56"):
 			gotGet = true
-			_, _ = w.Write([]byte(`{"number":56,"status":"failure","workflows":[{"name":"ci","state":"failure","children":[{"name":"test","state":"failure","error":"boom"}]}]}`))
-		case strings.Contains(r.URL.Path, "/logs/"):
-			_, _ = w.Write([]byte(`[]`))
+			_, _ = w.Write([]byte(`{"number":56,"status":"failure"}`))
 		case strings.HasSuffix(r.URL.Path, "/web-config.js"):
 			_, _ = w.Write([]byte(`WOODPECKER_CSRF = "tok";`))
 		default:
@@ -207,10 +218,10 @@ func TestPaintPipesRefreshesAbsentFromQueue(t *testing.T) {
 		Status: "running",
 		Jobs:   []woodpecker.Job{{Name: "ci", State: "running"}},
 	}})
-	if !gotGet {
-		t.Fatal("must refresh kernel when queue is empty")
+	if gotGet {
+		t.Fatal("list paint must not GetPipeline")
 	}
-	if len(out) != 1 || out[0].Status != "failure" || out[0].Wait != "" {
+	if len(out) != 1 {
 		t.Fatalf("%+v", out)
 	}
 }

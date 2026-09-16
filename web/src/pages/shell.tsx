@@ -37,7 +37,7 @@ function ShellFrame({ me }: { me: Me }) {
     >
       <SiteHeader me={me} hasSidebarNav={hasSidebarNav} />
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <AppSidebar />
+        {hasSidebarNav ? <AppSidebar /> : null}
         <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
           <div className="@container/main flex min-h-0 flex-1 flex-col overflow-hidden">
             <Outlet context={me} />

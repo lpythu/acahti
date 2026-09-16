@@ -91,7 +91,7 @@ func tools() []toolSpec {
 		{Name: "pipeline_trigger", Description: "Manual run on a ref. Official release is still git push", InputSchema: obj(map[string]any{"repo": str, "ref": str}, "repo")},
 		{Name: "pipeline_cancel", Description: "Cancel a running or queued pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 		{Name: "pipeline_delete", Description: "Delete a finished pipeline run", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
-		{Name: "inbox", Description: "Island inbox: open PRs or pipelines needing attention (blocked/failed latest per repo)", InputSchema: obj(map[string]any{"section": str, "page": num, "page_size": num})},
+		{Name: "inbox", Description: "Island inbox. pipes: latest failed or blocked run per repo. prs: open PRs whose head SHA latest pipeline is success (ready to merge)", InputSchema: obj(map[string]any{"section": str, "page": num, "page_size": num})},
 		{Name: "pkg_publish", Description: "Publish a language package (pypi wheel URL or npm tarball URL)", InputSchema: obj(map[string]any{"kind": str, "url": str, "filename": str}, "kind", "url")},
 		{Name: "pkg_list", Description: "List language packages", InputSchema: obj(map[string]any{"owner": str, "kind": str, "page": num, "page_size": num})},
 		{Name: "pkg_delete", Description: "Delete a language package version. Org admin. Omit version to delete every version of that name", InputSchema: obj(map[string]any{"owner": str, "kind": str, "name": str, "version": str}, "kind", "name")},
@@ -277,7 +277,7 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		if section == "prs" {
 			return s.Cat.BoardPRs(token, pq)
 		}
-		return s.Cat.BoardPipes(token, pq)
+		return s.Cat.ListPipelines(token, "", "", "failed,blocked", pq)
 	case "pkg_list":
 		owner := str("owner")
 		if owner == "" {

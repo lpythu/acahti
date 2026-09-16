@@ -18,7 +18,6 @@ export function useLoad<T>(
     async (soft: boolean) => {
       if (!enabled) return
       if (!soft) {
-        setData(null)
         setLoading(true)
       }
       try {

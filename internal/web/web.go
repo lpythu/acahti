@@ -142,23 +142,12 @@ func (p *Pages) Board(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	q := page.Parse(r)
-	switch r.URL.Query().Get("section") {
-	case "prs":
-		out, err := p.Cat.BoardPRs(user, q)
-		if err != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusOK, out)
-	default:
-		out, err := p.Cat.BoardPipes(user, q)
-		if err != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusOK, out)
+	out, err := p.Cat.BoardPRs(user, page.Parse(r))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
 	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {

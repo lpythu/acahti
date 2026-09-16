@@ -320,8 +320,7 @@ export const api = {
   createInvite: () => req<{ code: string; url: string }>("/ui/invites", { method: "POST" }),
   deleteInvite: (code: string) => req<{ ok: boolean }>(`/ui/invites/${code}`, { method: "DELETE" }),
   logout: () => req<{ ok: boolean }>("/ui/logout", { method: "POST" }),
-  boardPRs: (q?: PageQuery) => req<Page<PR>>(`/ui/board${pageQS(q, { section: "prs" })}`),
-  boardPipes: (q?: PageQuery) => req<Page<Pipeline>>(`/ui/board${pageQS(q, { section: "pipes" })}`),
+  boardPRs: (q?: PageQuery) => req<Page<PR>>(`/ui/board${pageQS(q)}`),
   users: (q?: PageQuery) => req<Page<User>>(`/ui/users${pageQS(q)}`),
   createUser: (username: string, password: string, admin: boolean) =>
     req<{ user: User }>("/ui/users", {
@@ -433,8 +432,8 @@ export const api = {
     req<Page<Comment>>(`/ui/repos/${owner}/${name}/pulls/${n}/comments${pageQS(q)}`),
   mergePull: (owner: string, name: string, n: number) =>
     req<{ merged: boolean }>(`/ui/repos/${owner}/${name}/pulls/${n}/merge`, { method: "POST" }),
-  pipelines: (q?: PageQuery & { repo?: string; team?: string }) =>
-    req<Page<Pipeline>>(`/ui/pipelines${pageQS(q, { repo: q?.repo, team: q?.team })}`),
+  pipelines: (q?: PageQuery & { repo?: string; team?: string; status?: string }) =>
+    req<Page<Pipeline>>(`/ui/pipelines${pageQS(q, { repo: q?.repo, team: q?.team, status: q?.status })}`),
   repoPipelines: (owner: string, name: string, q?: PageQuery) =>
     req<Page<Pipeline>>(`/ui/repos/${owner}/${name}/pipelines${pageQS(q)}`),
   pipeline: (owner: string, name: string, n: number) =>

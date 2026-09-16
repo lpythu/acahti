@@ -250,7 +250,7 @@ func (p *Pages) Pipelines(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	out, err := p.Cat.ListPipelines(user, q.Get("repo"), q.Get("team"), page.Parse(r))
+	out, err := p.Cat.ListPipelines(user, q.Get("repo"), q.Get("team"), q.Get("status"), page.Parse(r))
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
