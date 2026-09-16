@@ -28,17 +28,15 @@ Clone is always `$ACAHTI_ORG/<repo>`. A team (Platform, ModelCamp, …) is acces
 
 If Codeup (or another host) is `origin`, keep it. Fetch and push the island on remote `acahti`. Do not `git fetch --all` to sync the island.
 
-This is not about the `acahti/` or `acahti-plugin/` product repos on GitHub. Those remotes stay GitHub; do **not** run `setup_local` there.
-
 Before any `git commit` in the current repo:
 
 1. `git remote -v`
 2. Call MCP `whoami`
-3. Gate **only** on remote URL host — never on directory or repo name (a folder named `acahti` on GitHub is not island git)
+3. Gate **only** on remote URL host — never on directory or repo name
 4. If **any** remote URL host is in `apply_when_remote_host`, run `setup_local` (`git config --local` only)
 5. If **no** remote host matches, do **not** change `user.name` / `user.email`. If local author was wrongly set to `*@noreply.$DOMAIN`, `git config --local --unset user.name` and `user.email` so the laptop identity applies
 
-`git_name` is the commit author the admin set on the user (default `login`). `git_email` is `{login}@noreply.$DOMAIN`. Run `setup_local` with `whoami.git_name` and `whoami.git_email`. Do not ask the user for a name or email.
+Use `whoami.git_name` / `whoami.git_email` as the git author. Do not ask the user for a name or email.
 
 Protection is per repository, not a global train. Before push: `repo_get` `{owner, name}` and `branch_list` `{owner, name}`. Direct-push branches with `protected: false`. For `protected: true`, open a PR (`pr_create`; `base` defaults to `repo_get.default_branch`). Do not assume `dev` / `test` / `main` / `release`. If the remote declines a push, open a PR to the default branch. Operators set default / protection on the repo **Branches** page in the web UI.
 
@@ -82,6 +80,8 @@ Same credentials as git. Username is the Acahti login. Password is the login pas
 - npm: `$ROOT_URL/api/packages/$ACAHTI_ORG/npm/`
 - PyPI: `$ROOT_URL/api/packages/$ACAHTI_ORG/pypi/simple/`
 - REST: `$ROOT_URL/acahti/v1/…` same verbs as MCP
+
+Repo `.npmrc` / `[[tool.uv.index]]` name the registry only. Auth is `~/.npmrc` (`_password` = **base64** of the password or MCP token) or `UV_INDEX_SAIDC_USERNAME` / `UV_INDEX_SAIDC_PASSWORD` (raw) / `~/.netrc`. CI `docker-build` writes those files from job identity. Dockerfiles do not mount `acahti` secrets or name Harbor/ACR; YAML passes `BASE_IMAGE=harbor.saidc/base/…`.
 
 Org members who can see repos can install. Publish uses the triggering user's identity (`npm-publish` / `pypi-publish` / `pkg_publish`).
 

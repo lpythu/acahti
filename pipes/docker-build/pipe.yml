@@ -5,7 +5,9 @@ inputs:
     description: |
       One image per line. First field is the primary tag. Optional KEY=VAL:
       also extra tags (comma-separated), context (default .), file (Dockerfile),
-      anything else is --build-arg.
+      anything else is --build-arg (CI passes BASE_IMAGE=harbor.saidc/base/...).
+      Job identity writes .npmrc / .netrc into the context; Dockerfiles stay
+      Harbor-free. Default --network=host on buildx. CODEUP_NETRC → id=codeup_netrc.
   push:
     required: false
     description: "true (default) to push primary and also= tags; false is --load only"

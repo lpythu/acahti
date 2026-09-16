@@ -68,7 +68,7 @@ Only org/repo admins can list or put secrets. Repo Secrets shows the effective s
 
 ### docker-build
 
-`with:` `images` (required). One image per line. First field is the primary tag. Optional `also=` extra tags (comma-separated), `context=` (default `.`), `file=` Dockerfile, other `KEY=VAL` as `--build-arg`. Optional `push` (default `true`); `push: false` is `--load` only (CI). BuildKit secrets: job identity → `id=acahti_user` and `id=acahti`, `CODEUP_NETRC` → `id=codeup_netrc`. Default `--network=host`. Builds with `--pull --provenance=false --load`, then pushes primary and `also=` tags when `push` is true.
+`with:` `images` (required). One image per line. First field is the primary tag. Optional `also=` extra tags (comma-separated), `context=` (default `.`), `file=` Dockerfile, other `KEY=VAL` as `--build-arg` (CI names `BASE_IMAGE=harbor.saidc/base/…` or the ACR library equivalent; Dockerfiles stay Harbor-free). Optional `push` (default `true`); `push: false` is `--load` only (CI). Job identity writes `.npmrc` (npm) and `.netrc` (uv) into the build context. `CODEUP_NETRC` → BuildKit `id=codeup_netrc`. Default `docker buildx --network=host`. Builds with `--pull --provenance=false --load`, then pushes primary and `also=` tags when `push` is true. Empty `images:` lines are skipped.
 
 OCI tags: office CD `dev-${CI_COMMIT_SHA}`; HK CD `${CI_COMMIT_TAG#v}` (git tag `vX.Y.Z` → `X.Y.Z`). `latest` is a pointer at the same digest. `${CI_COMMIT_TAG#v}` is expanded in the pipe (`${CI_COMMIT_TAG}` is interpolated by the runner).
 

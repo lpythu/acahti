@@ -159,7 +159,7 @@ Same secret name: **repo overrides org**. YAML `secrets:` only names which secre
 | person / agent | Acahti login + password or OAuth | do not read pipeline secrets to install packages |
 | CI | job identity, injected by `docker-build` / publish | YAML names them (`DOCKER_PASSWORD: harbor_password`, `KUBECONFIG: kubeconfig_office`) |
 
-Packages live at `$ROOT_URL/api/packages/$ORG/{npm\|pypi}` and use the same identity proxy as git HTTPS. Org members who can see repos can install. Publish uses the triggering user (`npm-publish` / `pypi-publish` / `pkg_publish`). BuildKit pulls packages with `RUN --network=host` against `$ROOT_URL` (no LAN origin).
+Packages live at `$ROOT_URL/api/packages/$ORG/{npm\|pypi}` and use the same identity proxy as git HTTPS. Org members who can see repos can install. Publish uses the triggering user (`npm-publish` / `pypi-publish` / `pkg_publish`). `docker-build` writes `.npmrc` / `.netrc` from job identity and runs `docker buildx --network=host` against `$ROOT_URL`. App Dockerfiles do not set `--network=host` or mount identity secrets.
 
 Harbor (office) and ACR (hk) are a pair. YAML names both username and password. Do not auto-inject only Harbor.
 
@@ -174,7 +174,7 @@ Harbor (office) and ACR (hk) are a pair. YAML names both username and password. 
 | `codeup_netrc` | still cloning Codeup | name it |
 | `npm_token` / `acahti_publish_token` | none | delete |
 
-Laptop / agent installs use the same identity as git. Repo files only name the registry. Credentials stay in `~/.npmrc` or env, not in git.
+Laptop / agent installs use the same identity as git. Repo files only name the registry. Credentials stay in `~/.npmrc` / `~/.netrc` or env, not in git. Harbor and ACR library/base images are named only in pipeline YAML (`BASE_IMAGE=harbor.saidc/base/…`).
 
 **npm** (committed `.npmrc` is registry-only):
 
@@ -182,7 +182,15 @@ Laptop / agent installs use the same identity as git. Repo files only name the r
 @saidc:registry=https://acahti.saidc.ai/api/packages/saidc/npm/
 ```
 
-Local `~/.npmrc` (not committed): username = Acahti login; `_password` = **base64** of the login password or MCP `access_token`; `always-auth=true`. Dockerfile `pnpm` steps do the same with `RUN --network=host` and `--mount=type=secret,id=acahti_user` plus `id=acahti`.
+Local `~/.npmrc` (not committed): username = Acahti login; `_password` = **base64** of the login password or MCP `access_token`; `always-auth=true`.
+
+```
+//acahti.saidc.ai/api/packages/saidc/npm/:username=YOUR_LOGIN
+//acahti.saidc.ai/api/packages/saidc/npm/:_password=BASE64_PASSWORD
+always-auth=true
+```
+
+CI: `docker-build` appends those auth lines to the workspace `.npmrc` from job identity. Dockerfile is `COPY .npmrc` then `pnpm install` (strip auth after install so it is not in the runtime layer).
 
 **PyPI** (committed `pyproject.toml` is the index URL):
 
@@ -193,7 +201,15 @@ url = "https://acahti.saidc.ai/api/packages/saidc/pypi/simple/"
 authenticate = "always"
 ```
 
-Local env: `UV_INDEX_SAIDC_USERNAME` / `UV_INDEX_SAIDC_PASSWORD`. Dockerfile `pnpm` / `uv` steps use `RUN --network=host` and `--mount=type=secret,id=acahti_user` plus `id=acahti`.
+Local env: `UV_INDEX_SAIDC_USERNAME` / `UV_INDEX_SAIDC_PASSWORD` (raw password, not base64), or `~/.netrc`:
+
+```
+machine acahti.saidc.ai
+login YOUR_LOGIN
+password YOUR_PASSWORD_OR_MCP_TOKEN
+```
+
+CI: `docker-build` writes workspace `.netrc`. Dockerfile `COPY .netrc /root/.netrc` then `uv sync` then `rm`.
 
 ## Pipeline secrets
 

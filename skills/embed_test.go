@@ -25,7 +25,7 @@ func TestAcahtiFillsIslandURLs(t *testing.T) {
 		"git fetch --all",
 		"Protection is per repository",
 		"GET `https://acahti.example.com/skill.md` now",
-		"`git_name` is the commit author",
+		"whoami.git_name",
 	} {
 		if !strings.Contains(s, need) {
 			t.Fatalf("missing %q in\n%s", need, s)

@@ -94,7 +94,7 @@ func tools() []toolSpec {
 		{Name: "inbox", Description: "Island inbox: open PRs or pipelines needing attention (blocked/failed latest per repo)", InputSchema: obj(map[string]any{"section": str, "page": num, "page_size": num})},
 		{Name: "pkg_publish", Description: "Publish a language package (pypi wheel URL or npm tarball URL)", InputSchema: obj(map[string]any{"kind": str, "url": str, "filename": str}, "kind", "url")},
 		{Name: "pkg_list", Description: "List language packages", InputSchema: obj(map[string]any{"owner": str, "kind": str, "page": num, "page_size": num})},
-		{Name: "whoami", Description: "Acahti git identity. git_name is the admin-set commit author (default login). Also git_email, clone_url_template, skill_url, skill_sha, apply_when_remote_host, setup_local, org_admin", InputSchema: obj(map[string]any{})},
+		{Name: "whoami", Description: "Acahti git identity: git_name, git_email, clone_url_template, skill_url, skill_sha, apply_when_remote_host, setup_local, org_admin", InputSchema: obj(map[string]any{})},
 		{Name: "agent_status", Description: "Host agent last contact", InputSchema: obj(pg)},
 		{Name: "deploy_approve", Description: "Approve a gated deploy pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 		{Name: "secret_list", Description: "List pipeline secret names (never values). scope org is org admins. scope repo is the effective set (org inherited plus repo) for repo admins. repo or owner+name for repo scope", InputSchema: obj(map[string]any{"scope": str, "repo": str, "owner": str, "name": str, "page": num, "page_size": num})},
