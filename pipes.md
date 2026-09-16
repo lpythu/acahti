@@ -90,11 +90,11 @@ OCI tags: office CD `dev-${CI_COMMIT_SHA}`; HK CD `${CI_COMMIT_TAG#v}` (git tag 
 
 ### npm-publish
 
-Build the package first (`commands:`). `with:` `path` (package dir with `dist/`), `registry` (Acahti packages npm URL). Auth is the triggering user's Acahti identity. Optional `origin`, `org`, `user` (derived from `registry` when omitted).
+`with:` `path` (package dir), `registry` (Acahti packages npm URL). Optional `image` (default `node:22-alpine`). The pipe writes job-identity npm auth in the container (not the workspace), `pnpm install --frozen-lockfile --ignore-scripts`, `pnpm --filter <package.json name> build`, then `npm pack` and PUT. YAML does not `docker run` or write `.npmrc`. Optional `origin`, `org`, `user` (derived from `registry` when omitted).
 
 ### pypi-publish
 
-`with:` `registry` (uv `--publish-url`). Auth is the triggering user's Acahti identity. Runs `uv build` then `uv publish`.
+`with:` `registry` (uv `--publish-url`). Optional `path` (default `.`), `image` (default `python:3.12-slim-bookworm`). The pipe runs `uv build` then `uv publish` in that image (installs uv if missing). Job identity is `UV_PUBLISH_*` and `UV_INDEX_<NAME>_*` for `[[tool.uv.index]]` entries with `authenticate = always`. YAML does not `docker run` or name a token.
 
 ### oss-put
 
@@ -168,19 +168,32 @@ steps:
 
 Omit `wait` when there is no public URL. Repository stays in chart values — do not `--set` it.
 
-npm package (Node is a container, not a Runner install):
+npm / PyPI package. Harbor image → `docker-login` first. The publish pipe builds and uploads.
 
 ```yaml
 steps:
-  build:
-    image: bash
-    commands:
-      - |
-        docker run --rm --network=host -v "$PWD:/app" -w /app harbor.example/library/node:22-alpine sh -c "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @scope/pkg build"
+  login:
+    pipe: docker-login@v1
+    with:
+      registry: harbor.example
+    secrets:
+      DOCKER_USERNAME: harbor_username
+      DOCKER_PASSWORD: harbor_password
   publish:
+    depends_on:
+      - login
     pipe: npm-publish@v1
     with:
       path: packages/pkg
       registry: https://acahti.example.com/api/packages/acme/npm
       image: harbor.example/library/node:22-alpine
+```
+
+```yaml
+steps:
+  publish:
+    pipe: pypi-publish@v1
+    with:
+      registry: https://acahti.example.com/api/packages/acme/pypi
+      image: harbor.example/base/saidc-uv:0.12.0
 ```

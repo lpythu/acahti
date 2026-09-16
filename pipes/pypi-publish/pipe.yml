@@ -3,3 +3,9 @@ inputs:
   registry:
     required: true
     description: uv --publish-url, e.g. https://acahti.example.com/api/packages/acme/pypi
+  path:
+    required: false
+    description: Directory with pyproject.toml (default .)
+  image:
+    required: false
+    description: Python image (default python:3.12-slim-bookworm). uv is installed if missing. Harbor/ACR images need a prior docker-login, or the Runner Harbor login.
