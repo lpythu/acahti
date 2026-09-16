@@ -80,9 +80,6 @@ FROM pipelines WHERE repo = $1 AND number = $2
 const pipeSelect = `repo, number, status, event, branch, ref, title, message, author, avatar, commit, error,
 created, started, finished, jobs`
 
-// pipeLane groups a run with others on the same branch (or tag when branch is empty).
-const pipeLane = `COALESCE(NULLIF(BTRIM(branch), ''), NULLIF(BTRIM(ref), ''), '')`
-
 func appendFilter(b *strings.Builder, args *[]any, f Filter) {
 	if f.Repos != nil {
 		*args = append(*args, f.Repos)
@@ -137,32 +134,6 @@ func (s *Store) List(f Filter, q page.Query) (page.Result[woodpecker.Pipeline], 
 	args = append(args, q.LimitPlus(), (q.Page-1)*q.Size)
 	fmt.Fprintf(&b, ` LIMIT $%d OFFSET $%d`, len(args)-1, len(args))
 	items, err := s.queryPipes(b.String(), args)
-	if err != nil {
-		return page.Result[woodpecker.Pipeline]{}, err
-	}
-	return page.Clip(items, q), nil
-}
-
-// ListHeads returns the newest run per (repo, branch). A later number on the
-// same branch replaces earlier ones, including PR runs that share that branch.
-// Tags (empty branch) stay on their own ref.
-func (s *Store) ListHeads(f Filter, q page.Query) (page.Result[woodpecker.Pipeline], error) {
-	if !s.ready() {
-		return page.Of([]woodpecker.Pipeline{}, q, false), nil
-	}
-	if f.Repos != nil && len(f.Repos) == 0 {
-		return page.Of([]woodpecker.Pipeline{}, q, false), nil
-	}
-	q = q.Norm()
-	var inner strings.Builder
-	args := []any{}
-	fmt.Fprintf(&inner, `SELECT DISTINCT ON (repo, %s) %s FROM pipelines WHERE 1=1`, pipeLane, pipeSelect)
-	appendFilter(&inner, &args, f)
-	fmt.Fprintf(&inner, ` ORDER BY repo, %s, number DESC`, pipeLane)
-	args = append(args, q.LimitPlus(), (q.Page-1)*q.Size)
-	sql := fmt.Sprintf(`SELECT %s FROM (%s) heads ORDER BY created DESC, number DESC LIMIT $%d OFFSET $%d`,
-		pipeSelect, inner.String(), len(args)-1, len(args))
-	items, err := s.queryPipes(sql, args)
 	if err != nil {
 		return page.Result[woodpecker.Pipeline]{}, err
 	}

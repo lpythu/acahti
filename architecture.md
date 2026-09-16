@@ -199,8 +199,8 @@ flowchart LR
 
 **Read (query)**
 
-1. `GET /ui/pipelines` — newest run per `(repo, branch)` (`created DESC`). A later number on the same branch replaces earlier ones. Tags with an empty branch stay on their ref. Visibility from the org catalog. Rows use stored `jobs` (no YAML fetch).
-2. `GET /ui/repos/{owner}/{name}/pipelines` — that repo’s run history.
+1. `GET /ui/pipelines` — newest run per repo (`created DESC`). Later numbers replace earlier branches and tags. Visibility from the org catalog. Rows use stored `jobs` (no YAML fetch).
+2. `GET /ui/repos/{owner}/{name}/pipelines` — that repo’s full run history.
 3. Board — latest blocked/failed pipeline per visible repo.
 4. Detail — index row. Miss or in-flight (`running` / `pending` / `blocked`) → Woodpecker `GetPipeline` and write-back. `files[]` loads YAML on `(repo, commit)` cache miss.
 5. Step log still hits Woodpecker (`GET …/log`).
@@ -211,7 +211,7 @@ One screen, one JSON. The SPA renders fields; it does not walk kernels.
 
 | Request | Returns |
 |---|---|
-| `GET /ui/pipelines` | latest run per `(repo, branch)` with stored `jobs` |
+| `GET /ui/pipelines` | latest run per repo with stored `jobs` |
 | `GET /ui/repos/{owner}/{name}/pipelines` | that repo’s run history |
 | `GET /ui/pipelines/{owner}/{name}/{n}` | `{ pipeline, team, files }` — `pipeline.jobs[].steps` |
 | `GET /ui/secrets` | org pipeline secret names (Owners) |

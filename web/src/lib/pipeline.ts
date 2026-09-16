@@ -53,14 +53,10 @@ export function upsertRun<T extends { items?: Pipeline[] }>(page: T | null, next
   return page
 }
 
-export function runLane(p: Pipeline) {
-  return `${p.repo}\0${(p.branch || p.ref || "").trim()}`
-}
-
 export function upsertHead<T extends { items?: Pipeline[] }>(page: T | null, next: Pipeline, pageNo: number): T | null {
   if (!page) return page
   const items = [...(page.items || [])]
-  const i = items.findIndex((p) => runLane(p) === runLane(next))
+  const i = items.findIndex((p) => p.repo === next.repo)
   if (i >= 0) {
     if (next.number < items[i].number) return { ...page, items }
     if (next.number === items[i].number) {

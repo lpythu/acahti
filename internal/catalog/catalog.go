@@ -581,12 +581,14 @@ func (c *Catalog) ListPipelines(user, repo, team string, q page.Query) (page.Res
 		f.Repos = names
 	}
 	c.syncRecentPipelines(f.Repos)
-	res, err := c.listHeads(f, q)
+	if c.Idx == nil {
+		return page.Of([]woodpecker.Pipeline{}, q, false), nil
+	}
+	latest, err := c.Idx.LatestByRepo(f.Repos)
 	if err != nil {
 		return page.Result[woodpecker.Pipeline]{}, err
 	}
-	res.Items = c.paintPipes(res.Items)
-	return res, nil
+	return c.pagePipes(latest, q), nil
 }
 
 func (c *Catalog) visiblePipeRepos(user, team string) ([]string, error) {
@@ -627,13 +629,6 @@ func (c *Catalog) listIndexed(f store.Filter, q page.Query) (page.Result[woodpec
 		return page.Of([]woodpecker.Pipeline{}, q, false), nil
 	}
 	return c.Idx.List(f, q)
-}
-
-func (c *Catalog) listHeads(f store.Filter, q page.Query) (page.Result[woodpecker.Pipeline], error) {
-	if c.Idx == nil {
-		return page.Of([]woodpecker.Pipeline{}, q, false), nil
-	}
-	return c.Idx.ListHeads(f, q)
 }
 
 func (c *Catalog) syncRecentPipelines(repos []string) {
