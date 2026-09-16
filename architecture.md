@@ -200,7 +200,7 @@ flowchart LR
 **Read (query)**
 
 1. `GET /ui/pipelines` — time-ordered runs (`created DESC`). Visibility from the org catalog. Rows use stored `jobs` (no YAML fetch).
-2. Board blocked / failed — same table, `status` filter.
+2. Board — latest pipeline per visible repo. Inbox MCP keeps the blocked/failed filter.
 3. Detail — index row. Miss or in-flight (`running` / `pending` / `blocked`) → Woodpecker `GetPipeline` and write-back. `files[]` loads YAML on `(repo, commit)` cache miss.
 4. Step log still hits Woodpecker (`GET …/log`).
 

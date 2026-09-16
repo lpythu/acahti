@@ -1220,16 +1220,51 @@ func (c *Catalog) BoardPRs(user string, q page.Query) (page.Result[forgejo.PR], 
 	return page.Take(matched, q), nil
 }
 
-func (c *Catalog) BoardPipes(user string, q page.Query) (page.Result[woodpecker.Pipeline], error) {
+func (c *Catalog) latestPipes(user string) ([]woodpecker.Pipeline, error) {
 	names, err := c.visiblePipeRepos(user, "")
 	if err != nil {
-		return page.Result[woodpecker.Pipeline]{}, err
+		return nil, err
 	}
 	c.syncRecentPipelines(names)
 	if c.Idx == nil {
-		return page.Of([]woodpecker.Pipeline{}, q, false), nil
+		return []woodpecker.Pipeline{}, nil
 	}
 	latest, err := c.Idx.LatestByRepo(names)
+	if err != nil {
+		return nil, err
+	}
+	if latest == nil {
+		return []woodpecker.Pipeline{}, nil
+	}
+	return latest, nil
+}
+
+func sortPipesRecent(items []woodpecker.Pipeline) {
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].Created != items[j].Created {
+			return items[i].Created > items[j].Created
+		}
+		return items[i].Number > items[j].Number
+	})
+}
+
+func (c *Catalog) pagePipes(items []woodpecker.Pipeline, q page.Query) page.Result[woodpecker.Pipeline] {
+	sortPipesRecent(items)
+	res := page.Take(items, q)
+	res.Items = c.paintPipes(res.Items)
+	return res
+}
+
+func (c *Catalog) BoardPipes(user string, q page.Query) (page.Result[woodpecker.Pipeline], error) {
+	latest, err := c.latestPipes(user)
+	if err != nil {
+		return page.Result[woodpecker.Pipeline]{}, err
+	}
+	return c.pagePipes(latest, q), nil
+}
+
+func (c *Catalog) InboxPipes(user string, q page.Query) (page.Result[woodpecker.Pipeline], error) {
+	latest, err := c.latestPipes(user)
 	if err != nil {
 		return page.Result[woodpecker.Pipeline]{}, err
 	}
@@ -1239,15 +1274,7 @@ func (c *Catalog) BoardPipes(user string, q page.Query) (page.Result[woodpecker.
 			attention = append(attention, p)
 		}
 	}
-	sort.SliceStable(attention, func(i, j int) bool {
-		if attention[i].Created != attention[j].Created {
-			return attention[i].Created > attention[j].Created
-		}
-		return attention[i].Number > attention[j].Number
-	})
-	res := page.Take(attention, q)
-	res.Items = c.paintPipes(res.Items)
-	return res, nil
+	return c.pagePipes(attention, q), nil
 }
 
 func boardPipeAttention(status string) bool {

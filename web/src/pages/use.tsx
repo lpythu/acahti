@@ -1,5 +1,6 @@
 import { Link, Navigate } from "react-router-dom"
 
+import { BootScreen } from "@/components/boot"
 import { AcahtiMark } from "@/components/logo"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,7 +16,7 @@ export function UsePage() {
   const { data } = useLoad(() => api.public(), [])
 
   if (!ready) {
-    return <div className="bg-background min-h-svh" />
+    return <BootScreen label={t("loading")} />
   }
   if (me) {
     return <Navigate to="/board" replace />
