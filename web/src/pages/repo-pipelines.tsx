@@ -17,7 +17,7 @@ export function RepoPipelinesPage() {
   const t = useT()
   const nav = useNavigate()
   const { owner, name, data } = useRepo()
-  const list = usePage((q) => api.pipelines({ ...q, repo: `${owner}/${name}` }), [owner, name])
+  const list = usePage((q) => api.repoPipelines(owner, name, q), [owner, name])
   useEvents((ev) => {
     if (ev.type !== "pipeline.updated") return
     const next = asPipeline(ev.data)

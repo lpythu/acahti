@@ -9,7 +9,7 @@ import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api, repoName, splitRepo, type Pipeline } from "@/lib/api"
 import { pipelineHref } from "@/lib/nav"
-import { asPipeline, upsertRun } from "@/lib/pipeline"
+import { asPipeline, upsertHead } from "@/lib/pipeline"
 
 export function PipelinesPage() {
   const t = useT()
@@ -23,7 +23,7 @@ export function PipelinesPage() {
     const next = asPipeline(ev.data)
     if (!next) return
     if (repo && next.repo !== repo) return
-    list.apply((page) => upsertRun(page, next, list.page))
+    list.apply((page) => upsertHead(page, next, list.page))
   })
   const [busy, setBusy] = useState("")
 

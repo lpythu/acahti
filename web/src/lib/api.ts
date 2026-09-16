@@ -402,6 +402,8 @@ export const api = {
     req<{ merged: boolean }>(`/ui/repos/${owner}/${name}/pulls/${n}/merge`, { method: "POST" }),
   pipelines: (q?: PageQuery & { repo?: string; team?: string }) =>
     req<Page<Pipeline>>(`/ui/pipelines${pageQS(q, { repo: q?.repo, team: q?.team })}`),
+  repoPipelines: (owner: string, name: string, q?: PageQuery) =>
+    req<Page<Pipeline>>(`/ui/repos/${owner}/${name}/pipelines${pageQS(q)}`),
   pipeline: (owner: string, name: string, n: number) =>
     req<PipelineDetail>(`/ui/pipelines/${owner}/${name}/${n}`),
   pipelineLog: (owner: string, name: string, n: number, step: number) =>

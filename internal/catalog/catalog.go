@@ -581,7 +581,7 @@ func (c *Catalog) ListPipelines(user, repo, team string, q page.Query) (page.Res
 		f.Repos = names
 	}
 	c.syncRecentPipelines(f.Repos)
-	res, err := c.listIndexed(f, q)
+	res, err := c.listHeads(f, q)
 	if err != nil {
 		return page.Result[woodpecker.Pipeline]{}, err
 	}
@@ -627,6 +627,13 @@ func (c *Catalog) listIndexed(f store.Filter, q page.Query) (page.Result[woodpec
 		return page.Of([]woodpecker.Pipeline{}, q, false), nil
 	}
 	return c.Idx.List(f, q)
+}
+
+func (c *Catalog) listHeads(f store.Filter, q page.Query) (page.Result[woodpecker.Pipeline], error) {
+	if c.Idx == nil {
+		return page.Of([]woodpecker.Pipeline{}, q, false), nil
+	}
+	return c.Idx.ListHeads(f, q)
 }
 
 func (c *Catalog) syncRecentPipelines(repos []string) {

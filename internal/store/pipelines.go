@@ -77,6 +77,50 @@ FROM pipelines WHERE repo = $1 AND number = $2
 	return p, true, nil
 }
 
+const pipeSelect = `repo, number, status, event, branch, ref, title, message, author, avatar, commit, error,
+created, started, finished, jobs`
+
+// pipeLane groups a run with others on the same git ref (branch, tag, or PR).
+const pipeLane = `COALESCE(NULLIF(BTRIM(ref), ''), NULLIF(BTRIM(branch), ''), '')`
+
+func appendFilter(b *strings.Builder, args *[]any, f Filter) {
+	if f.Repos != nil {
+		*args = append(*args, f.Repos)
+		fmt.Fprintf(b, ` AND repo = ANY($%d)`, len(*args))
+	}
+	if len(f.Status) > 0 {
+		*args = append(*args, f.Status)
+		fmt.Fprintf(b, ` AND status = ANY($%d)`, len(*args))
+	}
+	if sha := strings.TrimSpace(f.SHA); sha != "" {
+		*args = append(*args, strings.ToLower(sha)+"%")
+		fmt.Fprintf(b, ` AND lower(commit) LIKE $%d`, len(*args))
+	}
+	if br := strings.TrimSpace(f.Branch); br != "" {
+		*args = append(*args, br)
+		fmt.Fprintf(b, ` AND branch = $%d`, len(*args))
+	}
+}
+
+func (s *Store) queryPipes(sql string, args []any) ([]woodpecker.Pipeline, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	rows, err := s.pool.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []woodpecker.Pipeline
+	for rows.Next() {
+		p, err := scanPipe(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, p)
+	}
+	return items, rows.Err()
+}
+
 func (s *Store) List(f Filter, q page.Query) (page.Result[woodpecker.Pipeline], error) {
 	if !s.ready() {
 		return page.Of([]woodpecker.Pipeline{}, q, false), nil
@@ -87,43 +131,38 @@ func (s *Store) List(f Filter, q page.Query) (page.Result[woodpecker.Pipeline], 
 	q = q.Norm()
 	var b strings.Builder
 	args := []any{}
-	b.WriteString(`SELECT repo, number, status, event, branch, ref, title, message, author, avatar, commit, error,
-created, started, finished, jobs FROM pipelines WHERE 1=1`)
-	if f.Repos != nil {
-		args = append(args, f.Repos)
-		fmt.Fprintf(&b, ` AND repo = ANY($%d)`, len(args))
-	}
-	if len(f.Status) > 0 {
-		args = append(args, f.Status)
-		fmt.Fprintf(&b, ` AND status = ANY($%d)`, len(args))
-	}
-	if sha := strings.TrimSpace(f.SHA); sha != "" {
-		args = append(args, strings.ToLower(sha)+"%")
-		fmt.Fprintf(&b, ` AND lower(commit) LIKE $%d`, len(args))
-	}
-	if br := strings.TrimSpace(f.Branch); br != "" {
-		args = append(args, br)
-		fmt.Fprintf(&b, ` AND branch = $%d`, len(args))
-	}
+	fmt.Fprintf(&b, `SELECT %s FROM pipelines WHERE 1=1`, pipeSelect)
+	appendFilter(&b, &args, f)
 	b.WriteString(` ORDER BY created DESC, number DESC`)
 	args = append(args, q.LimitPlus(), (q.Page-1)*q.Size)
 	fmt.Fprintf(&b, ` LIMIT $%d OFFSET $%d`, len(args)-1, len(args))
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
-	rows, err := s.pool.Query(ctx, b.String(), args...)
+	items, err := s.queryPipes(b.String(), args)
 	if err != nil {
 		return page.Result[woodpecker.Pipeline]{}, err
 	}
-	defer rows.Close()
-	var items []woodpecker.Pipeline
-	for rows.Next() {
-		p, err := scanPipe(rows)
-		if err != nil {
-			return page.Result[woodpecker.Pipeline]{}, err
-		}
-		items = append(items, p)
+	return page.Clip(items, q), nil
+}
+
+// ListHeads returns the newest run per (repo, ref). A later number on the same
+// branch replaces earlier ones; tags and PRs stay on their own lanes.
+func (s *Store) ListHeads(f Filter, q page.Query) (page.Result[woodpecker.Pipeline], error) {
+	if !s.ready() {
+		return page.Of([]woodpecker.Pipeline{}, q, false), nil
 	}
-	if err := rows.Err(); err != nil {
+	if f.Repos != nil && len(f.Repos) == 0 {
+		return page.Of([]woodpecker.Pipeline{}, q, false), nil
+	}
+	q = q.Norm()
+	var inner strings.Builder
+	args := []any{}
+	fmt.Fprintf(&inner, `SELECT DISTINCT ON (repo, %s) %s FROM pipelines WHERE 1=1`, pipeLane, pipeSelect)
+	appendFilter(&inner, &args, f)
+	fmt.Fprintf(&inner, ` ORDER BY repo, %s, number DESC`, pipeLane)
+	args = append(args, q.LimitPlus(), (q.Page-1)*q.Size)
+	sql := fmt.Sprintf(`SELECT %s FROM (%s) heads ORDER BY created DESC, number DESC LIMIT $%d OFFSET $%d`,
+		pipeSelect, inner.String(), len(args)-1, len(args))
+	items, err := s.queryPipes(sql, args)
+	if err != nil {
 		return page.Result[woodpecker.Pipeline]{}, err
 	}
 	return page.Clip(items, q), nil

@@ -257,6 +257,21 @@ func (p *Pages) Pipelines(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (p *Pages) RepoPipelines(w http.ResponseWriter, r *http.Request) {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
+		return
+	}
+	repo := r.PathValue("owner") + "/" + r.PathValue("name")
+	q := r.URL.Query()
+	out, err := p.Cat.ListRepoPipelines(user, repo, q.Get("sha"), q.Get("branch"), q.Get("status"), page.Parse(r))
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (p *Pages) TriggerPipeline(w http.ResponseWriter, r *http.Request) {
 	user, _, ok := p.requireJSON(w, r)
 	if !ok {
