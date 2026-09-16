@@ -2,22 +2,30 @@ package pipeline
 
 import (
 	"path"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
-// foldFinishJobs drops standalone ci.yaml when a cd.* / pkg job matches this
-// event, so one workflow occupies the Runner slot until the train finishes.
+const ciStepPrefix = "ci-"
+
+// foldFinishJobs inlines ci.yaml steps into a matching cd.* / pkg job so one
+// workflow occupies the Runner slot until the train finishes. CI still runs
+// first (prefixed step names). Standalone ci.yaml is omitted only after it is
+// copied in. PR / push-test keep standalone ci.
 func foldFinishJobs(in []fileMeta, event, branch, ref string) []fileMeta {
 	if strings.TrimSpace(event) == "" {
 		return in
 	}
+	var ci *fileMeta
 	finish := false
-	for _, f := range in {
+	for i, f := range in {
+		if isCIJob(f.Name) {
+			ci = &in[i]
+		}
 		if isFinishJob(f.Name) && whenMatches(f.Data, event, branch, ref) {
 			finish = true
-			break
 		}
 	}
 	if !finish {
@@ -28,7 +36,11 @@ func foldFinishJobs(in []fileMeta, event, branch, ref string) []fileMeta {
 		if isCIJob(f.Name) {
 			continue
 		}
-		f.Data = stripDependsOn(f.Data, "ci")
+		if ci != nil && isFinishJob(f.Name) && whenMatches(f.Data, event, branch, ref) {
+			f.Data = inlineCISteps(f.Data, ci.Data)
+		} else {
+			f.Data = stripDependsOn(f.Data, "ci")
+		}
 		out = append(out, f)
 	}
 	return out
@@ -92,6 +104,111 @@ func clauseMatches(clause map[string]any, event, branch, ref string) bool {
 		}
 	}
 	return false
+}
+
+func inlineCISteps(finishData, ciData string) string {
+	var finish, ci map[string]any
+	if err := yaml.Unmarshal([]byte(finishData), &finish); err != nil || finish == nil {
+		return stripDependsOn(finishData, "ci")
+	}
+	if err := yaml.Unmarshal([]byte(ciData), &ci); err != nil || ci == nil {
+		return stripDependsOn(finishData, "ci")
+	}
+	ciSteps := yamlSteps(ci["steps"])
+	if len(ciSteps) == 0 {
+		return stripDependsOn(finishData, "ci")
+	}
+	prefixed := make(map[string]map[string]any, len(ciSteps))
+	depended := map[string]struct{}{}
+	for name, body := range ciSteps {
+		step := cloneStep(body)
+		deps := stepDependsOn(body)
+		if len(deps) > 0 {
+			rewritten := make([]any, 0, len(deps))
+			for _, d := range deps {
+				rewritten = append(rewritten, ciStepPrefix+d)
+				depended[d] = struct{}{}
+			}
+			step["depends_on"] = rewritten
+		}
+		prefixed[ciStepPrefix+name] = step
+	}
+	leaves := make([]string, 0, len(ciSteps))
+	for name := range ciSteps {
+		if _, ok := depended[name]; !ok {
+			leaves = append(leaves, ciStepPrefix+name)
+		}
+	}
+	sort.Strings(leaves)
+	if len(leaves) == 0 {
+		for name := range prefixed {
+			leaves = append(leaves, name)
+		}
+		sort.Strings(leaves)
+	}
+	merged := make(map[string]any, len(prefixed)+8)
+	for name, step := range prefixed {
+		merged[name] = step
+	}
+	for name, body := range yamlSteps(finish["steps"]) {
+		step := cloneStep(body)
+		if len(stepDependsOn(body)) == 0 && len(leaves) > 0 {
+			deps := make([]any, 0, len(leaves))
+			for _, leaf := range leaves {
+				deps = append(deps, leaf)
+			}
+			step["depends_on"] = deps
+		}
+		merged[name] = step
+	}
+	finish["steps"] = merged
+	out, err := yaml.Marshal(finish)
+	if err != nil {
+		return stripDependsOn(finishData, "ci")
+	}
+	return stripDependsOn(string(out), "ci")
+}
+
+func yamlSteps(raw any) map[string]map[string]any {
+	out := map[string]map[string]any{}
+	switch t := raw.(type) {
+	case map[string]any:
+		for name, body := range t {
+			m, ok := body.(map[string]any)
+			if !ok || strings.TrimSpace(name) == "" {
+				continue
+			}
+			out[name] = m
+		}
+	case []any:
+		for i, item := range t {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			name := strings.TrimSpace(stringify(m["name"]))
+			if name == "" {
+				name = stringify(i)
+			}
+			out[name] = m
+		}
+	}
+	return out
+}
+
+func cloneStep(body map[string]any) map[string]any {
+	out := make(map[string]any, len(body)+1)
+	for k, v := range body {
+		out[k] = v
+	}
+	return out
+}
+
+func stepDependsOn(body map[string]any) []string {
+	if body == nil {
+		return nil
+	}
+	return stringList(body["depends_on"])
 }
 
 func stripDependsOn(data, job string) string {

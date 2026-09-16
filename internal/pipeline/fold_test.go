@@ -6,19 +6,37 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
-func TestFoldDropsCIWhenOfficeMatches(t *testing.T) {
+func TestFoldInlinesCIWhenOfficeMatches(t *testing.T) {
 	in := []fileMeta{
-		{Name: ".acahti/pipelines/ci.yaml", Data: "when:\n  - event: [push, pull_request]\nsteps:\n  x:\n    image: bash\n    commands: [true]\n"},
-		{Name: ".acahti/pipelines/cd.office.yaml", Data: "when:\n  - event: [push, manual]\n    branch: [dev]\ndepends_on:\n  - ci\nsteps:\n  deploy:\n    image: bash\n    commands: [true]\n"},
+		{Name: ".acahti/pipelines/ci.yaml", Data: "when:\n  - event: [push, pull_request]\nsteps:\n  login:\n    image: bash\n    commands: [true]\n  build:\n    depends_on: [login]\n    image: bash\n    commands: [true]\n"},
+		{Name: ".acahti/pipelines/cd.office.yaml", Data: "when:\n  - event: [push, manual]\n    branch: [dev]\ndepends_on:\n  - ci\nsteps:\n  login:\n    image: bash\n    commands: [true]\n  deploy:\n    depends_on: [login]\n    image: bash\n    commands: [true]\n"},
 	}
 	got := foldFinishJobs(in, "push", "dev", "refs/heads/dev")
 	if len(got) != 1 || !strings.Contains(got[0].Name, "cd.office") {
 		t.Fatalf("got %+v", got)
 	}
-	if strings.Contains(got[0].Data, "depends_on") || strings.Contains(got[0].Data, "\nci\n") {
-		t.Fatalf("leftover ci dep:\n%s", got[0].Data)
+	steps := stepsOf(t, got[0].Data)
+	if _, ok := steps["ci-login"]; !ok {
+		t.Fatalf("missing ci-login:\n%s", got[0].Data)
+	}
+	if _, ok := steps["ci-build"]; !ok {
+		t.Fatalf("missing ci-build:\n%s", got[0].Data)
+	}
+	if _, ok := steps["login"]; !ok {
+		t.Fatalf("missing cd login:\n%s", got[0].Data)
+	}
+	if !hasDep(steps["ci-build"], "ci-login") {
+		t.Fatalf("ci-build should wait on ci-login:\n%s", got[0].Data)
+	}
+	if !hasDep(steps["login"], "ci-build") {
+		t.Fatalf("cd login should wait on ci-build:\n%s", got[0].Data)
+	}
+	if hasJobDependsOn(got[0].Data, "ci") {
+		t.Fatalf("leftover job depends_on ci:\n%s", got[0].Data)
 	}
 }
 
@@ -44,7 +62,7 @@ func TestFoldKeepsCIOnTestPush(t *testing.T) {
 	}
 }
 
-func TestFoldDropsCIOnHkTag(t *testing.T) {
+func TestFoldInlinesCIOnHkTag(t *testing.T) {
 	in := []fileMeta{
 		{Name: "ci.yaml", Data: "when:\n  - event: [tag]\nsteps:\n  x:\n    image: bash\n    commands: [true]\n"},
 		{Name: "cd.hk.yaml", Data: "when:\n  - event: [tag, manual]\ndepends_on:\n  - ci\nsteps:\n  x:\n    image: bash\n    commands: [true]\n"},
@@ -53,8 +71,15 @@ func TestFoldDropsCIOnHkTag(t *testing.T) {
 	if len(got) != 1 || jobBase(got[0].Name) != "cd.hk" {
 		t.Fatalf("got %+v", names(got))
 	}
-	if strings.Contains(got[0].Data, "depends_on") {
-		t.Fatalf("leftover depends_on:\n%s", got[0].Data)
+	steps := stepsOf(t, got[0].Data)
+	if _, ok := steps["ci-x"]; !ok {
+		t.Fatalf("missing ci-x:\n%s", got[0].Data)
+	}
+	if !hasDep(steps["x"], "ci-x") {
+		t.Fatalf("cd x should wait on ci-x:\n%s", got[0].Data)
+	}
+	if hasJobDependsOn(got[0].Data, "ci") {
+		t.Fatalf("leftover job depends_on ci:\n%s", got[0].Data)
 	}
 }
 
@@ -99,9 +124,40 @@ func TestHandleConfigFoldsOfficePush(t *testing.T) {
 	if len(resp.Configs) != 1 || jobBase(resp.Configs[0].Name) != "cd.office" {
 		t.Fatalf("resp=%+v", resp)
 	}
-	if strings.Contains(resp.Configs[0].Data, "depends_on") {
-		t.Fatalf("leftover depends_on:\n%s", resp.Configs[0].Data)
+	if !strings.Contains(resp.Configs[0].Data, "ci-x") {
+		t.Fatalf("inlined ci missing:\n%s", resp.Configs[0].Data)
 	}
+}
+
+func stepsOf(t *testing.T, data string) map[string]map[string]any {
+	t.Helper()
+	var doc map[string]any
+	if err := yaml.Unmarshal([]byte(data), &doc); err != nil {
+		t.Fatal(err)
+	}
+	return yamlSteps(doc["steps"])
+}
+
+func hasDep(step map[string]any, name string) bool {
+	for _, d := range stepDependsOn(step) {
+		if d == name {
+			return true
+		}
+	}
+	return false
+}
+
+func hasJobDependsOn(data, job string) bool {
+	var doc map[string]any
+	if err := yaml.Unmarshal([]byte(data), &doc); err != nil || doc == nil {
+		return false
+	}
+	for _, item := range asList(doc["depends_on"]) {
+		if dependsOnName(item) == job {
+			return true
+		}
+	}
+	return false
 }
 
 func names(in []fileMeta) []string {
