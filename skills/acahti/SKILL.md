@@ -81,7 +81,7 @@ Same credentials as git. Username is the Acahti login. Password is the login pas
 - PyPI: `$ROOT_URL/api/packages/$ACAHTI_ORG/pypi/simple/`
 - REST: `$ROOT_URL/acahti/v1/…` same verbs as MCP
 
-Repo `.npmrc` / `[[tool.uv.index]]` name the registry only. Auth is `~/.npmrc` (`_password` = **base64** of the password or MCP token) or `UV_INDEX_SAIDC_USERNAME` / `UV_INDEX_SAIDC_PASSWORD` (raw) / `~/.netrc`. CI `docker-build` writes those files from job identity. Dockerfiles do not mount `acahti` secrets or name Harbor/ACR; YAML passes `BASE_IMAGE=harbor.saidc/base/…`.
+Repo `.npmrc` / `[[tool.uv.index]]` name the registry only (scopes like `@saidc` are the app’s file, not the pipe). Laptop auth is `~/.npmrc` (`_password` = **base64** of the password or MCP token) or `UV_INDEX_<INDEX>_USERNAME` / `UV_INDEX_<INDEX>_PASSWORD` / `~/.netrc`. CI: `docker-build` forwards job identity as BuildKit secrets `acahti_user` / `acahti_token`; Dockerfiles mount them on install. YAML does not name npm tokens. YAML names Harbor/ACR as `BASE_IMAGE=…`.
 
 Org members who can see repos can install. Publish uses the triggering user's identity (`npm-publish` / `pypi-publish` / `pkg_publish`).
 

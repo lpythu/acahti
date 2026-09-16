@@ -33,48 +33,11 @@ add_bk_secret() {
 	secret_args+=(--secret "id=${id},src=${src}")
 }
 add_bk_secret codeup_netrc "${CODEUP_NETRC:-}"
-
-# Job identity → the same files engineers use locally. Dockerfiles COPY them;
-# they must not format credentials themselves.
-write_job_identity_files() {
-	local user="${ACAHTI_USER:-}" token="${ACAHTI_TOKEN:-}"
-	[[ -z "$user" || -z "$token" ]] && return 0
-
-	local host="acahti.saidc.ai" org="saidc" line rest
-	org="${CI_REPO_OWNER:-${ACAHTI_ORG:-saidc}}"
-	if [[ -f .npmrc ]]; then
-		line="$(grep -E '^@saidc:registry=' .npmrc | tail -n1 || true)"
-		if [[ -n "$line" ]]; then
-			rest="${line#*://}"
-			host="${rest%%/*}"
-			if [[ "$rest" == *"/api/packages/"* ]]; then
-				org="${rest#*/api/packages/}"
-				org="${org%%/*}"
-			fi
-		fi
-	fi
-
-	if [[ -f package.json || -f pnpm-lock.yaml || -f package-lock.json || -f yarn.lock ]]; then
-		local pass npmrc=".npmrc"
-		pass="$(printf %s "$token" | base64 | tr -d '\n')"
-		if [[ -f "$npmrc" ]]; then
-			grep -Ev '//.*:username=|//.*:_password=|^always-auth=' "$npmrc" >"${npmrc}.tmp" || true
-			mv "${npmrc}.tmp" "$npmrc"
-		fi
-		if ! grep -qE '^@saidc:registry=' "$npmrc" 2>/dev/null; then
-			printf '@saidc:registry=https://%s/api/packages/%s/npm/\n' "$host" "$org" >>"$npmrc"
-		fi
-		printf '//%s/api/packages/%s/npm/:username=%s\n' "$host" "$org" "$user" >>"$npmrc"
-		printf '//%s/api/packages/%s/npm/:_password=%s\nalways-auth=true\n' "$host" "$org" "$pass" >>"$npmrc"
-		echo "==> wrote .npmrc auth for ${user} @ ${host}"
-	fi
-
-	if [[ -f pyproject.toml || -f uv.lock ]]; then
-		printf 'machine %s\nlogin %s\npassword %s\n' "$host" "$user" "$token" >.netrc
-		chmod 600 .netrc
-		echo "==> wrote .netrc for ${user} @ ${host}"
-	fi
-}
+# Job identity from expand (ACAHTI_USER / ACAHTI_TOKEN), not YAML secrets.
+# Do not materialize .npmrc / .netrc here. App Dockerfiles mount these ids.
+add_bk_secret acahti_user "${ACAHTI_USER:-}"
+add_bk_secret acahti_token "${ACAHTI_TOKEN:-}"
+echo "==> docker-build secrets acahti_user acahti_token"
 
 ensure_host_builder() {
 	local info driver
@@ -93,7 +56,6 @@ ensure_host_builder() {
 	exit 1
 }
 
-write_job_identity_files
 ensure_host_builder
 ensure_harbor_login
 

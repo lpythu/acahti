@@ -159,7 +159,7 @@ Same secret name: **repo overrides org**. YAML `secrets:` only names which secre
 | person / agent | Acahti login + password or OAuth | do not read pipeline secrets to install packages |
 | CI | job identity, injected by `docker-build` / publish | YAML names them (`DOCKER_PASSWORD: harbor_password`, `KUBECONFIG: kubeconfig_office`) |
 
-Packages live at `$ROOT_URL/api/packages/$ORG/{npm\|pypi}` and use the same identity proxy as git HTTPS. Org members who can see repos can install. Publish uses the triggering user (`npm-publish` / `pypi-publish` / `pkg_publish`). `docker-build` writes `.npmrc` / `.netrc` from job identity and runs `docker buildx --network=host` against `$ROOT_URL`. App Dockerfiles do not set `--network=host` or mount identity secrets.
+Packages live at `$ROOT_URL/api/packages/$ORG/{npm\|pypi}` and use the same identity proxy as git HTTPS. Org members who can see repos can install. Publish uses the triggering user (`npm-publish` / `pypi-publish` / `pkg_publish`). `docker-build` forwards job identity as BuildKit secrets `id=acahti_user` / `id=acahti_token` and runs `docker buildx --network=host`. It does not write `.npmrc` or `.netrc`. Scopes like `@saidc` belong in the business repo `.npmrc`. App Dockerfiles mount the secrets on install `RUN`s; they do not set `--network=host`.
 
 Harbor (office) and ACR (hk) are a pair. YAML names both username and password. Do not auto-inject only Harbor.
 
@@ -190,7 +190,7 @@ Local `~/.npmrc` (not committed): username = Acahti login; `_password` = **base6
 always-auth=true
 ```
 
-CI: `docker-build` appends those auth lines to the workspace `.npmrc` from job identity. Dockerfile is `COPY .npmrc` then `pnpm install` (strip auth after install so it is not in the runtime layer).
+CI: YAML does not name npm tokens. Expand injects `ACAHTI_USER` / `ACAHTI_TOKEN`; `docker-build` passes them as BuildKit secrets. Dockerfile `COPY .npmrc` (registry only) then `RUN --mount=type=secret,id=acahti_user` / `id=acahti_token` around `pnpm install`, and strips auth after so it is not in the runtime layer.
 
 **PyPI** (committed `pyproject.toml` is the index URL):
 
@@ -209,7 +209,7 @@ login YOUR_LOGIN
 password YOUR_PASSWORD_OR_MCP_TOKEN
 ```
 
-CI: `docker-build` writes workspace `.netrc`. Dockerfile `COPY .netrc /root/.netrc` then `uv sync` then `rm`.
+CI: `docker-build` forwards `ACAHTI_USER` / `ACAHTI_TOKEN` as BuildKit secrets. Dockerfile `RUN --mount=type=secret,id=acahti_user,env=UV_INDEX_SAIDC_USERNAME` / `id=acahti_token,env=UV_INDEX_SAIDC_PASSWORD` then `uv sync`. No `.netrc` in the build context.
 
 ## Pipeline secrets
 
