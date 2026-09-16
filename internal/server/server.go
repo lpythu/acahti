@@ -119,6 +119,7 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 	mux.HandleFunc("GET /ui/packages/{kind}/{name...}", pages.Packages)
 	mux.HandleFunc("GET /ui/stack", pages.Stack)
 	mux.HandleFunc("GET /ui/agents", pages.Agents)
+	mux.HandleFunc("GET /ui/queue", pages.Queue)
 	mux.HandleFunc("POST /ui/pipelines/{owner}/{name}/trigger", pages.TriggerPipeline)
 	mux.HandleFunc("GET /ui/users", pages.Users)
 	mux.HandleFunc("POST /ui/users", pages.Users)

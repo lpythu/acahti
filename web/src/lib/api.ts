@@ -37,6 +37,9 @@ export type PipelineJob = {
   name: string
   state: string
   pid?: number
+  wait?: string
+  queue_position?: number
+  agent?: string
   steps?: Step[]
 }
 
@@ -56,7 +59,32 @@ export type Pipeline = {
   created?: number
   started?: number
   finished?: number
+  wait?: string
+  queue_position?: number
+  agent?: string
   jobs?: PipelineJob[]
+}
+
+export type QueueTask = {
+  name: string
+  repo?: string
+  pipeline_number?: number
+  agent?: string
+  wait?: string
+  queue_position?: number
+}
+
+export type QueueInfo = {
+  paused: boolean
+  stats: {
+    worker_count: number
+    pending_count: number
+    waiting_on_deps_count: number
+    running_count: number
+  }
+  pending: QueueTask[]
+  waiting_on_deps: QueueTask[]
+  running: QueueTask[]
 }
 
 export type Agent = {
@@ -65,7 +93,11 @@ export type Agent = {
   labels: unknown
   version?: string
   platform?: string
+  capacity?: number
+  running?: number
 }
+
+export type AgentsPage = Page<Agent> & { queue: QueueInfo }
 
 export type Stack = {
   version: string
@@ -298,7 +330,8 @@ export const api = {
       body: JSON.stringify({ username, password, admin }),
     }),
   stack: () => req<Stack>("/ui/stack"),
-  agents: (q?: PageQuery) => req<Page<Agent>>(`/ui/agents${pageQS(q)}`),
+  agents: (q?: PageQuery) => req<AgentsPage>(`/ui/agents${pageQS(q)}`),
+  queue: () => req<QueueInfo>("/ui/queue"),
   setPassword: (username: string, password: string) =>
     req<{ ok: boolean; password: string }>("/ui/password", {
       method: "POST",

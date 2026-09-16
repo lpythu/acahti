@@ -12,6 +12,7 @@
 #   AGENT_NAME=builder         # WOODPECKER_HOSTNAME
 #   VERSION=3.18.1
 #   MODE=lan|ssh-reverse       # ssh-reverse expects WOODPECKER_SERVER already 127.0.0.1:9000
+#   WOODPECKER_MAX_WORKFLOWS=4 # parallel workflows on this host (local backend)
 #
 # Run: sudo -E bash scripts/agent.sh
 set -euo pipefail
@@ -27,6 +28,7 @@ MODE="${MODE:-lan}"
 ROLE="${ROLE:-}"
 LABELS="${LABELS:-}"
 AGENT_NAME="${AGENT_NAME:-$(hostname -s)}"
+MAX_WORKFLOWS="${WOODPECKER_MAX_WORKFLOWS:-4}"
 
 if [[ -z "${LABELS}" ]]; then
   case "${ROLE}" in
@@ -74,7 +76,7 @@ bindir=/usr/local/bin
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 
-echo "==> woodpecker-agent ${VERSION} ${ARCH} labels=${LABELS}"
+echo "==> woodpecker-agent ${VERSION} ${ARCH} labels=${LABELS} max_workflows=${MAX_WORKFLOWS}"
 need_fetch=1
 if [[ -x "${bindir}/woodpecker-agent" && "${FORCE_AGENT:-}" != "1" ]]; then
   have="$("${bindir}/woodpecker-agent" --version 2>/dev/null || true)"
@@ -136,7 +138,7 @@ WOODPECKER_AGENT_SECRET=${SECRET}
 WOODPECKER_BACKEND=local
 WOODPECKER_HOSTNAME=${AGENT_NAME}
 WOODPECKER_AGENT_LABELS=${LABELS}
-WOODPECKER_MAX_WORKFLOWS=32
+WOODPECKER_MAX_WORKFLOWS=${MAX_WORKFLOWS}
 WOODPECKER_HEALTHCHECK=false
 EOF
 chmod 600 "${tmpdir}/agent.env"

@@ -1,4 +1,13 @@
-import { CalendarIcon, ClockIcon, GitBranchIcon, PlayIcon } from "lucide-react"
+import {
+  CalendarIcon,
+  ClockIcon,
+  GitCommitVerticalIcon,
+  GitPullRequestIcon,
+  PlayIcon,
+  TagIcon,
+  TimerIcon,
+  ZapIcon,
+} from "lucide-react"
 import { Link } from "react-router-dom"
 
 import { PipelineJobDots } from "@/components/pipeline-stages"
@@ -10,7 +19,35 @@ import { splitRepo, type Pipeline } from "@/lib/api"
 import { formatDuration, formatUnix, formatUnixWhen } from "@/lib/format"
 import { shortSha } from "@/lib/git"
 import { pipelineHref } from "@/lib/nav"
-import { jobDotsOf, runEventKey, runRef, runTitle, triggerVars } from "@/lib/pipeline"
+import { jobDotsOf, runEventKey, runRef, runTitle, triggerKind, triggerVars, waitLine, type TriggerKind } from "@/lib/pipeline"
+
+function TriggerRefIcon({ kind }: { kind: TriggerKind }) {
+  switch (kind) {
+    case "tag":
+      return <TagIcon />
+    case "pr":
+      return <GitPullRequestIcon />
+    case "cron":
+      return <TimerIcon />
+    case "manual":
+      return <ZapIcon />
+    default:
+      return <GitCommitVerticalIcon />
+  }
+}
+
+function triggerRefLabel(kind: TriggerKind) {
+  switch (kind) {
+    case "tag":
+      return "tags" as const
+    case "pr":
+      return "prs" as const
+    case "push":
+      return "commits" as const
+    default:
+      return null
+  }
+}
 
 export function PipelineRunRow({
   pipe,
@@ -31,9 +68,11 @@ export function PipelineRunRow({
   const href = pipelineHref(owner, name, pipe.number)
   const title = runTitle(pipe)
   const ref = runRef(pipe)
+  const kind = triggerKind(pipe.event, pipe.ref)
+  const kindLabel = triggerRefLabel(kind)
   const vars = triggerVars(pipe)
   const sha = shortSha(pipe.commit || "")
-  const detail = t(runEventKey(pipe.event), { ...vars, sha: sha === "—" ? vars.ref : sha })
+  const detail = t(runEventKey(pipe.event, pipe.ref), { ...vars, sha: sha === "—" ? vars.ref : sha })
   const meta = t(hideRepo ? "runHeadlineRepo" : "runHeadline", {
     repo: name,
     number: pipe.number,
@@ -42,19 +81,24 @@ export function PipelineRunRow({
   const when = formatUnixWhen(pipe.started || pipe.created, locale)
   const exact = formatUnix(pipe.started || pipe.created)
   const duration = formatDuration(pipe.started, pipe.finished, pipe.status)
+  const wait = waitLine(pipe)
   const jobs = jobDotsOf(pipe)
   const blocked = pipe.status === "blocked"
 
   return (
     <li className="flex items-center gap-3 px-3 py-3 hover:bg-muted/50">
       <Link to={href} className="flex min-w-0 flex-1 items-start gap-3">
-        <RunStatusIcon status={pipe.status} className="mt-0.5 size-5" />
+        <RunStatusIcon status={pipe.status} wait={pipe.wait} className="mt-0.5 size-5" />
         <span className="min-w-0 flex-1">
           <span className="flex min-w-0 items-center gap-2">
             <span className="min-w-0 truncate text-sm font-medium hover:underline">{title}</span>
             {ref ? (
-              <Badge variant="outline" className="max-w-28 shrink-0 font-normal text-sky-700 dark:text-sky-400">
-                <GitBranchIcon />
+              <Badge
+                variant="outline"
+                className="max-w-28 shrink-0 font-normal text-sky-700 dark:text-sky-400"
+                title={kindLabel ? t(kindLabel) : undefined}
+              >
+                <TriggerRefIcon kind={kind} />
                 <span className="truncate">{ref}</span>
               </Badge>
             ) : null}
@@ -68,7 +112,12 @@ export function PipelineRunRow({
           <CalendarIcon className="size-3.5" />
           {when}
         </span>
-        {duration ? (
+        {wait ? (
+          <span className="inline-flex items-center gap-1.5">
+            <ClockIcon className="size-3.5" />
+            {t(wait.key, wait.vars)}
+          </span>
+        ) : duration ? (
           <span className="inline-flex items-center gap-1.5">
             <ClockIcon className="size-3.5" />
             {duration}

@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"fmt"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -31,10 +32,15 @@ type Ident struct {
 
 // Expand rewrites pipe: name@v1 steps into image: bash + acahti-pipe <name>.
 func Expand(src []byte) ([]byte, error) {
-	return ExpandIdent(src, Ident{})
+	return ExpandFile("", src, Ident{})
 }
 
 func ExpandIdent(src []byte, id Ident) ([]byte, error) {
+	return ExpandFile("", src, id)
+}
+
+// ExpandFile is ExpandIdent plus filename-based Woodpecker concurrency for CD/pkg jobs.
+func ExpandFile(name string, src []byte, id Ident) ([]byte, error) {
 	if len(strings.TrimSpace(string(src))) == 0 {
 		return src, nil
 	}
@@ -48,6 +54,7 @@ func ExpandIdent(src []byte, id Ident) ([]byte, error) {
 	if _, ok := doc["uses"]; ok {
 		return nil, fmt.Errorf("uses: is not supported; use pipe:")
 	}
+	injectConcurrency(doc, name)
 	if steps, ok := doc["steps"]; ok {
 		if err := expandSteps(steps, id); err != nil {
 			return nil, err
@@ -232,6 +239,33 @@ func expandStep(name string, step map[string]any, id Ident) error {
 	delete(step, "pipe")
 	delete(step, "with")
 	return nil
+}
+
+func injectConcurrency(doc map[string]any, file string) {
+	if _, ok := doc["concurrency"]; ok {
+		return
+	}
+	group := concurrencyGroup(file)
+	if group == "" {
+		return
+	}
+	doc["concurrency"] = map[string]any{"limit": 1, "group": group}
+}
+
+func concurrencyGroup(file string) string {
+	base := strings.ToLower(path.Base(strings.TrimSpace(file)))
+	base = strings.TrimSuffix(base, ".yaml")
+	base = strings.TrimSuffix(base, ".yml")
+	switch {
+	case strings.Contains(base, "office"):
+		return "deploy-office"
+	case strings.Contains(base, "hk"):
+		return "deploy-hk"
+	case base == "pkg" || strings.HasPrefix(base, "pkg.") || strings.HasPrefix(base, "pkg-"):
+		return "pkg"
+	default:
+		return ""
+	}
 }
 
 func stringify(v any) string {

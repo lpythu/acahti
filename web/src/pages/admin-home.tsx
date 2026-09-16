@@ -3,6 +3,7 @@ import { Link } from "react-router-dom"
 import { CopyField } from "@/components/copy-field"
 import { Pager } from "@/components/paged-list"
 import { PageFrame } from "@/components/page-frame"
+import { QueueLists, QueueStrip } from "@/components/queue-strip"
 import { StatusBadge } from "@/components/status-badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useLoad } from "@/hooks/use-load"
@@ -60,6 +61,18 @@ export function AdminHomePage() {
       ) : null}
 
       <section className="flex flex-col gap-2">
+        <h2 className="text-sm font-medium">{t("queue")}</h2>
+        {agents.data?.queue ? (
+          <>
+            <QueueStrip queue={agents.data.queue} />
+            <QueueLists queue={agents.data.queue} />
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">{t("noQueue")}</p>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-2">
         <h2 className="text-sm font-medium">{t("agents")}</h2>
         <p className="text-sm text-muted-foreground">{t("runnersNote")}</p>
         {agents.empty ? (
@@ -70,6 +83,7 @@ export function AdminHomePage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("name")}</TableHead>
+                  <TableHead>{t("runnerSlots")}</TableHead>
                   <TableHead>{t("lastSeen")}</TableHead>
                   <TableHead>{t("status")}</TableHead>
                   <TableHead>{t("runnerVersion")}</TableHead>
@@ -80,6 +94,9 @@ export function AdminHomePage() {
                 {agents.items.map((a) => (
                   <TableRow key={a.name}>
                     <TableCell>{a.name}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {a.running ?? 0}/{a.capacity || "—"}
+                    </TableCell>
                     <TableCell>{fmtWhen(a.last_contact)}</TableCell>
                     <TableCell>
                       <StatusBadge status={agentStale(a) ? "stale" : "online"} />

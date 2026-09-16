@@ -24,11 +24,14 @@ type logWatch struct {
 
 func (c *Catalog) WatchPipelines() {
 	watches := map[string]logWatch{}
+	queueFP := map[string]string{}
 	c.Reap(time.Now(), watches)
+	c.reapQueue(queueFP)
 	t := time.NewTicker(reapEvery)
 	defer t.Stop()
 	for range t.C {
 		c.Reap(time.Now(), watches)
+		c.reapQueue(queueFP)
 	}
 }
 
@@ -104,8 +107,48 @@ func (c *Catalog) reapOne(p woodpecker.Pipeline, now time.Time, prev, keep map[s
 }
 
 func (c *Catalog) emit(p woodpecker.Pipeline) {
+	p = c.Present(p)
 	if c.Notify != nil {
 		c.Notify("pipeline.updated", p)
+	}
+}
+
+func (c *Catalog) reapQueue(fp map[string]string) {
+	if c.Idx == nil || c.WP == nil || !c.WP.Ready() {
+		return
+	}
+	listed, err := page.Walk(func(q page.Query) (page.Result[woodpecker.Pipeline], error) {
+		return c.Idx.List(store.Filter{Status: []string{"running", "pending"}}, q)
+	})
+	if err != nil {
+		log.Printf("pipeline queue: list: %v", err)
+		return
+	}
+	keep := map[string]string{}
+	for _, p := range listed {
+		painted := p
+		if woodpecker.InFlight(p.Status) {
+			fresh, err := c.Refresh(p.Repo, p.Number)
+			if err != nil {
+				painted = c.Present(p)
+			} else {
+				painted = fresh
+			}
+		} else {
+			painted = c.Present(p)
+		}
+		key := fmt.Sprintf("%s#%d", painted.Repo, painted.Number)
+		next := woodpecker.WaitFingerprint(painted)
+		keep[key] = next
+		if fp[key] != next {
+			c.emit(painted)
+		}
+	}
+	for k := range fp {
+		delete(fp, k)
+	}
+	for k, v := range keep {
+		fp[k] = v
 	}
 }
 

@@ -79,6 +79,8 @@ func TestReapOneCancelsSilentStep(t *testing.T) {
 	body := `{"number":9,"status":"running","workflows":[{"name":"cd.hk","state":"running","children":[{"id":466,"pid":4,"name":"cd","state":"running","type":"commands"}]}]}`
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case strings.Contains(r.URL.Path, "/queue/info"):
+			_, _ = w.Write([]byte(`{"pending":[],"waiting_on_deps":[],"running":[],"stats":{}}`))
 		case strings.Contains(r.URL.Path, "/lookup/"):
 			_, _ = w.Write([]byte(`{"id":1,"full_name":"saidc/exweb"}`))
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/pipelines/9"):
@@ -112,6 +114,8 @@ func TestReapOneKeepsFreshLog(t *testing.T) {
 	body := `{"number":9,"status":"running","workflows":[{"name":"cd.hk","state":"running","children":[{"id":466,"pid":4,"name":"cd","state":"running","type":"commands"}]}]}`
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case strings.Contains(r.URL.Path, "/queue/info"):
+			_, _ = w.Write([]byte(`{"pending":[],"waiting_on_deps":[],"running":[],"stats":{}}`))
 		case strings.Contains(r.URL.Path, "/lookup/"):
 			_, _ = w.Write([]byte(`{"id":1,"full_name":"saidc/exweb"}`))
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/pipelines/9"):

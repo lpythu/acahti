@@ -177,6 +177,41 @@ func secretCatalog(t *testing.T) *catalog.Catalog {
 	return catalog.New(config.Config{Org: "saidc", AdminUser: "alice"}, fjClient, woodpecker.New(wp.URL, "t"), nil)
 }
 
+func TestAgentStatusIncludesQueue(t *testing.T) {
+	now := time.Now().Unix()
+	wp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/agents":
+			_ = json.NewEncoder(w).Encode([]map[string]any{{
+				"id": 1, "name": "buildof", "capacity": 4, "last_contact": now,
+			}})
+		case r.URL.Path == "/api/queue/info":
+			_, _ = w.Write([]byte(`{"paused":false,"pending":[{"name":"ci","repo_id":7,"pipeline_number":12}],"waiting_on_deps":[],"running":[{"name":"ci","repo_id":7,"pipeline_number":11,"agent_name":"buildof"}],"stats":{"pending_count":1,"running_count":1,"waiting_on_deps_count":0}}`))
+		case r.URL.Path == "/api/repos/7":
+			_, _ = w.Write([]byte(`{"id":7,"full_name":"saidc/tm-web"}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(wp.Close)
+	cat := catalog.New(config.Config{Org: "saidc"}, nil, woodpecker.New(wp.URL, "t"), nil)
+	s := &Server{Cat: cat}
+	out, err := s.CallForAPI("alice", "agent_status", map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, ok := out.(catalog.AgentStatus)
+	if !ok {
+		t.Fatalf("%T", out)
+	}
+	if st.Queue.Stats.PendingCount != 1 || len(st.Queue.Pending) != 1 || st.Queue.Pending[0].Repo != "saidc/tm-web" {
+		t.Fatalf("queue %+v", st.Queue)
+	}
+	if len(st.Items) != 1 || st.Items[0].Capacity != 4 || st.Items[0].Running != 1 {
+		t.Fatalf("agents %+v", st.Items)
+	}
+}
+
 func TestSecretListMemberNotFound(t *testing.T) {
 	cat := secretCatalog(t)
 	s := &Server{Cfg: ConfigView{Org: "saidc", RootURL: "https://acahti.example"}, FJ: cat.FJ, Cat: cat}

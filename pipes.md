@@ -4,7 +4,7 @@ A **pipeline** is one run. Each YAML file in `.acahti/pipelines/` is a **job** i
 
 Acahti expands `pipe:` before the Runner executes. The Runner runs `acahti-pipe <name>`. Do not vendor `.acahti/scripts`. Do not write `uses:`.
 
-A step is either `pipe:` + `with:` or raw `commands:` (one-offs stay in the repo). `when`, `depends_on`, and `labels` pass through.
+A step is either `pipe:` + `with:` or raw `commands:` (one-offs stay in the repo). `when`, `depends_on`, and `labels` pass through. Expand injects Woodpecker `concurrency` when the job file omits it: `cd.office` → group `deploy-office`, `cd.hk` → `deploy-hk`, `pkg` → `pkg` (limit 1). YAML `concurrency:` wins. CI files are unlimited except Runner `WOODPECKER_MAX_WORKFLOWS`.
 
 In `commands:`, write `$IMAGE` (shell). `${IMAGE}` is emptied by the runner before the step starts; `${CI_COMMIT_SHA}` is job context and is expanded.
 

@@ -130,6 +130,20 @@ func TestLiveAgentsDropsStale(t *testing.T) {
 	}
 }
 
+func TestPresentInfersWait(t *testing.T) {
+	c := New(config.Config{}, nil, nil, nil)
+	p := c.Present(woodpecker.Pipeline{
+		Status: "pending",
+		Jobs: []woodpecker.Job{
+			{Name: "ci", State: "running"},
+			{Name: "cd.office", State: "pending"},
+		},
+	})
+	if p.Jobs[1].Wait != woodpecker.WaitDeps {
+		t.Fatalf("%+v", p.Jobs)
+	}
+}
+
 func TestPermFromRole(t *testing.T) {
 	if p := permFromRole("admin"); !p.Admin || !p.Push || !p.Pull {
 		t.Fatalf("%+v", p)

@@ -18,7 +18,7 @@ import { api } from "@/lib/api"
 import { formatUnix } from "@/lib/format"
 import { langOf } from "@/lib/lang"
 import { pipelineHref } from "@/lib/nav"
-import { asPipeline, jobsOf, namedSecrets, triggerKey, triggerVars } from "@/lib/pipeline"
+import { asPipeline, jobsOf, namedSecrets, triggerKey, triggerVars, waitLine } from "@/lib/pipeline"
 import { useRepo } from "@/pages/repo-layout"
 
 export function PipelinePage() {
@@ -134,6 +134,15 @@ export function PipelinePage() {
 
   if (!p) return null
 
+  const wait = waitLine(p)
+  const activeJob = jobs.find((j) => j.steps.some((s) => s.pid === activeStep?.pid && s.name === activeStep?.name))
+  const jobWait = waitLine({
+    status: activeStep?.state || p.status,
+    wait: activeJob?.wait || p.wait,
+    queue_position: activeJob?.queue_position || p.queue_position,
+    agent: activeJob?.agent || p.agent,
+  })
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-start justify-between gap-3 border-b px-4 py-3 lg:px-6">
@@ -142,14 +151,22 @@ export function PipelinePage() {
             <h2 className="text-lg font-medium">
               #{n} {p.title || p.event || t("pipelines")}
             </h2>
-            <StatusBadge status={p.status} />
+            <StatusBadge status={p.status} wait={p.wait} />
           </div>
           <p className="mt-1 truncate text-sm text-muted-foreground">
-            {t(triggerKey(p.event), triggerVars(p))}
+            {t(triggerKey(p.event, p.ref), triggerVars(p))}
             {p.branch ? ` · ${p.branch}` : ""}
             {p.commit ? ` · ${p.commit.slice(0, 7)}` : ""}
             {` · ${formatUnix(p.started || p.created)}`}
           </p>
+          {wait ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t(wait.key, wait.vars)}
+              {p.agent ? ` · ${t("waitAgent", { agent: p.agent })}` : ""}
+            </p>
+          ) : p.agent ? (
+            <p className="mt-1 text-sm text-muted-foreground">{t("waitAgent", { agent: p.agent })}</p>
+          ) : null}
           <p className="mt-1 text-sm text-muted-foreground">
             {yamlSecretNames.length
               ? t("yamlSecrets", { names: yamlSecretNames.join(", ") })
@@ -218,7 +235,7 @@ export function PipelinePage() {
               <pre className="p-4 font-mono text-xs whitespace-pre-wrap">{log || activeStep?.error || p.error}</pre>
             </AutoHideScroll>
           ) : (
-            <EmptyState>{t("noLog")}</EmptyState>
+            <EmptyState>{jobWait ? t(jobWait.key, jobWait.vars) : t("noLog")}</EmptyState>
           )}
         </ResizablePanel>
       </ResizablePanelGroup>

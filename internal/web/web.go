@@ -500,12 +500,19 @@ func (p *Pages) Agents(w http.ResponseWriter, r *http.Request) {
 	if _, ok := p.requireAdmin(w, r); !ok {
 		return
 	}
-	out, err := p.Cat.ListAgents(page.Parse(r))
+	out, err := p.Cat.AgentStatus(page.Parse(r))
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (p *Pages) Queue(w http.ResponseWriter, r *http.Request) {
+	if _, ok := p.requireAdmin(w, r); !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, p.Cat.Queue())
 }
 
 func (p *Pages) Files() fs.FS {

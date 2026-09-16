@@ -749,6 +749,7 @@ func (c *Catalog) CommitDetail(user, owner, name, sha string, q page.Query) (Com
 
 func (c *Catalog) paintPipes(pipes []woodpecker.Pipeline) []woodpecker.Pipeline {
 	out := append([]woodpecker.Pipeline(nil), pipes...)
+	q := c.queueInfo()
 	var wg sync.WaitGroup
 	for i := range out {
 		wg.Add(1)
@@ -757,10 +758,37 @@ func (c *Catalog) paintPipes(pipes []woodpecker.Pipeline) []woodpecker.Pipeline 
 			out[i].HydrateJobs()
 			out[i].SortJobs()
 			out[i] = c.applyCommitAuthor(out[i])
+			out[i] = woodpecker.Annotate(out[i], q)
 		}(i)
 	}
 	wg.Wait()
 	return out
+}
+
+func (c *Catalog) Present(p woodpecker.Pipeline) woodpecker.Pipeline {
+	p.HydrateJobs()
+	p.SortJobs()
+	p = c.applyCommitAuthor(p)
+	return woodpecker.Annotate(p, c.queueInfo())
+}
+
+func (c *Catalog) queueInfo() woodpecker.QueueInfo {
+	if c.mem != nil {
+		if q, ok := c.mem.queueOf(); ok {
+			return q
+		}
+	}
+	if c.WP == nil || !c.WP.Ready() {
+		return woodpecker.QueueInfo{}
+	}
+	q, err := c.WP.QueueInfo()
+	if err != nil {
+		return woodpecker.QueueInfo{}
+	}
+	if c.mem != nil {
+		c.mem.setQueue(q)
+	}
+	return q
 }
 
 func (c *Catalog) decoratePipe(p woodpecker.Pipeline) woodpecker.Pipeline {
@@ -852,10 +880,11 @@ func (c *Catalog) Remember(p woodpecker.Pipeline) woodpecker.Pipeline {
 	p = c.decoratePipe(p)
 	p = c.mergeLogTails(p)
 	p = c.captureTerminalLogs(p)
+	p = woodpecker.StripWait(p)
 	if c.Idx != nil {
 		_ = c.Idx.Upsert(p)
 	}
-	return p
+	return c.Present(p)
 }
 
 func (c *Catalog) mergeLogTails(p woodpecker.Pipeline) woodpecker.Pipeline {
@@ -1080,7 +1109,7 @@ func (c *Catalog) PipelineDetail(user, repo string, number int64) (PipelineDetai
 		}
 	}
 	p.Repo = repo
-	p = c.Remember(p)
+	p = c.Present(p)
 	return PipelineDetail{Pipeline: p, Team: head.Team, Files: c.pipelineFiles(p)}, nil
 }
 
@@ -1288,14 +1317,40 @@ func boardPipeAttention(status string) bool {
 }
 
 func (c *Catalog) ListAgents(q page.Query) (page.Result[woodpecker.Agent], error) {
-	if !c.WP.Ready() {
-		return page.Of([]woodpecker.Agent{}, q, false), nil
-	}
-	agents, err := c.WP.Agents()
+	status, err := c.AgentStatus(q)
 	if err != nil {
 		return page.Result[woodpecker.Agent]{}, err
 	}
-	return page.Take(liveAgents(agents, time.Now()), q), nil
+	return page.Of(status.Items, page.Query{Page: status.Page, Size: status.Size}, status.HasMore), nil
+}
+
+type AgentStatus struct {
+	Items   []woodpecker.Agent   `json:"items"`
+	Page    int                  `json:"page"`
+	Size    int                  `json:"page_size"`
+	HasMore bool                 `json:"has_more"`
+	Queue   woodpecker.QueueInfo `json:"queue"`
+}
+
+func (c *Catalog) AgentStatus(q page.Query) (AgentStatus, error) {
+	if c.WP == nil || !c.WP.Ready() {
+		return AgentStatus{Items: []woodpecker.Agent{}, Page: q.Norm().Page, Size: q.Norm().Size, Queue: woodpecker.QueueInfo{}}, nil
+	}
+	agents, err := c.WP.Agents()
+	if err != nil {
+		return AgentStatus{}, err
+	}
+	qi := c.queueInfo()
+	agents = woodpecker.PaintAgents(liveAgents(agents, time.Now()), qi)
+	res := page.Take(agents, q)
+	return AgentStatus{Items: res.Items, Page: res.Page, Size: res.Size, HasMore: res.HasMore, Queue: qi}, nil
+}
+
+func (c *Catalog) Queue() woodpecker.QueueInfo {
+	if c.WP == nil || !c.WP.Ready() {
+		return woodpecker.QueueInfo{}
+	}
+	return c.queueInfo()
 }
 
 const agentAlive = 5 * time.Minute

@@ -4,6 +4,9 @@ import type { MessageKey } from "@/i18n/messages"
 export type Job = {
   name: string
   state: string
+  wait?: string
+  queue_position?: number
+  agent?: string
   steps: Step[]
 }
 
@@ -14,21 +17,24 @@ function usableName(name?: string) {
 }
 
 export function jobsOf(p: Pipeline): Job[] {
-  return (p.jobs || [])
-    .map((j) => {
-      const name = usableName(j.name)
-      if (!name) return null
-      return {
-        name,
-        state: j.state || p.status,
-        steps: j.steps?.length ? j.steps : [],
-      }
+  const out: Job[] = []
+  for (const j of p.jobs || []) {
+    const name = usableName(j.name)
+    if (!name) continue
+    out.push({
+      name,
+      state: j.state || p.status,
+      wait: j.wait || p.wait,
+      queue_position: j.queue_position || p.queue_position,
+      agent: j.agent || p.agent,
+      steps: j.steps?.length ? j.steps : [],
     })
-    .filter((j): j is Job => j != null)
+  }
+  return out
 }
 
-export function jobDotsOf(p: Pipeline): { name: string; state: string }[] {
-  return jobsOf(p).map((j) => ({ name: j.name, state: j.state }))
+export function jobDotsOf(p: Pipeline): { name: string; state: string; wait?: string }[] {
+  return jobsOf(p).map((j) => ({ name: j.name, state: j.state, wait: j.wait }))
 }
 
 export function asPipeline(data: unknown): Pipeline | null {
@@ -77,15 +83,32 @@ function shortRef(ref?: string) {
   return ref.replace(/^refs\/(heads|tags)\//, "")
 }
 
-export function triggerKey(event?: string): MessageKey {
-  switch ((event || "").toLowerCase()) {
+export type TriggerKind = "push" | "tag" | "pr" | "cron" | "manual"
+
+export function triggerKind(event?: string, ref?: string): TriggerKind {
+  const ev = (event || "").toLowerCase()
+  if (ev === "tag" || ev === "release" || (ref || "").startsWith("refs/tags/")) return "tag"
+  switch (ev) {
+    case "push":
+      return "push"
+    case "pull_request":
+    case "pull_request_closed":
+    case "pull_request_metadata":
+      return "pr"
+    case "cron":
+      return "cron"
+    default:
+      return "manual"
+  }
+}
+
+export function triggerKey(event?: string, ref?: string): MessageKey {
+  switch (triggerKind(event, ref)) {
     case "push":
       return "triggerPush"
     case "tag":
-    case "release":
       return "triggerTag"
-    case "pull_request":
-    case "pull_request_closed":
+    case "pr":
       return "triggerPR"
     case "cron":
       return "triggerCron"
@@ -113,21 +136,34 @@ export function runRef(p: Pipeline) {
   return shortRef(p.ref) || p.branch || ""
 }
 
-export function runEventKey(event?: string): MessageKey {
-  switch ((event || "").toLowerCase()) {
+export function runEventKey(event?: string, ref?: string): MessageKey {
+  switch (triggerKind(event, ref)) {
     case "push":
       return "runPush"
     case "tag":
-    case "release":
       return "runTag"
-    case "pull_request":
-    case "pull_request_closed":
+    case "pr":
       return "runPR"
     case "cron":
       return "runCron"
     default:
       return "runManual"
   }
+}
+
+export function waitLine(p: { status?: string; wait?: string; queue_position?: number; agent?: string }): {
+  key: MessageKey
+  vars?: Record<string, string>
+} | null {
+  const status = (p.status || "").toLowerCase()
+  if (status === "blocked") return { key: "statusBlocked" }
+  if (p.wait === "queue") {
+    if (p.queue_position && p.queue_position > 0) return { key: "waitQueuedN", vars: { n: String(p.queue_position) } }
+    return { key: "statusQueued" }
+  }
+  if (p.wait === "deps") return { key: "statusWaiting" }
+  if (p.wait === "concurrency") return { key: "statusSlot" }
+  return null
 }
 
 export function namedSecrets(files: { content?: string }[] | undefined): string[] {

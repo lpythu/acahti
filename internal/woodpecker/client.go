@@ -23,6 +23,7 @@ type Client struct {
 	http  *http.Client
 	mu    sync.Mutex
 	ids   map[string]int64
+	names map[int64]string
 }
 
 func New(base, token string) *Client {
@@ -31,6 +32,7 @@ func New(base, token string) *Client {
 		token: token,
 		http:  &http.Client{Timeout: 45 * time.Second},
 		ids:   map[string]int64{},
+		names: map[int64]string{},
 	}
 }
 
@@ -49,24 +51,27 @@ type Repo struct {
 }
 
 type Pipeline struct {
-	ID       int64       `json:"id"`
-	Number   int64       `json:"number"`
-	Status   string      `json:"status"`
-	Event    string      `json:"event"`
-	Branch   string      `json:"branch"`
-	Ref      string      `json:"ref"`
-	Title    string      `json:"title"`
-	Message  string      `json:"message"`
-	Author   string      `json:"author"`
-	Avatar   string      `json:"avatar"`
-	Commit   string      `json:"commit"`
-	Error    string      `json:"error"`
-	Errors   []PipeError `json:"errors,omitempty"`
-	Created  int64       `json:"created"`
-	Started  int64       `json:"started"`
-	Finished int64       `json:"finished"`
-	Jobs     []Job       `json:"jobs,omitempty"`
-	Repo     string      `json:"repo,omitempty"`
+	ID            int64       `json:"id"`
+	Number        int64       `json:"number"`
+	Status        string      `json:"status"`
+	Event         string      `json:"event"`
+	Branch        string      `json:"branch"`
+	Ref           string      `json:"ref"`
+	Title         string      `json:"title"`
+	Message       string      `json:"message"`
+	Author        string      `json:"author"`
+	Avatar        string      `json:"avatar"`
+	Commit        string      `json:"commit"`
+	Error         string      `json:"error"`
+	Errors        []PipeError `json:"errors,omitempty"`
+	Created       int64       `json:"created"`
+	Started       int64       `json:"started"`
+	Finished      int64       `json:"finished"`
+	Jobs          []Job       `json:"jobs,omitempty"`
+	Repo          string      `json:"repo,omitempty"`
+	Wait          string      `json:"wait,omitempty"`
+	QueuePosition int         `json:"queue_position,omitempty"`
+	Agent         string      `json:"agent,omitempty"`
 }
 
 type PipeError struct {
@@ -78,11 +83,14 @@ type PipeError struct {
 
 // Job is one `.acahti/pipelines/*.yaml` file in a run (ci, cd.office, …).
 type Job struct {
-	ID    int64  `json:"id,omitempty"`
-	PID   int64  `json:"pid,omitempty"`
-	Name  string `json:"name"`
-	State string `json:"state"`
-	Steps []Step `json:"steps,omitempty"`
+	ID            int64  `json:"id,omitempty"`
+	PID           int64  `json:"pid,omitempty"`
+	Name          string `json:"name"`
+	State         string `json:"state"`
+	Wait          string `json:"wait,omitempty"`
+	QueuePosition int    `json:"queue_position,omitempty"`
+	Agent         string `json:"agent,omitempty"`
+	Steps         []Step `json:"steps,omitempty"`
 }
 
 type Step struct {
@@ -135,7 +143,10 @@ type Agent struct {
 	ID       int64  `json:"id"`
 	Name     string `json:"name"`
 	Platform string `json:"platform"`
+	Backend  string `json:"backend,omitempty"`
 	Version  string `json:"version"`
+	Capacity int    `json:"capacity"`
+	Running  int    `json:"running,omitempty"`
 	LastWork int64  `json:"last_work"`
 	LastSeen int64  `json:"last_contact"`
 	Labels   any    `json:"labels"`
@@ -283,6 +294,7 @@ func (c *Client) rememberID(fullName string, id int64) {
 	}
 	c.mu.Lock()
 	c.ids[fullName] = id
+	c.names[id] = fullName
 	c.mu.Unlock()
 }
 
@@ -456,6 +468,20 @@ func (c *Client) Agents() ([]Agent, error) {
 	if err != nil {
 		return nil, err
 	}
-	var out []Agent
-	return out, json.Unmarshal(b, &out)
+	var raw []struct {
+		Agent
+		CustomLabels any `json:"custom_labels"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return nil, err
+	}
+	out := make([]Agent, 0, len(raw))
+	for _, a := range raw {
+		got := a.Agent
+		if got.Labels == nil {
+			got.Labels = a.CustomLabels
+		}
+		out = append(out, got)
+	}
+	return out, nil
 }

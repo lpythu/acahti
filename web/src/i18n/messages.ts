@@ -82,6 +82,16 @@ export const messages = {
     statusSuccess: "success",
     statusRunning: "running",
     statusPending: "pending",
+    statusQueued: "queued",
+    statusWaiting: "waiting",
+    statusSlot: "waiting for slot",
+    waitQueuedN: "queued · #{n}",
+    waitAgent: "on {agent}",
+    queue: "Queue",
+    queuePaused: "Queue paused.",
+    queueCounts: "{running} running · {pending} queued · {waiting} waiting",
+    runnerSlots: "Slots",
+    noQueue: "Nothing in the queue.",
     statusBlocked: "blocked",
     statusSkipped: "skipped",
     statusFailure: "failure",
@@ -319,6 +329,16 @@ export const messages = {
     statusSuccess: "成功",
     statusRunning: "运行中",
     statusPending: "等待",
+    statusQueued: "排队",
+    statusWaiting: "等待依赖",
+    statusSlot: "等空位",
+    waitQueuedN: "排队 · 第 {n} 位",
+    waitAgent: "在 {agent}",
+    queue: "队列",
+    queuePaused: "队列已暂停。",
+    queueCounts: "{running} 运行中 · {pending} 排队 · {waiting} 等待依赖",
+    runnerSlots: "槽位",
+    noQueue: "队列是空的。",
     statusBlocked: "待批准",
     statusSkipped: "未运行",
     statusFailure: "失败",
@@ -477,3 +497,6 @@ export const messages = {
 
 export type Locale = keyof typeof messages
 export type MessageKey = keyof typeof messages.en
+
+const _locales: Record<Locale, Record<MessageKey, string>> = messages
+void _locales

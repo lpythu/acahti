@@ -84,18 +84,18 @@ func tools() []toolSpec {
 		{Name: "pr_merge", Description: "Merge a PR when the latest pipeline round on the head SHA is green", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
 		{Name: "pr_close", Description: "Close a pull request", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
 		{Name: "checks_wait", Description: "Snapshot of commit checks for the latest pipeline round. Poll this tool; it does not block", InputSchema: obj(map[string]any{"owner": str, "name": str, "sha": str}, "owner", "name", "sha")},
-		{Name: "pipeline_list", Description: "List pipelines for a repo. sha is a commit prefix", InputSchema: obj(map[string]any{"repo": str, "sha": str, "branch": str, "status": str, "page": num, "page_size": num}, "repo")},
-		{Name: "pipeline_get", Description: "Get one pipeline with jobs and steps", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
+		{Name: "pipeline_list", Description: "List pipelines for a repo with wait (queue, deps, concurrency) on in-flight runs. sha is a commit prefix", InputSchema: obj(map[string]any{"repo": str, "sha": str, "branch": str, "status": str, "page": num, "page_size": num}, "repo")},
+		{Name: "pipeline_get", Description: "Get one pipeline with jobs, steps, and wait (queue, deps, concurrency)", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 		{Name: "pipeline_log", Description: "Fetch pipeline logs. Omit step for failed steps only", InputSchema: obj(map[string]any{"repo": str, "number": num, "step": num, "tail_lines": num}, "repo", "number")},
 		{Name: "pipeline_rerun", Description: "Rerun a pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 		{Name: "pipeline_trigger", Description: "Manual run on a ref. Official release is still git push", InputSchema: obj(map[string]any{"repo": str, "ref": str}, "repo")},
-		{Name: "pipeline_cancel", Description: "Cancel a running pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
+		{Name: "pipeline_cancel", Description: "Cancel a running or queued pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 		{Name: "pipeline_delete", Description: "Delete a finished pipeline run", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 		{Name: "inbox", Description: "Island inbox: open PRs or pipelines needing attention (blocked/failed latest per repo)", InputSchema: obj(map[string]any{"section": str, "page": num, "page_size": num})},
 		{Name: "pkg_publish", Description: "Publish a language package (pypi wheel URL or npm tarball URL)", InputSchema: obj(map[string]any{"kind": str, "url": str, "filename": str}, "kind", "url")},
 		{Name: "pkg_list", Description: "List language packages", InputSchema: obj(map[string]any{"owner": str, "kind": str, "page": num, "page_size": num})},
 		{Name: "whoami", Description: "Acahti git identity: git_name, git_email, clone_url_template, skill_url, skill_sha, apply_when_remote_host, setup_local, org_admin", InputSchema: obj(map[string]any{})},
-		{Name: "agent_status", Description: "Host agent last contact", InputSchema: obj(pg)},
+		{Name: "agent_status", Description: "Host runners plus Woodpecker queue stats (pending, waiting_on_deps, running)", InputSchema: obj(pg)},
 		{Name: "deploy_approve", Description: "Approve a gated deploy pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 		{Name: "secret_list", Description: "List pipeline secret names (never values). scope org is org admins. scope repo is the effective set (org inherited plus repo) for repo admins. repo or owner+name for repo scope", InputSchema: obj(map[string]any{"scope": str, "repo": str, "owner": str, "name": str, "page": num, "page_size": num})},
 		{Name: "secret_put", Description: "Create or replace a pipeline secret. Does not echo value. org scope needs org admin. repo scope needs repo admin. name is the secret", InputSchema: obj(map[string]any{"scope": str, "name": str, "secret": str, "value": str, "events": map[string]any{"type": "array", "items": str}, "repo": str, "owner": str}, "value")},
@@ -286,7 +286,7 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 	case "pkg_publish":
 		return s.publish(token, str("kind"), str("url"), str("filename"))
 	case "agent_status":
-		return s.Cat.ListAgents(pq)
+		return s.Cat.AgentStatus(pq)
 	case "deploy_approve":
 		repo := str("repo")
 		if err := s.WP.Approve(repo, num("number")); err != nil {

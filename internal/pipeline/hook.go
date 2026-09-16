@@ -68,7 +68,7 @@ func HandleConfig(token string, issue func(author, repo, sha string) Ident) http
 		}
 		out := make([]fileMeta, 0, len(req.Configuration))
 		for _, cfg := range req.Configuration {
-			data, err := ExpandIdent([]byte(cfg.Data), id)
+			data, err := ExpandFile(cfg.Name, []byte(cfg.Data), id)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return

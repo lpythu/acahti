@@ -52,7 +52,7 @@ Trigger CI with `git push`, a tag, or opening a PR. Do not use `pipeline_trigger
 
 1. `git rev-parse HEAD`
 2. `checks_wait` `{owner, name, sha}` — snapshot of the latest pipeline round. Poll until `done` is true. Do not pass `timeout_sec`
-3. Failed: `pipeline_list` `{repo: owner/name, sha}` (sha prefix) → `pipeline_get` (jobs and steps) → `pipeline_log` (omit `step`)
+3. Failed: `pipeline_list` `{repo: owner/name, sha}` (sha prefix) → `pipeline_get` (jobs, steps, and wait) → `pipeline_log` (omit `step`)
 4. Fix and push, or `pipeline_rerun`. `pipeline_cancel` only for a stuck run
 5. Green (`ok` and `done`): `pr_merge`. `blocked`: `deploy_approve`
 6. Island triage: `inbox` `{section: pipes|prs}` (default pipes: latest blocked/failed per repo)

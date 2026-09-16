@@ -3,9 +3,14 @@ package catalog
 import (
 	"sync"
 	"time"
+
+	"acahti/internal/woodpecker"
 )
 
-const memoTTL = 30 * time.Second
+const (
+	memoTTL  = 30 * time.Second
+	queueTTL = 2 * time.Second
+)
 
 type stamp[T any] struct {
 	at time.Time
@@ -25,6 +30,7 @@ type memo struct {
 	authors stamp[map[string]string]
 	files   map[string][]FileBlob
 	who     map[string]commitWho
+	queue   stamp[woodpecker.QueueInfo]
 }
 
 func newMemo() *memo {
@@ -141,6 +147,27 @@ func (m *memo) drop() {
 func (m *memo) dropAuthors() {
 	m.mu.Lock()
 	m.authors = stamp[map[string]string]{}
+	m.mu.Unlock()
+}
+
+func (m *memo) queueOf() (woodpecker.QueueInfo, bool) {
+	if m == nil {
+		return woodpecker.QueueInfo{}, false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.queue.at.IsZero() || time.Since(m.queue.at) > queueTTL {
+		return woodpecker.QueueInfo{}, false
+	}
+	return m.queue.v, true
+}
+
+func (m *memo) setQueue(q woodpecker.QueueInfo) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	m.queue = stamp[woodpecker.QueueInfo]{at: time.Now(), v: q}
 	m.mu.Unlock()
 }
 

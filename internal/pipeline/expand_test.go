@@ -314,4 +314,87 @@ func TestHandleConfigIssuesJob(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), "ACAHTI_USER: lipeiyang") {
 		t.Fatalf("body=%s", rr.Body.String())
 	}
+
+	office := configRequest{}
+	office.Configuration = []fileMeta{{
+		Name: ".acahti/pipelines/cd.office.yaml",
+		Data: "steps:\n  deploy:\n    pipe: helm@v1\n    with:\n      release: a\n      namespace: b\n",
+	}}
+	office.Pipeline.Author = "acahti"
+	office.Pipeline.Commit = "abc"
+	office.Repo.Owner = "saidc"
+	office.Repo.Name = "tm-web"
+	body, _ = json.Marshal(office)
+	req = httptest.NewRequest(http.MethodPost, "/hooks/pipeline-config", strings.NewReader(string(body)))
+	req.SetBasicAuth("pipe", "secret")
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("office %d %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "deploy-office") {
+		t.Fatalf("missing concurrency: %s", rr.Body.String())
+	}
+}
+
+func TestExpandFileInjectsOfficeConcurrency(t *testing.T) {
+	got, err := ExpandFile(".acahti/pipelines/cd.office.yaml", []byte(`steps:
+  deploy:
+    pipe: helm@v1
+    with:
+      release: app
+      namespace: default
+`), Ident{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(got)
+	if !strings.Contains(text, "group: deploy-office") || !strings.Contains(text, "limit: 1") {
+		t.Fatalf("missing concurrency:\n%s", text)
+	}
+}
+
+func TestExpandFileInjectsHkAndPkg(t *testing.T) {
+	hk, err := ExpandFile("cd.hk.yaml", []byte("steps:\n  x:\n    image: bash\n    commands: [true]\n"), Ident{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(hk), "group: deploy-hk") {
+		t.Fatalf("hk:\n%s", hk)
+	}
+	pkg, err := ExpandFile("pkg.yaml", []byte("steps:\n  x:\n    image: bash\n    commands: [true]\n"), Ident{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(pkg), "group: pkg") {
+		t.Fatalf("pkg:\n%s", pkg)
+	}
+}
+
+func TestExpandFileKeepsYAMLConcurrency(t *testing.T) {
+	got, err := ExpandFile("cd.office.yaml", []byte(`concurrency:
+  limit: 2
+  group: custom
+steps:
+  x:
+    image: bash
+    commands: [true]
+`), Ident{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(got)
+	if !strings.Contains(text, "group: custom") || strings.Contains(text, "deploy-office") {
+		t.Fatalf("%s", text)
+	}
+}
+
+func TestExpandFileSkipsCI(t *testing.T) {
+	got, err := ExpandFile("ci.yaml", []byte("steps:\n  x:\n    image: bash\n    commands: [true]\n"), Ident{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(got), "concurrency:") {
+		t.Fatalf("ci should not get concurrency:\n%s", got)
+	}
 }

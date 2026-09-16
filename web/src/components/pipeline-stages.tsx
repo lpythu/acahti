@@ -6,7 +6,7 @@ import { useT } from "@/i18n/i18n"
 
 const VISIBLE = 4
 
-export function PipelineJobDots({ jobs }: { jobs: { name: string; state: string }[] }) {
+export function PipelineJobDots({ jobs }: { jobs: { name: string; state: string; wait?: string }[] }) {
   const t = useT()
   if (!jobs.length) return null
 
@@ -18,14 +18,14 @@ export function PipelineJobDots({ jobs }: { jobs: { name: string; state: string 
   return (
     <ol className="flex max-w-64 shrink-0 flex-wrap items-center justify-end gap-1" aria-label={t("jobs")}>
       {shown.map((s, i) => {
-        const label = statusText(s.state, t)
+        const label = statusText(s.state, t, s.wait)
         return (
           <li key={`${s.name}-${i}`}>
             <Tooltip>
               <TooltipTrigger
                 render={
                   <Badge variant="outline" className="font-normal">
-                    <RunStatusIcon status={s.state} className="size-3" />
+                    <RunStatusIcon status={s.state} wait={s.wait} className="size-3" />
                     <span className="max-w-20 truncate">{s.name}</span>
                   </Badge>
                 }
@@ -52,7 +52,7 @@ export function PipelineJobDots({ jobs }: { jobs: { name: string; state: string 
               {extra.map((s, i) => (
                 <span key={`${s.name}-${i}`}>
                   {s.name}
-                  <span className="opacity-70"> {statusText(s.state, t)}</span>
+                  <span className="opacity-70"> {statusText(s.state, t, s.wait)}</span>
                 </span>
               ))}
             </TooltipContent>

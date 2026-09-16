@@ -32,7 +32,7 @@ flowchart LR
 | Host | Runs |
 |---|---|
 | **Acahti** | control plane. No Runner on this host. |
-| **Runner** | `ACAHTI_BUILD` — executes `.acahti/pipelines/` after Acahti expands `pipe:` |
+| **Runner** | `ACAHTI_BUILD` — executes `.acahti/pipelines/` after Acahti expands `pipe:`. One `woodpecker-agent`, `WOODPECKER_MAX_WORKFLOWS` default 4. Excess workflows stay in the Woodpecker queue (`pending` / `waiting_on_deps`). |
 
 Public identity is Acahti: SPA, MCP, `/acahti/v1`, git HTTPS, `/api/packages`. Closed to the internet: `/ci`, git-kernel HTML, `/api/v1`.
 
@@ -284,14 +284,14 @@ flowchart LR
 2. Gateway `Remember`s the pipeline: merge declared jobs from YAML, upsert `acahti.pipelines`, publish `pipeline.updated`.
 3. Woodpecker progress also arrives as Forgejo `status` webhooks or `POST /hooks/woodpecker`. Same `Remember`.
 4. Startup backfill lists Woodpecker runs per active repo and `Remember`s them.
-5. `WatchPipelines` refreshes indexed `running` rows from Woodpecker. A running step whose log has not grown for 15m is `Cancel`ed (Woodpecker does not close a step when the process dies without a Done RPC).
+5. `WatchPipelines` refreshes indexed `running` and `pending` rows from Woodpecker. Queue `wait` / `queue_position` is painted live from `GET /api/queue/info` (not stored). A running step whose log has not grown for 15m is `Cancel`ed (Woodpecker does not close a step when the process dies without a Done RPC).
 
 **Read (query)**
 
 1. `GET /ui/pipelines` — newest run per repo (`created DESC`). Later numbers replace earlier branches and tags. Visibility from the org catalog. Rows use stored `jobs` (no YAML fetch).
 2. `GET /ui/repos/{owner}/{name}/pipelines` — that repo’s full run history.
 3. Board — latest blocked/failed pipeline per visible repo.
-4. Detail — index row. Miss or in-flight (`running` / `pending` / `blocked`) → Woodpecker `GetPipeline` and write-back. `files[]` loads YAML on `(repo, commit)` cache miss.
+4. Detail — index row. Miss or in-flight (`running` / `pending` / `blocked`) → Woodpecker `GetPipeline` and write-back. In-flight rows also get `wait` (`queue` / `deps` / `concurrency`) and `queue_position` from the Woodpecker queue. `files[]` loads YAML on `(repo, commit)` cache miss.
 5. Step log still hits Woodpecker (`GET …/log`).
 
 ## Page contracts
@@ -302,13 +302,17 @@ One screen, one JSON. The SPA renders fields; it does not walk kernels.
 |---|---|
 | `GET /ui/pipelines` | latest run per repo with stored `jobs` |
 | `GET /ui/repos/{owner}/{name}/pipelines` | that repo’s run history |
-| `GET /ui/pipelines/{owner}/{name}/{n}` | `{ pipeline, team, files }` — `pipeline.jobs[].steps` |
+| `GET /ui/pipelines/{owner}/{name}/{n}` | `{ pipeline, team, files }` — `pipeline.jobs[].steps`; in-flight `wait` / `queue_position` / `agent` |
+| `GET /ui/queue` | Owners: Woodpecker queue snapshot (`paused`, stats, pending / waiting_on_deps / running) |
+| `GET /ui/agents` | Owners: runners (`capacity`, `running`) plus `queue` |
 | `GET /ui/secrets` | Org secrets catalog (Owners) |
 | `GET /ui/repos/{owner}/{name}/secrets` | effective set: org inherited + repo override (repo admin) |
 | `GET /ui/nav/tree` | `[{ team, repos }]` from the org catalog; trailing `{ team: "" }` is unassigned repos |
 | `GET /ui/repos?teams=1` | team names and counts |
 | `GET /ui/users` | page of users with `teams` and this page’s `repos` ACL |
 | `GET /ui/events` | SSE: `pipeline.updated`, `catalog.updated`, or `forgejo` (PRs) |
+
+MCP `pipeline_list` / `pipeline_get` return the same in-flight `wait` fields. `agent_status` returns runners plus the queue snapshot.
 
 ```mermaid
 sequenceDiagram

@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge"
 import { useT } from "@/i18n/i18n"
 import type { MessageKey } from "@/i18n/messages"
 
-type Tone = "success" | "running" | "pending" | "warning" | "danger"
+type Tone = "success" | "running" | "pending" | "queue" | "waiting" | "warning" | "danger"
 
 const TONE: Record<string, Tone> = {
   success: "success",
@@ -26,6 +26,8 @@ const TONE_CLASS: Record<Tone, string> = {
   success: "border-transparent bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
   running: "border-transparent bg-sky-500/10 text-sky-700 dark:text-sky-400",
   pending: "border-transparent bg-slate-500/10 text-slate-700 dark:text-slate-300",
+  queue: "border-transparent bg-indigo-500/10 text-indigo-700 dark:text-indigo-400",
+  waiting: "border-transparent bg-slate-500/10 text-slate-700 dark:text-slate-300",
   warning: "border-transparent bg-amber-500/10 text-amber-800 dark:text-amber-400",
   danger: "border-transparent bg-red-500/10 text-red-700 dark:text-red-400",
 }
@@ -48,22 +50,32 @@ const LABEL: Record<string, MessageKey> = {
   closed: "statusClosed",
 }
 
-export function resolveTone(status: string): Tone {
-  return TONE[status.toLowerCase()] ?? "pending"
+export function resolveTone(status: string, wait?: string): Tone {
+  const s = status.toLowerCase()
+  if (s === "pending") {
+    if (wait === "queue") return "queue"
+    if (wait === "concurrency") return "warning"
+    if (wait === "deps") return "waiting"
+  }
+  return TONE[s] ?? "pending"
 }
 
-export function statusText(status: string, t: (key: MessageKey) => string): string {
-  const key = LABEL[status.toLowerCase()]
+export function statusText(status: string, t: (key: MessageKey) => string, wait?: string): string {
+  const s = status.toLowerCase()
+  if (s === "pending") {
+    if (wait === "queue") return t("statusQueued")
+    if (wait === "deps") return t("statusWaiting")
+    if (wait === "concurrency") return t("statusSlot")
+  }
+  const key = LABEL[s]
   return key ? t(key) : status
 }
 
-export function StatusBadge({ status }: { status: string }) {
+export function StatusBadge({ status, wait }: { status: string; wait?: string }) {
   const t = useT()
-  const key = status.toLowerCase()
-  const label = LABEL[key]
   return (
-    <Badge variant="outline" className={TONE_CLASS[resolveTone(status)]}>
-      {label ? t(label) : status}
+    <Badge variant="outline" className={TONE_CLASS[resolveTone(status, wait)]}>
+      {statusText(status, t, wait)}
     </Badge>
   )
 }
