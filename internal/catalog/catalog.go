@@ -755,6 +755,7 @@ func (c *Catalog) paintPipes(pipes []woodpecker.Pipeline) []woodpecker.Pipeline 
 		go func(i int) {
 			defer wg.Done()
 			out[i].HydrateJobs()
+			out[i].SortJobs()
 			out[i] = c.applyCommitAuthor(out[i])
 		}(i)
 	}

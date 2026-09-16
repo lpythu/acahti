@@ -149,3 +149,11 @@ func TestMergeDeclaredKeepsRuntimeFailure(t *testing.T) {
 		t.Fatalf("cd=%+v", got.Jobs[1])
 	}
 }
+
+func TestSortJobsCiBeforeCd(t *testing.T) {
+	p := Pipeline{Jobs: []Job{{Name: "cd.hk"}, {Name: "cd.office"}, {Name: "ci"}}}
+	p.SortJobs()
+	if len(p.Jobs) != 3 || p.Jobs[0].Name != "ci" || p.Jobs[1].Name != "cd.office" || p.Jobs[2].Name != "cd.hk" {
+		t.Fatalf("%+v", p.Jobs)
+	}
+}

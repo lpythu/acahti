@@ -2,6 +2,7 @@ package woodpecker
 
 import (
 	"path"
+	"sort"
 	"strings"
 )
 
@@ -160,7 +161,18 @@ func MergeDeclaredJobs(p Pipeline, declared []string) Pipeline {
 		out = append(out, syntheticJob(name, state, err))
 	}
 	p.Jobs = out
+	p.SortJobs()
 	return p
+}
+
+func (p *Pipeline) SortJobs() {
+	sort.SliceStable(p.Jobs, func(i, j int) bool {
+		ri, rj := declaredRank(p.Jobs[i].Name), declaredRank(p.Jobs[j].Name)
+		if ri != rj {
+			return ri < rj
+		}
+		return p.Jobs[i].Name < p.Jobs[j].Name
+	})
 }
 
 func primaryJob(names []string) string {
@@ -184,8 +196,10 @@ func declaredRank(name string) int {
 	switch {
 	case strings.HasPrefix(n, "ci"), strings.HasPrefix(n, "build"), strings.HasPrefix(n, "test"), strings.HasPrefix(n, "lint"), strings.HasPrefix(n, "check"):
 		return 0
-	case strings.HasPrefix(n, "cd"), strings.HasPrefix(n, "deploy"), strings.HasPrefix(n, "release"):
+	case strings.Contains(n, "office"):
 		return 2
+	case strings.HasPrefix(n, "cd"), strings.HasPrefix(n, "deploy"), strings.HasPrefix(n, "release"):
+		return 3
 	default:
 		return 1
 	}
