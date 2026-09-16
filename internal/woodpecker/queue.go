@@ -351,41 +351,52 @@ func (c *Client) QueueInfo() (QueueInfo, error) {
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return QueueInfo{}, err
 	}
-	q := QueueInfo{Paused: raw.Paused, Stats: raw.Stats, Fetched: true}
+	q := QueueInfo{Paused: raw.Paused, Stats: QueueStats{WorkerCount: raw.Stats.WorkerCount}, Fetched: true}
 	q.Pending = c.publicTasks(raw.Pending, WaitQueue)
 	q.WaitingOnDeps = c.publicTasks(raw.WaitingOnDeps, WaitDeps)
 	q.Running = c.publicTasks(raw.Running, "")
-	workers := q.Stats.WorkerCount
-	q.Stats = pipelineStats(q)
-	q.Stats.WorkerCount = workers
 	return q, nil
 }
 
-func pipelineStats(q QueueInfo) QueueStats {
-	rank := map[string]int{}
-	bump := func(tasks []QueueTask, r int) {
+func PipelineStripStats(q QueueInfo, get func(QueueTask) (Pipeline, bool)) QueueStats {
+	seen := map[string]bool{}
+	var s QueueStats
+	consider := func(tasks []QueueTask, fallback string) {
 		for _, t := range tasks {
 			k := pipelineKey(t)
-			if k == "" {
+			if k == "" || seen[k] {
 				continue
 			}
-			if r > rank[k] {
-				rank[k] = r
+			seen[k] = true
+			p, ok := get(t)
+			if !ok {
+				if fallback == "" {
+					continue
+				}
+				p = Pipeline{Repo: t.Repo, Number: t.Number, ID: t.PipelineID, Status: fallback}
+			}
+			switch stripBucket(Annotate(p, q)) {
+			case "running":
+				s.RunningCount++
+			case "queued":
+				s.PendingCount++
 			}
 		}
 	}
-	bump(q.Running, 2)
-	bump(q.Pending, 1)
-	bump(q.WaitingOnDeps, 1)
-	var s QueueStats
-	for _, r := range rank {
-		if r == 2 {
-			s.RunningCount++
-			continue
-		}
-		s.PendingCount++
-	}
+	consider(q.Running, "running")
+	consider(q.Pending, "pending")
+	consider(q.WaitingOnDeps, "")
 	return s
+}
+
+func stripBucket(p Pipeline) string {
+	if strings.EqualFold(p.Status, "running") && p.Wait == "" {
+		return "running"
+	}
+	if p.Wait == WaitQueue || p.Wait == WaitConcurrency {
+		return "queued"
+	}
+	return ""
 }
 
 func pipelineKey(t QueueTask) string {

@@ -303,7 +303,7 @@ One screen, one JSON. The SPA renders fields; it does not walk kernels.
 | `GET /ui/pipelines` | latest run per repo; live queue paint (refresh kernel if in-flight but not in queue) |
 | `GET /ui/repos/{owner}/{name}/pipelines` | that repo’s run history |
 | `GET /ui/pipelines/{owner}/{name}/{n}` | `{ pipeline, team, files }` — `pipeline.jobs[].steps`; in-flight `wait` / `queue_position` / `agent` |
-| `GET /ui/queue` | Owners: Woodpecker queue snapshot. `stats` counts pipelines (`running` / `queued`). Task lists stay jobs. |
+| `GET /ui/queue` | Owners: Woodpecker queue snapshot. `stats` counts pipelines whose painted status is running or queued (failed leftover CD is not queued). Task lists stay jobs. |
 | `GET /ui/agents` | Owners: runners (`capacity`, `running`) plus `queue` |
 | `GET /ui/secrets` | Org secrets catalog (Owners) |
 | `GET /ui/repos/{owner}/{name}/secrets` | effective set: org inherited + repo override (repo admin) |

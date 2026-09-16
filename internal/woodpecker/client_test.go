@@ -189,7 +189,7 @@ func TestQueueInfo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q.Stats.PendingCount != 1 || len(q.Pending) != 1 || q.Pending[0].Repo != "saidc/tm-web" || q.Pending[0].Wait != WaitQueue || q.Pending[0].QueuePosition != 1 {
+	if len(q.Pending) != 1 || q.Pending[0].Repo != "saidc/tm-web" || q.Pending[0].Wait != WaitQueue || q.Pending[0].QueuePosition != 1 {
 		t.Fatalf("pending %+v", q.Pending)
 	}
 	if len(q.WaitingOnDeps) != 1 || q.WaitingOnDeps[0].Wait != WaitDeps {
@@ -201,7 +201,7 @@ func TestQueueInfo(t *testing.T) {
 	if !q.Fetched {
 		t.Fatal("live fetch")
 	}
-	if q.Stats.RunningCount != 1 || q.Stats.PendingCount != 1 {
-		t.Fatalf("pipeline stats %+v", q.Stats)
+	if q.Stats.WorkerCount != 1 {
+		t.Fatalf("workers %+v", q.Stats)
 	}
 }

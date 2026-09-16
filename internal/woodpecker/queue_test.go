@@ -1,6 +1,9 @@
 package woodpecker
 
-import "testing"
+import (
+	"strconv"
+	"testing"
+)
 
 func TestAnnotateSkipsCDWhenCIFailed(t *testing.T) {
 	p := Pipeline{
@@ -191,18 +194,43 @@ func TestAnnotateEmptyQueueDoesNotInferWait(t *testing.T) {
 	}
 }
 
-func TestPipelineStatsCountsPipelines(t *testing.T) {
+func TestPipelineStripStatsSkipsFailedLeftovers(t *testing.T) {
 	q := QueueInfo{
-		Running: []QueueTask{{Repo: "saidc/a", Number: 1, Name: "ci"}},
-		Pending: []QueueTask{{Repo: "saidc/b", Number: 2, Name: "ci"}},
+		Fetched: true,
+		Pending: []QueueTask{{Repo: "saidc/ops", Number: 46, Name: "cd.office"}},
 		WaitingOnDeps: []QueueTask{
-			{Repo: "saidc/a", Number: 1, Name: "cd.office"},
-			{Repo: "saidc/b", Number: 2, Name: "cd.office"},
+			{Repo: "saidc/ops", Number: 46, Name: "pkg"},
 			{Repo: "saidc/c", Number: 3, Name: "cd.office"},
 		},
 	}
-	s := pipelineStats(q)
-	if s.RunningCount != 1 || s.PendingCount != 2 {
+	pipes := map[string]Pipeline{
+		"saidc/ops#46": {
+			Repo: "saidc/ops", Number: 46, Status: "running",
+			Jobs: []Job{{Name: "ci", State: "failure"}, {Name: "cd.office", State: "pending"}},
+		},
+	}
+	s := PipelineStripStats(q, func(t QueueTask) (Pipeline, bool) {
+		p, ok := pipes[t.Repo+"#"+strconv.FormatInt(t.Number, 10)]
+		return p, ok
+	})
+	if s.RunningCount != 0 || s.PendingCount != 0 {
+		t.Fatalf("failed leftovers must not count %+v", s)
+	}
+}
+
+func TestPipelineStripStatsRunningAndQueued(t *testing.T) {
+	q := QueueInfo{
+		Fetched: true,
+		Running: []QueueTask{{Repo: "saidc/a", Number: 1, Name: "ci"}},
+		Pending: []QueueTask{{Repo: "saidc/b", Number: 2, Name: "ci"}},
+	}
+	s := PipelineStripStats(q, func(t QueueTask) (Pipeline, bool) {
+		if t.Number == 1 {
+			return Pipeline{Repo: t.Repo, Number: 1, Status: "running", Jobs: []Job{{Name: "ci", State: "running"}}}, true
+		}
+		return Pipeline{Repo: t.Repo, Number: 2, Status: "pending", Jobs: []Job{{Name: "ci", State: "pending"}}}, true
+	})
+	if s.RunningCount != 1 || s.PendingCount != 1 {
 		t.Fatalf("%+v", s)
 	}
 }

@@ -792,10 +792,25 @@ func (c *Catalog) queueInfo() woodpecker.QueueInfo {
 	if err != nil {
 		return woodpecker.QueueInfo{}
 	}
+	workers := q.Stats.WorkerCount
+	q.Stats = woodpecker.PipelineStripStats(q, c.lookupQueueTask)
+	q.Stats.WorkerCount = workers
 	if c.mem != nil {
 		c.mem.setQueue(q)
 	}
 	return q
+}
+
+func (c *Catalog) lookupQueueTask(t woodpecker.QueueTask) (woodpecker.Pipeline, bool) {
+	if t.Repo == "" || t.Number == 0 || c.Idx == nil {
+		return woodpecker.Pipeline{}, false
+	}
+	p, ok, err := c.Idx.Get(t.Repo, t.Number)
+	if err != nil || !ok {
+		return woodpecker.Pipeline{}, false
+	}
+	p.HydrateJobs()
+	return p, true
 }
 
 func (c *Catalog) decoratePipe(p woodpecker.Pipeline) woodpecker.Pipeline {
