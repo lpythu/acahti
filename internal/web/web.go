@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"io/fs"
 	"net/http"
@@ -31,6 +32,7 @@ type Pages struct {
 	OAuth       *oauth.Server
 	Passwords   *passwd.Store
 	files       fs.FS
+	passwordSet func(login string) (has, ok bool)
 }
 
 func New(cfg config.Config, cat *catalog.Catalog, fj *forgejo.Client, wp *woodpecker.Client, a *auth.Service, inv *invite.Store, oa *oauth.Server, hub *events.Hub) *Pages {
@@ -193,6 +195,7 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 		u.FullName = identity.Name(u.Login, u.FullName)
 		_ = p.rememberPassword(u.Login, pw)
 		u.Password = pw
+		u.HasPassword = true
 		writeJSON(w, http.StatusOK, map[string]any{"user": u})
 		return
 	}
@@ -215,6 +218,7 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
+	flags, flagErr := forgejo.UserPasswordFlags(r.Context(), p.Cfg.DatabaseURL)
 	for i := range out.Items {
 		out.Items[i].FullName = identity.Name(out.Items[i].Login, out.Items[i].FullName)
 		names := byLogin[out.Items[i].Login]
@@ -233,7 +237,13 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 		out.Items[i].Repos = dst
-		out.Items[i].Password = p.Passwords.Get(out.Items[i].Login)
+		pw := p.Passwords.Get(out.Items[i].Login)
+		out.Items[i].Password = pw
+		has := pw != ""
+		if flagErr == nil {
+			has = has || flags[out.Items[i].Login]
+		}
+		out.Items[i].HasPassword = has
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -414,7 +424,13 @@ func (p *Pages) Password(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "password": pw})
+		has := pw != ""
+		if !has {
+			if set, ok := p.forgejoPasswordSet(target); ok {
+				has = set
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "password": pw, "has_password": has})
 		return
 	}
 	if err := p.FJ.SetPassword(target, body.Password); err != nil {
@@ -435,10 +451,29 @@ func (p *Pages) rememberPassword(login, password string) error {
 	return p.Passwords.Set(login, password)
 }
 
+func (p *Pages) forgejoPasswordSet(login string) (has, ok bool) {
+	if p.passwordSet != nil {
+		return p.passwordSet(login)
+	}
+	flags, err := forgejo.UserPasswordFlags(context.Background(), p.Cfg.DatabaseURL)
+	if err != nil {
+		return false, false
+	}
+	return flags[login], true
+}
+
 func (p *Pages) ensurePassword(login string) (string, error) {
 	if pw := p.Passwords.Get(login); pw != "" {
 		return pw, nil
 	}
+	has, ok := p.forgejoPasswordSet(login)
+	if !ok || has {
+		return "", nil
+	}
+	return p.initPassword(login)
+}
+
+func (p *Pages) initPassword(login string) (string, error) {
 	pw, err := passwd.Random()
 	if err != nil {
 		return "", err

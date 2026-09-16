@@ -46,6 +46,7 @@ type User struct {
 	Teams       []string   `json:"teams,omitempty"`
 	Repos       []UserRepo `json:"repos,omitempty"`
 	Password    string     `json:"password,omitempty"`
+	HasPassword bool       `json:"has_password"`
 }
 
 type UserRepo struct {

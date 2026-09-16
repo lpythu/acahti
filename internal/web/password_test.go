@@ -81,6 +81,9 @@ func TestPasswordEnsureInitsWhenMissing(t *testing.T) {
 		Auth:      auth.New([]byte("test"), "alice"),
 		FJ:        forgejo.New(fj.URL, "t"),
 		Passwords: store,
+		passwordSet: func(string) (bool, bool) {
+			return false, true
+		},
 	}
 	got := callPassword(t, p, "alice", `{"username":"gaowenrong"}`)
 	pw, _ := got["password"].(string)
@@ -97,6 +100,37 @@ func TestPasswordEnsureInitsWhenMissing(t *testing.T) {
 	again := callPassword(t, p, "alice", `{"username":"gaowenrong"}`)
 	if again["password"] != pw || body != nil {
 		t.Fatalf("second ensure reset %v patch=%v", again, body)
+	}
+}
+
+func TestPasswordEnsureDoesNotResetExisting(t *testing.T) {
+	var patches int
+	fj := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPatch {
+			patches++
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	t.Cleanup(fj.Close)
+	store, err := passwd.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &Pages{
+		Auth:      auth.New([]byte("test"), "alice"),
+		FJ:        forgejo.New(fj.URL, "t"),
+		Passwords: store,
+		passwordSet: func(string) (bool, bool) {
+			return true, true
+		},
+	}
+	got := callPassword(t, p, "alice", `{"username":"lipeiyang"}`)
+	if got["password"] != "" || got["has_password"] != true {
+		t.Fatalf("ensure %v", got)
+	}
+	if patches != 0 {
+		t.Fatalf("reset existing %d", patches)
 	}
 }
 

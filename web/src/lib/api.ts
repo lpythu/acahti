@@ -81,6 +81,7 @@ export type User = {
   is_admin: boolean
   full_name: string
   password?: string
+  has_password?: boolean
   teams?: string[]
   repos?: UserRepoPerm[]
 }
@@ -303,7 +304,7 @@ export const api = {
       body: JSON.stringify({ username, password }),
     }),
   ensurePassword: (username: string) =>
-    req<{ ok: boolean; password: string }>("/ui/password", {
+    req<{ ok: boolean; password: string; has_password: boolean }>("/ui/password", {
       method: "POST",
       body: JSON.stringify({ username }),
     }),

@@ -79,10 +79,19 @@ function AuthorInput({
   )
 }
 
-function PasswordInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function PasswordInput({
+  value,
+  hasPassword,
+  onChange,
+}: {
+  value: string
+  hasPassword: boolean
+  onChange: (v: string) => void
+}) {
   const t = useT()
   const [copied, setCopied] = useState(false)
   const known = value.trim() !== ""
+  const showMask = hasPassword && !known
 
   async function copy() {
     if (!known) return
@@ -93,15 +102,23 @@ function PasswordInput({ value, onChange }: { value: string; onChange: (v: strin
   }
 
   return (
-    <div className="relative min-w-36">
+    <div className="relative w-40 shrink-0">
       <Input
         type="password"
         autoComplete="new-password"
         aria-label={t("password")}
         value={value}
-        className={known ? "pr-7" : undefined}
+        className="w-40 pr-7"
         onChange={(e) => onChange(e.target.value)}
       />
+      {showMask ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-2.5 right-7 flex items-center text-sm tracking-[0.35em] text-foreground"
+        >
+          ••••••••
+        </span>
+      ) : null}
       {known ? (
         <button
           type="button"
@@ -375,14 +392,16 @@ function OnboardMenu({
   onPassword: (pw: string) => void
 }) {
   const t = useT()
-  const [pw, setPw] = useState("")
+  const [note, setNote] = useState("")
 
   async function prepare() {
     try {
       const r = await api.ensurePassword(login)
-      onPassword(r.password)
-      setPw(r.password)
-      await copyText(onboardNote(root, login, r.password), t("copied"), t("copyFailed"))
+      const next = r.password || ""
+      if (next) onPassword(next)
+      const text = onboardNote(root, login, next)
+      setNote(text)
+      await copyText(text, t("copied"), t("copyFailed"))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("loadError"))
     }
@@ -392,17 +411,17 @@ function OnboardMenu({
     <Popover
       onOpenChange={(open) => {
         if (open) void prepare()
-        else setPw("")
+        else setNote("")
       }}
     >
       <PopoverTrigger render={<Button type="button" size="sm" disabled={!root} />}>
         {t("join")}
       </PopoverTrigger>
       <PopoverContent className="flex w-96 flex-col gap-3">
-        {pw ? (
+        {note ? (
           <>
             <p className="text-sm text-muted-foreground">{t("onboardHint")}</p>
-            <CopyField multiline value={onboardNote(root, login, pw)} />
+            <CopyField multiline value={note} />
           </>
         ) : null}
       </PopoverContent>
@@ -533,6 +552,7 @@ export function UsersPage() {
                     <div className="flex items-center gap-2">
                       <PasswordInput
                         value={password}
+                        hasPassword={Boolean(u.has_password) || password.trim() !== ""}
                         onChange={(v) => setResets((m) => ({ ...m, [u.login]: v }))}
                       />
                       <Button type="button" size="sm" variant="outline" onClick={() => void resetRow(u.login, u.password || "")}>

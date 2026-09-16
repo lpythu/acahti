@@ -1,11 +1,12 @@
 export function onboardNote(rootURL: string, login: string, password: string) {
   const root = rootURL.replace(/\/$/, "")
-  return [
+  const lines = [
     `Give this to Cursor, Codex, or any coding agent.`,
     ``,
     `Install ${root}/skill.md`,
     `Login    ${root}/login`,
     `User     ${login}`,
-    `Password ${password}`,
-  ].join("\n")
+  ]
+  if (password) lines.push(`Password ${password}`)
+  return lines.join("\n")
 }
