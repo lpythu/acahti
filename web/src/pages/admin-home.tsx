@@ -3,7 +3,7 @@ import { Link } from "react-router-dom"
 import { CopyField } from "@/components/copy-field"
 import { Pager } from "@/components/paged-list"
 import { PageFrame } from "@/components/page-frame"
-import { QueueLists, QueueStrip } from "@/components/queue-strip"
+import { QueueLists, QueuePaused, QueueStrip } from "@/components/queue-strip"
 import { StatusBadge } from "@/components/status-badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useLoad } from "@/hooks/use-load"
@@ -64,6 +64,7 @@ export function AdminHomePage() {
         <h2 className="text-sm font-medium">{t("queue")}</h2>
         {agents.data?.queue ? (
           <>
+            <QueuePaused paused={agents.data.queue.paused} />
             <QueueStrip queue={agents.data.queue} />
             <QueueLists queue={agents.data.queue} />
           </>

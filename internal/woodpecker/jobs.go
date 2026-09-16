@@ -90,8 +90,30 @@ func syntheticJob(name, state, err string) Job {
 	}
 }
 
+func jobOrder(name string) int {
+	n := strings.ToLower(strings.TrimSpace(name))
+	switch {
+	case n == "ci" || strings.HasPrefix(n, "ci.") || strings.HasPrefix(n, "ci-"):
+		return 0
+	case n == "cd.office" || strings.HasSuffix(n, ".office"):
+		return 1
+	case n == "cd.hk" || strings.HasSuffix(n, ".hk"):
+		return 2
+	case strings.HasPrefix(n, "cd.") || strings.HasPrefix(n, "cd-"):
+		return 3
+	case n == "pkg" || strings.HasPrefix(n, "pkg.") || strings.HasPrefix(n, "pkg-"):
+		return 4
+	default:
+		return 5
+	}
+}
+
 func (p *Pipeline) SortJobs() {
 	sort.SliceStable(p.Jobs, func(i, j int) bool {
+		a, b := jobOrder(p.Jobs[i].Name), jobOrder(p.Jobs[j].Name)
+		if a != b {
+			return a < b
+		}
 		return p.Jobs[i].Name < p.Jobs[j].Name
 	})
 }

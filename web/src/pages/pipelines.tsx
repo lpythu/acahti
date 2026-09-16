@@ -4,7 +4,7 @@ import { toast } from "sonner"
 
 import { PagedList } from "@/components/paged-list"
 import { PipelineRunRow } from "@/components/pipeline-run-row"
-import { QueueStrip } from "@/components/queue-strip"
+import { QueuePaused, QueueStrip } from "@/components/queue-strip"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useEvents } from "@/hooks/use-events"
 import { useLoad } from "@/hooks/use-load"
@@ -117,10 +117,16 @@ export function PipelinesPage() {
       skeleton="lines"
       header={
         <div className="flex flex-col gap-2">
-          {queue.data ? <QueueStrip queue={queue.data} /> : null}
-          <div className="flex flex-wrap items-center gap-2">
+          <QueuePaused paused={queue.data?.paused} />
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3">
+              {queue.data ? <QueueStrip queue={queue.data} /> : null}
+              {team || repo ? (
+                <p className="text-sm text-muted-foreground">{team || repoName(repo)}</p>
+              ) : null}
+            </div>
             <Select value={status} onValueChange={(v) => setStatus(String(v ?? "all"))}>
-              <SelectTrigger size="sm" aria-label={t("status")}>
+              <SelectTrigger size="sm" className="shrink-0" aria-label={t("status")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -131,9 +137,6 @@ export function PipelinesPage() {
                 <SelectItem value="success">{t("statusSuccess")}</SelectItem>
               </SelectContent>
             </Select>
-            {team || repo ? (
-              <p className="text-sm text-muted-foreground">{team || repoName(repo)}</p>
-            ) : null}
           </div>
         </div>
       }

@@ -53,10 +53,10 @@ func TestPipelineErrorsBecomeJobs(t *testing.T) {
 	}
 }
 
-func TestSortJobsByName(t *testing.T) {
-	p := Pipeline{Jobs: []Job{{Name: "cd.hk"}, {Name: "ci"}, {Name: "cd.office"}}}
+func TestSortJobsCiThenCd(t *testing.T) {
+	p := Pipeline{Jobs: []Job{{Name: "cd.hk"}, {Name: "pkg"}, {Name: "ci"}, {Name: "cd.office"}}}
 	p.SortJobs()
-	if len(p.Jobs) != 3 || p.Jobs[0].Name != "cd.hk" || p.Jobs[1].Name != "cd.office" || p.Jobs[2].Name != "ci" {
+	if len(p.Jobs) != 4 || p.Jobs[0].Name != "ci" || p.Jobs[1].Name != "cd.office" || p.Jobs[2].Name != "cd.hk" || p.Jobs[3].Name != "pkg" {
 		t.Fatalf("%+v", p.Jobs)
 	}
 }

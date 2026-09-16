@@ -27,19 +27,22 @@ function TaskLine({ task }: { task: QueueTask }) {
   return inner
 }
 
+export function QueuePaused({ paused }: { paused?: boolean }) {
+  const t = useT()
+  if (!paused) return null
+  return <p className="text-sm text-amber-700 dark:text-amber-400">{t("queuePaused")}</p>
+}
+
 export function QueueStrip({ queue }: { queue: QueueInfo }) {
   const t = useT()
   const stats = queue.stats || { running_count: 0, pending_count: 0, worker_count: 0 }
   return (
-    <div className="flex flex-col gap-2">
-      {queue.paused ? <p className="text-sm text-amber-700 dark:text-amber-400">{t("queuePaused")}</p> : null}
-      <p className="text-sm text-muted-foreground">
-        {t("queueCounts", {
-          running: stats.running_count,
-          pending: stats.pending_count,
-        })}
-      </p>
-    </div>
+    <p className="text-sm text-muted-foreground">
+      {t("queueCounts", {
+        running: stats.running_count,
+        pending: stats.pending_count,
+      })}
+    </p>
   )
 }
 

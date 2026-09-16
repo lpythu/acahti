@@ -20,23 +20,13 @@ export function formatUnix(sec?: number) {
   return formatDate(d)
 }
 
-function clock(d: Date, locale: "en" | "zh") {
-  if (locale === "zh") return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
-  const am = d.getHours() < 12
-  const h = d.getHours() % 12 || 12
-  return `${h}:${pad2(d.getMinutes())} ${am ? "AM" : "PM"}`
+function clock(d: Date) {
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
 }
 
 function monthDay(d: Date, locale: "en" | "zh") {
   if (locale === "zh") return `${d.getMonth() + 1}月${d.getDate()}日`
   return d.toLocaleString("en", { month: "short", day: "numeric" })
-}
-
-function tzOffset(d: Date) {
-  const part = new Intl.DateTimeFormat("en", { timeZoneName: "shortOffset" })
-    .formatToParts(d)
-    .find((p) => p.type === "timeZoneName")?.value
-  return part && part !== "GMT" ? part : ""
 }
 
 export function formatUnixWhen(sec?: number, locale: "en" | "zh" = "en") {
@@ -51,7 +41,7 @@ export function formatUnixWhen(sec?: number, locale: "en" | "zh" = "en") {
     if (locale === "zh") return `${m} 分钟前`
     return m === 1 ? "1 minute ago" : `${m} minutes ago`
   }
-  const time = clock(d, locale)
+  const time = clock(d)
   if (d.toDateString() === now.toDateString()) {
     return locale === "zh" ? `今天 ${time}` : `Today at ${time}`
   }
@@ -60,15 +50,13 @@ export function formatUnixWhen(sec?: number, locale: "en" | "zh" = "en") {
   if (d.toDateString() === yest.toDateString()) {
     return locale === "zh" ? `昨天 ${time}` : `Yesterday at ${time}`
   }
-  const tz = tzOffset(d)
   const day =
     d.getFullYear() === now.getFullYear()
       ? monthDay(d, locale)
       : locale === "zh"
         ? `${d.getFullYear()}年${monthDay(d, locale)}`
         : `${monthDay(d, locale)}, ${d.getFullYear()}`
-  if (locale === "zh") return tz ? `${day} ${time} ${tz}` : `${day} ${time}`
-  return tz ? `${day} at ${time} ${tz}` : `${day} at ${time}`
+  return locale === "zh" ? `${day} ${time}` : `${day} at ${time}`
 }
 
 export function formatDuration(started?: number, finished?: number, status?: string) {
