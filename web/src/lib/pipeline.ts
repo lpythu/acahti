@@ -54,7 +54,7 @@ export function upsertRun<T extends { items?: Pipeline[] }>(page: T | null, next
 }
 
 export function runLane(p: Pipeline) {
-  return `${p.repo}\0${(p.ref || p.branch || "").trim()}`
+  return `${p.repo}\0${(p.branch || p.ref || "").trim()}`
 }
 
 export function upsertHead<T extends { items?: Pipeline[] }>(page: T | null, next: Pipeline, pageNo: number): T | null {

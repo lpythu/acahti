@@ -80,8 +80,8 @@ FROM pipelines WHERE repo = $1 AND number = $2
 const pipeSelect = `repo, number, status, event, branch, ref, title, message, author, avatar, commit, error,
 created, started, finished, jobs`
 
-// pipeLane groups a run with others on the same git ref (branch, tag, or PR).
-const pipeLane = `COALESCE(NULLIF(BTRIM(ref), ''), NULLIF(BTRIM(branch), ''), '')`
+// pipeLane groups a run with others on the same branch (or tag when branch is empty).
+const pipeLane = `COALESCE(NULLIF(BTRIM(branch), ''), NULLIF(BTRIM(ref), ''), '')`
 
 func appendFilter(b *strings.Builder, args *[]any, f Filter) {
 	if f.Repos != nil {
@@ -143,8 +143,9 @@ func (s *Store) List(f Filter, q page.Query) (page.Result[woodpecker.Pipeline], 
 	return page.Clip(items, q), nil
 }
 
-// ListHeads returns the newest run per (repo, ref). A later number on the same
-// branch replaces earlier ones; tags and PRs stay on their own lanes.
+// ListHeads returns the newest run per (repo, branch). A later number on the
+// same branch replaces earlier ones, including PR runs that share that branch.
+// Tags (empty branch) stay on their own ref.
 func (s *Store) ListHeads(f Filter, q page.Query) (page.Result[woodpecker.Pipeline], error) {
 	if !s.ready() {
 		return page.Of([]woodpecker.Pipeline{}, q, false), nil
