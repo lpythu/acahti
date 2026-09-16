@@ -104,3 +104,23 @@ func TestMergePRSudoesActor(t *testing.T) {
 		t.Fatalf("sudo=%q", sudo)
 	}
 }
+
+func TestDecodeCommitReadsGitAuthor(t *testing.T) {
+	cm, err := decodeCommit([]byte(`{"sha":"242402ea","message":"feat","author":{"name":"兰佳硕","email":"lan@noreply.acahti.saidc.ai"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cm.SHA != "242402ea" || cm.Commit.Author.Name != "兰佳硕" || cm.Commit.Message != "feat" {
+		t.Fatalf("%+v", cm)
+	}
+}
+
+func TestDecodeCommitKeepsNestedAuthor(t *testing.T) {
+	cm, err := decodeCommit([]byte(`{"sha":"abc","commit":{"message":"feat","author":{"name":"兰佳硕"}},"author":{"login":"lan","full_name":"兰佳硕"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cm.Commit.Author.Name != "兰佳硕" || cm.Author == nil || cm.Author.Login != "lan" {
+		t.Fatalf("%+v", cm)
+	}
+}

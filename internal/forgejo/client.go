@@ -713,12 +713,41 @@ func (c *Client) ListCommits(owner, name, sha string, q page.Query) (page.Result
 }
 
 func (c *Client) GetCommit(owner, name, sha string) (Commit, error) {
-	b, _, err := c.do(http.MethodGet, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/commits/"+url.PathEscape(sha), "", "", nil)
+	b, _, err := c.do(http.MethodGet, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/git/commits/"+url.PathEscape(sha), "", "", nil)
 	if err != nil {
 		return Commit{}, err
 	}
+	return decodeCommit(b)
+}
+
+func decodeCommit(b []byte) (Commit, error) {
 	var out Commit
-	return out, json.Unmarshal(b, &out)
+	if err := json.Unmarshal(b, &out); err != nil {
+		return Commit{}, err
+	}
+	if strings.TrimSpace(out.Commit.Author.Name) != "" {
+		return out, nil
+	}
+	var flat struct {
+		SHA       string       `json:"sha"`
+		Message   string       `json:"message"`
+		Author    CommitPerson `json:"author"`
+		Committer CommitPerson `json:"committer"`
+	}
+	if err := json.Unmarshal(b, &flat); err != nil {
+		return out, nil
+	}
+	if out.SHA == "" {
+		out.SHA = flat.SHA
+	}
+	if out.Commit.Message == "" {
+		out.Commit.Message = flat.Message
+	}
+	out.Commit.Author = flat.Author
+	if out.Commit.Committer.Name == "" {
+		out.Commit.Committer = flat.Committer
+	}
+	return out, nil
 }
 
 func (c *Client) GetCommitDiff(owner, name, sha string) (string, error) {
