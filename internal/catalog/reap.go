@@ -140,16 +140,6 @@ func (c *Catalog) reapQueue(fp map[string]string) {
 	}
 	keep := map[string]string{}
 	for _, p := range listed {
-		if woodpecker.InFlight(p.Status) && woodpecker.BlockedOnFailed(p) {
-			done, err := c.CancelPipeline("", p.Repo, p.Number)
-			if err != nil {
-				log.Printf("pipeline queue: drop failed %s #%d: %v", p.Repo, p.Number, err)
-			} else {
-				log.Printf("pipeline queue: drop failed %s #%d (upstream failed)", p.Repo, p.Number)
-				c.emit(done)
-			}
-			continue
-		}
 		painted := p
 		if woodpecker.InFlight(p.Status) {
 			fresh, err := c.Refresh(p.Repo, p.Number)

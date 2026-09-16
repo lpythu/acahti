@@ -44,7 +44,7 @@ function JobNode({
           <SidebarMenuSub>
             {job.steps.map((s) => {
               const selected = !activeFile && activeStep?.pid === s.pid && activeStep.name === s.name
-              const state = job.state === "skipped" && s.state !== "success" ? "skipped" : s.state
+              const state = s.state
               return (
                 <SidebarMenuSubItem key={`${s.pid}-${s.name}`}>
                   <SidebarMenuSubButton

@@ -86,60 +86,11 @@ func Annotate(p Pipeline, q QueueInfo) Pipeline {
 	for i := range p.Jobs {
 		annotateJob(&p.Jobs[i], p, q)
 	}
-	if BlockedOnFailed(p) {
-		p.Status = "failure"
-		p.Wait = ""
-		p.QueuePosition = 0
-		p.Agent = ""
-		return p
-	}
 	if !InFlight(p.Status) {
-		return p
-	}
-	if q.Fetched && !InQueue(p, q) {
-		p.Wait = ""
-		p.QueuePosition = 0
-		p.Agent = ""
-		p.Status = settleFromJobs(p)
 		return p
 	}
 	p.Wait, p.QueuePosition, p.Agent = pipelineWait(p)
 	return p
-}
-
-func settleFromJobs(p Pipeline) string {
-	if len(p.Jobs) == 0 {
-		if InFlight(p.Status) {
-			return "pending"
-		}
-		return p.Status
-	}
-	run, fail, pending := false, false, false
-	for _, j := range p.Jobs {
-		st := strings.ToLower(j.State)
-		if st == "running" {
-			run = true
-		}
-		if failedStatus(st) {
-			fail = true
-		}
-		if st == "pending" || st == "blocked" {
-			pending = true
-		}
-	}
-	if run {
-		return "running"
-	}
-	if fail {
-		return "failure"
-	}
-	if pending {
-		return "pending"
-	}
-	if !InFlight(p.Status) {
-		return p.Status
-	}
-	return "success"
 }
 
 func InQueue(p Pipeline, q QueueInfo) bool {
@@ -161,25 +112,6 @@ func InQueue(p Pipeline, q QueueInfo) bool {
 	return false
 }
 
-func BlockedOnFailed(p Pipeline) bool {
-	fail, run, leftover := false, false, false
-	for _, j := range p.Jobs {
-		st := strings.ToLower(j.State)
-		if failedStatus(st) {
-			fail = true
-			continue
-		}
-		if st == "running" {
-			run = true
-			continue
-		}
-		if st == "pending" || st == "skipped" {
-			leftover = true
-		}
-	}
-	return fail && !run && leftover
-}
-
 func annotateJob(j *Job, p Pipeline, q QueueInfo) {
 	if t, ok := findTask(q.Running, p, j.Name); ok {
 		j.Wait = ""
@@ -187,13 +119,6 @@ func annotateJob(j *Job, p Pipeline, q QueueInfo) {
 		if strings.EqualFold(j.State, "pending") {
 			j.State = "running"
 		}
-		return
-	}
-	if q.Fetched && strings.EqualFold(j.State, "running") {
-		j.State = "pending"
-	}
-	if upstreamFailed(p, *j) && !strings.EqualFold(j.State, "running") && !strings.EqualFold(j.State, "success") {
-		skipOrphan(j)
 		return
 	}
 	if t, ok := findTask(q.WaitingOnDeps, p, j.Name); ok {
@@ -208,41 +133,7 @@ func annotateJob(j *Job, p Pipeline, q QueueInfo) {
 		}
 		j.QueuePosition = t.QueuePosition
 		j.Agent = t.Agent
-		return
 	}
-	if strings.EqualFold(j.State, "pending") && (!q.Fetched || InQueue(p, q)) {
-		j.Wait = inferWait(p, *j)
-	}
-}
-
-func skipOrphan(j *Job) {
-	j.State = "skipped"
-	j.Wait = ""
-	j.QueuePosition = 0
-	j.Agent = ""
-	for i := range j.Steps {
-		if strings.EqualFold(j.Steps[i].State, "success") {
-			continue
-		}
-		j.Steps[i].State = "skipped"
-		j.Steps[i].Error = ""
-	}
-}
-
-func upstreamFailed(p Pipeline, job Job) bool {
-	rank := declaredRank(job.Name)
-	for _, other := range p.Jobs {
-		if other.Name == job.Name {
-			continue
-		}
-		if declaredRank(other.Name) >= rank {
-			continue
-		}
-		if failedStatus(other.State) {
-			return true
-		}
-	}
-	return false
 }
 
 func findTask(tasks []QueueTask, p Pipeline, job string) (QueueTask, bool) {
@@ -267,26 +158,6 @@ func taskMatchesPipeline(t QueueTask, p Pipeline) bool {
 	return false
 }
 
-func inferWait(p Pipeline, job Job) string {
-	rank := declaredRank(job.Name)
-	for _, other := range p.Jobs {
-		if other.Name == job.Name {
-			continue
-		}
-		if declaredRank(other.Name) >= rank {
-			continue
-		}
-		st := strings.ToLower(other.State)
-		if InFlight(st) || st == "" {
-			return WaitDeps
-		}
-		if st != "success" && st != "skipped" {
-			return WaitDeps
-		}
-	}
-	return WaitQueue
-}
-
 func pipelineWait(p Pipeline) (wait string, pos int, agent string) {
 	for _, j := range p.Jobs {
 		if strings.EqualFold(j.State, "running") {
@@ -304,9 +175,6 @@ func pipelineWait(p Pipeline) (wait string, pos int, agent string) {
 		if j.Wait == wait && wait == WaitQueue && j.QueuePosition > 0 && (pos == 0 || j.QueuePosition < pos) {
 			pos = j.QueuePosition
 		}
-	}
-	if wait == "" && strings.EqualFold(p.Status, "pending") {
-		wait = WaitQueue
 	}
 	return wait, pos, agent
 }
@@ -358,45 +226,26 @@ func (c *Client) QueueInfo() (QueueInfo, error) {
 	return q, nil
 }
 
-func PipelineStripStats(q QueueInfo, get func(QueueTask) (Pipeline, bool)) QueueStats {
+func PipelineStripStats(q QueueInfo) QueueStats {
 	seen := map[string]bool{}
 	var s QueueStats
-	consider := func(tasks []QueueTask, fallback string) {
+	count := func(tasks []QueueTask, queued bool) {
 		for _, t := range tasks {
 			k := pipelineKey(t)
 			if k == "" || seen[k] {
 				continue
 			}
 			seen[k] = true
-			p, ok := get(t)
-			if !ok {
-				if fallback == "" {
-					continue
-				}
-				p = Pipeline{Repo: t.Repo, Number: t.Number, ID: t.PipelineID, Status: fallback}
-			}
-			switch stripBucket(Annotate(p, q)) {
-			case "running":
-				s.RunningCount++
-			case "queued":
+			if queued {
 				s.PendingCount++
+			} else {
+				s.RunningCount++
 			}
 		}
 	}
-	consider(q.Running, "running")
-	consider(q.Pending, "pending")
-	consider(q.WaitingOnDeps, "")
+	count(q.Running, false)
+	count(q.Pending, true)
 	return s
-}
-
-func stripBucket(p Pipeline) string {
-	if strings.EqualFold(p.Status, "running") && p.Wait == "" {
-		return "running"
-	}
-	if p.Wait == WaitQueue || p.Wait == WaitConcurrency {
-		return "queued"
-	}
-	return ""
 }
 
 func pipelineKey(t QueueTask) string {

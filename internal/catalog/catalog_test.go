@@ -73,7 +73,7 @@ func TestWriteID(t *testing.T) {
 	}
 }
 
-func TestDecoratePipeNeedsDeclaredNames(t *testing.T) {
+func TestDecoratePipeKeepsKernelJobs(t *testing.T) {
 	c := New(config.Config{}, nil, nil, nil)
 	p := c.decoratePipe(woodpecker.Pipeline{Status: "error", Error: "bad yaml", Repo: "saidc/demo"})
 	if p.Error != "bad yaml" {
@@ -158,37 +158,6 @@ func TestMergeReadyPRsNilIndex(t *testing.T) {
 	p.Head.SHA = "abc"
 	if got := c.mergeReadyPRs([]forgejo.PR{p}); got != nil {
 		t.Fatalf("%+v", got)
-	}
-}
-
-func TestPresentSkipsCDWhenCIFailed(t *testing.T) {
-	c := New(config.Config{}, nil, nil, nil)
-	p := c.Present(woodpecker.Pipeline{
-		Status: "running",
-		Jobs: []woodpecker.Job{
-			{Name: "ci", State: "failure"},
-			{Name: "cd.office", State: "pending"},
-		},
-	})
-	if p.Status != "failure" || p.Wait != "" {
-		t.Fatalf("pipeline %+v", p)
-	}
-	if p.Jobs[1].State != "skipped" || p.Jobs[1].Wait != "" {
-		t.Fatalf("cd %+v", p.Jobs[1])
-	}
-}
-
-func TestPresentInfersWait(t *testing.T) {
-	c := New(config.Config{}, nil, nil, nil)
-	p := c.Present(woodpecker.Pipeline{
-		Status: "pending",
-		Jobs: []woodpecker.Job{
-			{Name: "ci", State: "running"},
-			{Name: "cd.office", State: "pending"},
-		},
-	})
-	if p.Jobs[1].Wait != woodpecker.WaitDeps {
-		t.Fatalf("%+v", p.Jobs)
 	}
 }
 

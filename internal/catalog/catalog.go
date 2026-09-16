@@ -783,7 +783,7 @@ func (c *Catalog) queueInfo() woodpecker.QueueInfo {
 		return woodpecker.QueueInfo{}
 	}
 	workers := q.Stats.WorkerCount
-	q.Stats = woodpecker.PipelineStripStats(q, c.lookupQueueTask)
+	q.Stats = woodpecker.PipelineStripStats(q)
 	q.Stats.WorkerCount = workers
 	if c.mem != nil {
 		c.mem.setQueue(q)
@@ -791,40 +791,9 @@ func (c *Catalog) queueInfo() woodpecker.QueueInfo {
 	return q
 }
 
-func (c *Catalog) lookupQueueTask(t woodpecker.QueueTask) (woodpecker.Pipeline, bool) {
-	if t.Repo == "" || t.Number == 0 || c.Idx == nil {
-		return woodpecker.Pipeline{}, false
-	}
-	p, ok, err := c.Idx.Get(t.Repo, t.Number)
-	if err != nil || !ok {
-		return woodpecker.Pipeline{}, false
-	}
-	p.HydrateJobs()
-	return p, true
-}
-
 func (c *Catalog) decoratePipe(p woodpecker.Pipeline) woodpecker.Pipeline {
 	p.HydrateJobs()
-	p = c.applyCommitAuthor(p)
-	return woodpecker.MergeDeclaredJobs(p, c.declaredJobNames(p))
-}
-
-func (c *Catalog) declaredJobNames(p woodpecker.Pipeline) []string {
-	files := c.pipelineFiles(p)
-	var names []string
-	seen := map[string]bool{}
-	for _, f := range files {
-		n := strings.TrimSuffix(f.Name, path.Ext(f.Name))
-		if n == "" || n == "pipeline" || seen[n] {
-			continue
-		}
-		if f.Content != "" && !matchesWhen(f.Content, p.Event, p.Branch) {
-			continue
-		}
-		seen[n] = true
-		names = append(names, n)
-	}
-	return names
+	return c.applyCommitAuthor(p)
 }
 
 func (c *Catalog) pipelineFiles(p woodpecker.Pipeline) []FileBlob {

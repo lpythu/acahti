@@ -1,43 +1,8 @@
 package woodpecker
 
 import (
-	"strconv"
 	"testing"
 )
-
-func TestAnnotateSkipsCDWhenCIFailed(t *testing.T) {
-	p := Pipeline{
-		Repo:   "saidc/api-gateway",
-		Number: 49,
-		Status: "running",
-		Jobs: []Job{
-			{Name: "ci", State: "failure"},
-			{Name: "cd.office", State: "killed", Steps: []Step{
-				{Name: "clone", State: "killed"},
-				{Name: "deploy", State: "failure"},
-			}},
-		},
-	}
-	q := QueueInfo{Pending: []QueueTask{{
-		Name: "cd.office", Repo: "saidc/api-gateway", Number: 49,
-		Wait: WaitConcurrency, QueuePosition: 11,
-	}}}
-	got := Annotate(p, q)
-	if got.Status != "failure" || got.Wait != "" {
-		t.Fatalf("pipeline %+v", got)
-	}
-	if got.Jobs[1].State != "skipped" || got.Jobs[1].Wait != "" {
-		t.Fatalf("cd %+v", got.Jobs[1])
-	}
-	for _, s := range got.Jobs[1].Steps {
-		if s.State != "skipped" {
-			t.Fatalf("step %s %s", s.Name, s.State)
-		}
-	}
-	if !BlockedOnFailed(p) {
-		t.Fatal("index row must be droppable")
-	}
-}
 
 func TestAnnotateQueuePosition(t *testing.T) {
 	p := Pipeline{
@@ -102,17 +67,22 @@ func TestAnnotateConcurrency(t *testing.T) {
 	}
 }
 
-func TestInferWaitDepsFromEarlierJob(t *testing.T) {
+func TestAnnotateDoesNotInventSkipOrWait(t *testing.T) {
 	p := Pipeline{
-		Status: "pending",
+		Repo:   "saidc/api-gateway",
+		Number: 49,
+		Status: "running",
 		Jobs: []Job{
-			{Name: "ci", State: "running"},
+			{Name: "ci", State: "failure"},
 			{Name: "cd.office", State: "pending"},
 		},
 	}
 	got := Annotate(p, QueueInfo{})
-	if got.Jobs[1].Wait != WaitDeps {
-		t.Fatalf("%+v", got.Jobs[1])
+	if got.Status != "running" {
+		t.Fatalf("status %+v", got)
+	}
+	if got.Jobs[1].State != "pending" || got.Jobs[1].Wait != "" {
+		t.Fatalf("cd %+v", got.Jobs[1])
 	}
 }
 
@@ -141,46 +111,6 @@ func TestWaitFingerprintChanges(t *testing.T) {
 	}
 }
 
-func TestAnnotateEmptyQueueSettlesStaleRunning(t *testing.T) {
-	p := Pipeline{
-		Repo:   "saidc/tm-cs",
-		Number: 56,
-		Status: "running",
-		Jobs: []Job{
-			{Name: "ci", State: "running"},
-			{Name: "cd.office", State: "running"},
-		},
-	}
-	got := Annotate(p, QueueInfo{Fetched: true})
-	if got.Status != "pending" || got.Wait != "" {
-		t.Fatalf("pipeline %+v", got)
-	}
-	for _, j := range got.Jobs {
-		if j.State != "pending" || j.Wait != "" {
-			t.Fatalf("job %+v", j)
-		}
-	}
-}
-
-func TestAnnotateEmptyQueueFailureNotQueued(t *testing.T) {
-	p := Pipeline{
-		Repo:   "saidc/api-gateway",
-		Number: 50,
-		Status: "running",
-		Jobs: []Job{
-			{Name: "ci", State: "failure"},
-			{Name: "cd.office", State: "running"},
-		},
-	}
-	got := Annotate(p, QueueInfo{Fetched: true})
-	if got.Status != "failure" || got.Wait != "" {
-		t.Fatalf("pipeline %+v", got)
-	}
-	if got.Jobs[1].State != "skipped" || got.Jobs[1].Wait != "" {
-		t.Fatalf("cd %+v", got.Jobs[1])
-	}
-}
-
 func TestAnnotateEmptyQueueDoesNotInferWait(t *testing.T) {
 	p := Pipeline{
 		Repo:   "saidc/voidgate",
@@ -194,43 +124,25 @@ func TestAnnotateEmptyQueueDoesNotInferWait(t *testing.T) {
 	}
 }
 
-func TestPipelineStripStatsSkipsFailedLeftovers(t *testing.T) {
-	q := QueueInfo{
-		Fetched: true,
-		Pending: []QueueTask{{Repo: "saidc/ops", Number: 46, Name: "cd.office"}},
-		WaitingOnDeps: []QueueTask{
-			{Repo: "saidc/ops", Number: 46, Name: "pkg"},
-			{Repo: "saidc/c", Number: 3, Name: "cd.office"},
-		},
-	}
-	pipes := map[string]Pipeline{
-		"saidc/ops#46": {
-			Repo: "saidc/ops", Number: 46, Status: "running",
-			Jobs: []Job{{Name: "ci", State: "failure"}, {Name: "cd.office", State: "pending"}},
-		},
-	}
-	s := PipelineStripStats(q, func(t QueueTask) (Pipeline, bool) {
-		p, ok := pipes[t.Repo+"#"+strconv.FormatInt(t.Number, 10)]
-		return p, ok
-	})
-	if s.RunningCount != 0 || s.PendingCount != 0 {
-		t.Fatalf("failed leftovers must not count %+v", s)
-	}
-}
-
 func TestPipelineStripStatsRunningAndQueued(t *testing.T) {
 	q := QueueInfo{
 		Fetched: true,
 		Running: []QueueTask{{Repo: "saidc/a", Number: 1, Name: "ci"}},
 		Pending: []QueueTask{{Repo: "saidc/b", Number: 2, Name: "ci"}},
 	}
-	s := PipelineStripStats(q, func(t QueueTask) (Pipeline, bool) {
-		if t.Number == 1 {
-			return Pipeline{Repo: t.Repo, Number: 1, Status: "running", Jobs: []Job{{Name: "ci", State: "running"}}}, true
-		}
-		return Pipeline{Repo: t.Repo, Number: 2, Status: "pending", Jobs: []Job{{Name: "ci", State: "pending"}}}, true
-	})
+	s := PipelineStripStats(q)
 	if s.RunningCount != 1 || s.PendingCount != 1 {
+		t.Fatalf("%+v", s)
+	}
+}
+
+func TestPipelineStripStatsOnePipelineTwoJobs(t *testing.T) {
+	q := QueueInfo{
+		Running: []QueueTask{{Repo: "saidc/a", Number: 1, Name: "ci"}},
+		Pending: []QueueTask{{Repo: "saidc/a", Number: 1, Name: "cd.office"}},
+	}
+	s := PipelineStripStats(q)
+	if s.RunningCount != 1 || s.PendingCount != 0 {
 		t.Fatalf("%+v", s)
 	}
 }

@@ -283,10 +283,10 @@ flowchart LR
 **Write (command)**
 
 1. SPA/MCP calls trigger / rerun / cancel / approve → Woodpecker.
-2. Gateway `Remember`s the pipeline: merge declared jobs from YAML, upsert `acahti.pipelines`, publish `pipeline.updated`.
+2. Gateway `Remember`s the pipeline: hydrate kernel jobs, upsert `acahti.pipelines`, publish `pipeline.updated`.
 3. Woodpecker progress also arrives as Forgejo `status` webhooks or `POST /hooks/woodpecker`. Same `Remember`.
 4. Startup backfill lists Woodpecker runs per active repo and `Remember`s them.
-5. `WatchPipelines` refreshes indexed `running` and `pending` rows from Woodpecker (queue paint every 3s; 15m silent-log cancel every 1m). Queue `wait` / `queue_position` is painted live from `GET /api/queue/info` (not stored). A row not in that snapshot is not running or queued: stale `running` jobs are demoted, leftover CD after failed CI is skipped/`Cancel`ed. A running step whose log has not grown for 15m is `Cancel`ed (Woodpecker does not close a step when the process dies without a Done RPC). List paint uses the same queue snapshot as `GET /ui/queue` (no Woodpecker GET on the list path).
+5. `WatchPipelines` refreshes indexed `running` and `pending` rows from Woodpecker (queue paint every 3s; 15m silent-log cancel every 1m). Queue `wait` / `queue_position` is painted live from `GET /api/queue/info` (not stored). Job skip, `when`, and `depends_on` are Woodpecker’s. A running step whose log has not grown for 15m is `Cancel`ed (Woodpecker does not close a step when the process dies without a Done RPC). List paint uses the same queue snapshot as `GET /ui/queue` (no Woodpecker GET on the list path).
 
 **Read (query)**
 
@@ -307,7 +307,7 @@ One screen, one JSON. The SPA renders fields; it does not walk kernels.
 | `GET /ui/board` | open PRs whose head SHA latest indexed pipeline is success |
 | `GET /ui/repos/{owner}/{name}/pipelines` | that repo’s run history |
 | `GET /ui/pipelines/{owner}/{name}/{n}` | `{ pipeline, team, files }` — `pipeline.jobs[].steps`; in-flight `wait` / `queue_position` / `agent` |
-| `GET /ui/queue` | Owners: Woodpecker queue snapshot. `stats` counts pipelines whose painted status is running or queued (failed leftover CD is not queued). Task lists stay jobs. |
+| `GET /ui/queue` | Owners: Woodpecker queue snapshot. `stats` counts pipelines (not jobs) that are running or queued. Task lists stay jobs. |
 | `GET /ui/agents` | Owners: runners (`capacity`, `running`) plus `queue` |
 | `GET /ui/secrets` | Org secrets catalog (Owners) |
 | `GET /ui/repos/{owner}/{name}/secrets` | effective set: org inherited + repo override (repo admin) |
