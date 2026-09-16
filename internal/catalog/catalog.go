@@ -1260,14 +1260,6 @@ func (c *Catalog) BoardPipes(user string, q page.Query) (page.Result[woodpecker.
 	if err != nil {
 		return page.Result[woodpecker.Pipeline]{}, err
 	}
-	return c.pagePipes(latest, q), nil
-}
-
-func (c *Catalog) InboxPipes(user string, q page.Query) (page.Result[woodpecker.Pipeline], error) {
-	latest, err := c.latestPipes(user)
-	if err != nil {
-		return page.Result[woodpecker.Pipeline]{}, err
-	}
 	var attention []woodpecker.Pipeline
 	for _, p := range latest {
 		if boardPipeAttention(p.Status) {

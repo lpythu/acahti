@@ -276,7 +276,7 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		if section == "prs" {
 			return s.Cat.BoardPRs(token, pq)
 		}
-		return s.Cat.InboxPipes(token, pq)
+		return s.Cat.BoardPipes(token, pq)
 	case "pkg_list":
 		owner := str("owner")
 		if owner == "" {

@@ -32,12 +32,14 @@ export function BoardPage() {
     if (ev.type !== "pipeline.updated" || section !== "pipes") return
     const next = asPipeline(ev.data)
     if (!next) return
+    const attention = new Set(["blocked", "failure", "error", "killed", "declined"])
     pipes.apply((page) => {
       const base = page ?? { items: [] as Pipeline[], page: pipes.page, page_size: pipes.pageSize, has_more: false }
       const withoutRepo = {
         ...base,
         items: base.items.filter((p: Pipeline) => p.repo !== next.repo),
       }
+      if (!attention.has(next.status)) return withoutRepo
       return upsertRun(withoutRepo, next, pipes.page)
     })
   })
@@ -114,7 +116,7 @@ export function BoardPage() {
   return (
     <PagedList
       list={pipes}
-      emptyText={t("noPipelines")}
+      emptyText={t("inboxEmpty")}
       skeleton="lines"
     >
       {(items) => (
