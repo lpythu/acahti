@@ -18,7 +18,7 @@ import { useLoad } from "@/hooks/use-load"
 import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api, repoName, splitRepo, type Invite, type UserRepoPerm } from "@/lib/api"
-import { onboardAgent, onboardYou } from "@/lib/onboard"
+import { onboardAgent, onboardYou, randomPassword } from "@/lib/onboard"
 import { useSession } from "@/lib/session"
 
 async function copyText(text: string, ok: string, fail: string) {
@@ -80,24 +80,47 @@ function AuthorInput({
 }
 
 function PasswordInput({
+  login,
   value,
   hasPassword,
   onChange,
+  onPassword,
 }: {
+  login: string
   value: string
   hasPassword: boolean
   onChange: (v: string) => void
+  onPassword: (pw: string) => void
 }) {
   const t = useT()
   const [copied, setCopied] = useState(false)
-  const known = value.trim() !== ""
-  const showMask = hasPassword && !known
+  const [focused, setFocused] = useState(false)
+  const [draft, setDraft] = useState("")
+  const [busy, setBusy] = useState(false)
+  const showMask = hasPassword && !focused
 
   async function copy() {
-    if (!known) return
-    if (await copyText(value, t("copied"), t("copyFailed"))) {
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 1500)
+    if (busy) return
+    setBusy(true)
+    try {
+      let pw = value.trim()
+      if (!pw) {
+        const r = await api.ensurePassword(login)
+        pw = (r.password || "").trim()
+      }
+      if (!pw) {
+        pw = randomPassword()
+        await api.setPassword(login, pw)
+      }
+      onPassword(pw)
+      if (await copyText(pw, t("copied"), t("copyFailed"))) {
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 1500)
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("copyFailed"))
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -107,9 +130,17 @@ function PasswordInput({
         type="password"
         autoComplete="new-password"
         aria-label={t("password")}
-        value={value}
+        value={focused ? draft : ""}
         className="w-40 pr-7"
-        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => {
+          setDraft("")
+          setFocused(true)
+        }}
+        onBlur={() => setFocused(false)}
+        onChange={(e) => {
+          setDraft(e.target.value)
+          onChange(e.target.value)
+        }}
       />
       {showMask ? (
         <span
@@ -119,11 +150,12 @@ function PasswordInput({
           ••••••••
         </span>
       ) : null}
-      {known ? (
+      {hasPassword ? (
         <button
           type="button"
           aria-label={t("copy")}
-          className="absolute top-1/2 right-1.5 z-10 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          disabled={busy}
+          className="absolute top-1/2 right-1.5 z-10 -translate-y-1/2 text-muted-foreground hover:text-foreground disabled:opacity-50"
           onClick={() => void copy()}
         >
           {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
@@ -562,9 +594,11 @@ export function UsersPage() {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <PasswordInput
+                        login={u.login}
                         value={password}
                         hasPassword={Boolean(u.has_password) || password.trim() !== ""}
                         onChange={(v) => setResets((m) => ({ ...m, [u.login]: v }))}
+                        onPassword={(pw) => setResets((m) => ({ ...m, [u.login]: pw }))}
                       />
                       <Button type="button" size="sm" variant="outline" onClick={() => void resetRow(u.login, u.password || "")}>
                         {t("resetPassword")}
