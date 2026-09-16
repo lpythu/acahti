@@ -12,7 +12,7 @@ inputs:
       CODEUP_NETRC → id=codeup_netrc.
   push:
     required: false
-    description: "true (default) is buildx --push; false is cache-only (CI, no --load)"
+    description: "true (default) is buildx --push; false is --output=type=cacheonly (CI)"
   network:
     required: false
     description: docker buildx --network (default host)

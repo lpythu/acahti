@@ -114,12 +114,14 @@ build_one() {
 	fi
 	if [[ "$push" == "true" ]]; then
 		args+=(--push)
+	else
+		args+=(--output=type=cacheonly)
 	fi
 	args+=("$context")
 	if [[ "$push" == "true" ]]; then
 		echo "==> build+push ${primary}"
 	else
-		echo "==> build ${primary}"
+		echo "==> build ${primary} (cache-only)"
 	fi
 	docker buildx build "${args[@]}"
 	echo "OK docker-build ${primary}"
