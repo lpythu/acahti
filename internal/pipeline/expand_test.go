@@ -135,6 +135,45 @@ func TestHandleConfigAuthAndExpand(t *testing.T) {
 	}
 }
 
+func TestHandleConfigKeepsCIAndCD(t *testing.T) {
+	h := HandleConfig("secret", nil)
+	body, _ := json.Marshal(configRequest{
+		Configuration: []fileMeta{
+			{Name: "ci.yaml", Data: "when:\n  - event: [push]\nsteps:\n  x:\n    image: bash\n    commands: [true]\n"},
+			{Name: "cd.office.yaml", Data: "when:\n  - event: [push]\n    branch: [dev]\ndepends_on: [ci]\nsteps:\n  x:\n    image: bash\n    commands: [true]\n"},
+		},
+	})
+	var parsed configRequest
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	parsed.Pipeline.Event = "push"
+	parsed.Pipeline.Branch = "dev"
+	parsed.Pipeline.Ref = "refs/heads/dev"
+	body, _ = json.Marshal(parsed)
+	req := httptest.NewRequest(http.MethodPost, "/hooks/pipeline-config", strings.NewReader(string(body)))
+	req.SetBasicAuth("pipe", "secret")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("%d %s", rr.Code, rr.Body.String())
+	}
+	var resp configResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Configs) != 2 {
+		t.Fatalf("want ci and cd.office, got %+v", resp)
+	}
+	names := resp.Configs[0].Name + " " + resp.Configs[1].Name
+	if !strings.Contains(names, "ci.yaml") || !strings.Contains(names, "cd.office.yaml") {
+		t.Fatalf("names=%s", names)
+	}
+	if !strings.Contains(resp.Configs[1].Data, "depends_on") {
+		t.Fatalf("cd should keep depends_on ci:\n%s", resp.Configs[1].Data)
+	}
+}
+
 func TestExpandSecretsList(t *testing.T) {
 	got, err := Expand([]byte(`steps:
   login:
