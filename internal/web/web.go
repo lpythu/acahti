@@ -466,10 +466,6 @@ func (p *Pages) ensurePassword(login string) (string, error) {
 	if pw := p.Passwords.Get(login); pw != "" {
 		return pw, nil
 	}
-	has, ok := p.forgejoPasswordSet(login)
-	if !ok || has {
-		return "", nil
-	}
 	return p.initPassword(login)
 }
 

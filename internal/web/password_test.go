@@ -81,9 +81,6 @@ func TestPasswordEnsureInitsWhenMissing(t *testing.T) {
 		Auth:      auth.New([]byte("test"), "alice"),
 		FJ:        forgejo.New(fj.URL, "t"),
 		Passwords: store,
-		passwordSet: func(string) (bool, bool) {
-			return false, true
-		},
 	}
 	got := callPassword(t, p, "alice", `{"username":"gaowenrong"}`)
 	pw, _ := got["password"].(string)
@@ -103,14 +100,19 @@ func TestPasswordEnsureInitsWhenMissing(t *testing.T) {
 	}
 }
 
-func TestPasswordEnsureDoesNotResetExisting(t *testing.T) {
-	var patches int
+func TestPasswordEnsureInitsWhenVaultEmpty(t *testing.T) {
+	var body map[string]any
 	fj := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPatch {
-			patches++
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/admin/users":
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"login": "zhuyu", "login_name": "zhuyu", "source_id": 0}})
+		case r.Method == http.MethodPatch && r.URL.Path == "/api/v1/admin/users/zhuyu":
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
 		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`[]`))
 	}))
 	t.Cleanup(fj.Close)
 	store, err := passwd.Open(t.TempDir())
@@ -125,12 +127,18 @@ func TestPasswordEnsureDoesNotResetExisting(t *testing.T) {
 			return true, true
 		},
 	}
-	got := callPassword(t, p, "alice", `{"username":"lipeiyang"}`)
-	if got["password"] != "" || got["has_password"] != true {
-		t.Fatalf("ensure %v", got)
+	got := callPassword(t, p, "alice", `{"username":"zhuyu"}`)
+	pw, _ := got["password"].(string)
+	if len(pw) != 24 {
+		t.Fatalf("init %v", got)
 	}
-	if patches != 0 {
-		t.Fatalf("reset existing %d", patches)
+	if body["password"] != pw {
+		t.Fatalf("forgejo %v", body)
+	}
+	body = nil
+	again := callPassword(t, p, "alice", `{"username":"zhuyu"}`)
+	if again["password"] != pw || body != nil {
+		t.Fatalf("second ensure reset %v patch=%v", again, body)
 	}
 }
 

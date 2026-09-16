@@ -6,9 +6,7 @@ function rootOf(rootURL: string) {
 
 export function onboardYou(rootURL: string, login: string, password: string) {
   const root = rootOf(rootURL)
-  const lines = [`Login    ${root}/login`, `User     ${login}`]
-  if (password) lines.push(`Password ${password}`)
-  return lines.join("\n")
+  return [`Login    ${root}/login`, `User     ${login}`, `Password ${password}`].join("\n")
 }
 
 export function onboardAgent(rootURL: string) {
