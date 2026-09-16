@@ -4,7 +4,7 @@ A **pipeline** is one run. Each YAML file in `.acahti/pipelines/` is a **job** i
 
 Acahti expands `pipe:` before the Runner executes. The Runner runs `acahti-pipe <name>`. Do not vendor `.acahti/scripts`. Do not write `uses:`.
 
-A step is either `pipe:` + `with:` or raw `commands:` (one-offs stay in the repo). `when`, `depends_on`, and `labels` pass through. Expand injects Woodpecker `concurrency` when the job file omits it: `cd.office` → group `deploy-office`, `cd.hk` → `deploy-hk`, `pkg` → `pkg` (limit 1). YAML `concurrency:` wins. CI files are unlimited except Runner `WOODPECKER_MAX_WORKFLOWS`.
+A step is either `pipe:` + `with:` or raw `commands:` (one-offs stay in the repo). `when`, `depends_on`, and `labels` pass through. Expand injects Woodpecker `concurrency` when the job file omits it: `cd.office` → group `deploy-office-<owner>-<repo>` (limit 1), `cd.hk` → `deploy-hk-…`, `pkg` → `pkg-…`. Same repo still serializes; different repos run in parallel. YAML `concurrency:` wins. CI files are unlimited except Runner capacity (`WOODPECKER_MAX_WORKFLOWS`, from host nproc/memory unless pinned).
 
 In `commands:`, write `$IMAGE` (shell). `${IMAGE}` is emptied by the runner before the step starts; `${CI_COMMIT_SHA}` is job context and is expanded.
 
@@ -68,13 +68,17 @@ Only org/repo admins can list or put secrets. Repo Secrets shows the effective s
 
 ### docker-build
 
-`with:` `images` (required). One image per line. First field is the primary tag. Optional `also=` extra tags (comma-separated), `context=` (default `.`), `file=` Dockerfile, other `KEY=VAL` as `--build-arg` (CI names `BASE_IMAGE=harbor.saidc/base/…` or the ACR library equivalent; Dockerfiles stay Harbor-free). Optional `push` (default `true`); `push: false` is `--load` only (CI). Job identity is forwarded as BuildKit secrets `id=acahti_user` / `id=acahti_token` (`ACAHTI_USER` / `ACAHTI_TOKEN`). The pipe does not write `.npmrc` or `.netrc`. `CODEUP_NETRC` → BuildKit `id=codeup_netrc`. Default `docker buildx --network=host`. Builds with `--pull --provenance=false --load`, then pushes primary and `also=` tags when `push` is true. Empty `images:` lines are skipped.
+`with:` `images` (required). One image per line. First field is the primary tag. Optional `also=` extra tags (comma-separated), `context=` (default `.`), `file=` Dockerfile, other `KEY=VAL` as `--build-arg` (CI names `BASE_IMAGE=harbor.saidc/base/…` or the ACR library equivalent; Dockerfiles stay Harbor-free). Optional `push` (default `true`); `push: false` is cache-only (CI, no `--load`). Job identity is forwarded as BuildKit secrets `id=acahti_user` / `id=acahti_token` (`ACAHTI_USER` / `ACAHTI_TOKEN`). The pipe does not write `.npmrc` or `.netrc`. `CODEUP_NETRC` → BuildKit `id=codeup_netrc`. Default builder `acahti` (`docker-container`, host network). Builds with `--pull --provenance=false`; `push: true` is `buildx --push` for primary and `also=` tags. Empty `images:` lines are skipped. After a successful build the pipe runs `docker-gc`.
 
 OCI tags: office CD `dev-${CI_COMMIT_SHA}`; HK CD `${CI_COMMIT_TAG#v}` (git tag `vX.Y.Z` → `X.Y.Z`). `latest` is a pointer at the same digest. `${CI_COMMIT_TAG#v}` is expanded in the pipe (`${CI_COMMIT_TAG}` is interpolated by the runner).
 
 ### oci-gc
 
 `with:` `repos` (required, one OCI repository per line, no tag). Optional `keep` (non-`latest` tags to keep, default 2). Always keeps `latest`. Uses `crane` already on the Runner (same class as docker/helm; `agent.sh` does not install it). Auth is the docker login already done in the job. Run after helm succeeds so retained tags are deployed ones.
+
+### docker-gc
+
+No `with:` required. Caps the Runner’s local BuildKit cache (`acahti` builder `--keep-storage=16GB`, `4GB` when `/` is ≥85% full), deletes other buildx builders, dangling images, stale `/tmp/woodpecker-local-*` (>6h), and leftover compose/云效 trees. Does not `docker system prune -a`. `docker-build` runs it after a successful build; `agent.sh` also installs an hourly systemd timer. Does not touch Harbor/ACR — that is `oci-gc`.
 
 ### helm
 
@@ -102,7 +106,7 @@ OCI tags: office CD `dev-${CI_COMMIT_SHA}`; HK CD `${CI_COMMIT_TAG#v}` (git tag 
 
 ## Examples
 
-CI verifies the image (`push: false`). It does not publish. Harbor login is only for `--pull` of private bases.
+CI verifies the image (`push: false`, cache-only). It does not publish. Harbor login is only for `--pull` of private bases.
 
 ```yaml
 steps:

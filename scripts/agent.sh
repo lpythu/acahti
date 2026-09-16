@@ -12,7 +12,7 @@
 #   AGENT_NAME=builder         # WOODPECKER_HOSTNAME
 #   VERSION=3.18.1
 #   MODE=lan|ssh-reverse       # ssh-reverse expects WOODPECKER_SERVER already 127.0.0.1:9000
-#   WOODPECKER_MAX_WORKFLOWS=4 # parallel workflows on this host (local backend)
+#   WOODPECKER_MAX_WORKFLOWS   # pin parallel workflows; default is host nproc/mem
 #
 # Run: sudo -E bash scripts/agent.sh
 set -euo pipefail
@@ -28,7 +28,35 @@ MODE="${MODE:-lan}"
 ROLE="${ROLE:-}"
 LABELS="${LABELS:-}"
 AGENT_NAME="${AGENT_NAME:-$(hostname -s)}"
-MAX_WORKFLOWS="${WOODPECKER_MAX_WORKFLOWS:-4}"
+if [[ -n "${WOODPECKER_MAX_WORKFLOWS:-}" ]]; then
+  MAX_WORKFLOWS="${WOODPECKER_MAX_WORKFLOWS}"
+else
+  cpus="$(nproc 2>/dev/null || echo 1)"
+  mem_gb="$(awk '/MemTotal:/ {printf "%d", $2/1024/1024}' /proc/meminfo 2>/dev/null || echo 0)"
+  if [[ "${mem_gb}" -lt 1 ]]; then
+    mem_gb=1
+  fi
+  by_cpu=$((cpus / 2))
+  if [[ "${by_cpu}" -lt 1 ]]; then
+    by_cpu=1
+  fi
+  headroom=$((mem_gb - 2))
+  if [[ "${headroom}" -lt 1 ]]; then
+    headroom=1
+  fi
+  by_mem=$((headroom / 4))
+  if [[ "${by_mem}" -lt 1 ]]; then
+    by_mem=1
+  fi
+  MAX_WORKFLOWS="${by_cpu}"
+  if [[ "${by_mem}" -lt "${MAX_WORKFLOWS}" ]]; then
+    MAX_WORKFLOWS="${by_mem}"
+  fi
+  if [[ "${MAX_WORKFLOWS}" -gt 16 ]]; then
+    MAX_WORKFLOWS=16
+  fi
+  echo "==> capacity cpus=${cpus} memGiB=${mem_gb} max_workflows=${MAX_WORKFLOWS}"
+fi
 
 if [[ -z "${LABELS}" ]]; then
   case "${ROLE}" in
@@ -132,6 +160,16 @@ if ! command -v crane >/dev/null; then
 fi
 
 install -d -m 0755 /etc/woodpecker
+buildx_cfg="${run_home}/.docker/buildx"
+install -d -o "${run_user}" -g "${run_user}" -m 0755 "${run_home}/.docker" "${buildx_cfg}"
+if command -v docker >/dev/null; then
+  echo "==> buildx builder acahti"
+  if ! sudo -u "${run_user}" env BUILDX_CONFIG="${buildx_cfg}" docker buildx inspect acahti >/dev/null 2>&1; then
+    sudo -u "${run_user}" env BUILDX_CONFIG="${buildx_cfg}" \
+      docker buildx create --name acahti --driver docker-container --driver-opt network=host >/dev/null
+  fi
+fi
+
 cat >"${tmpdir}/agent.env" <<EOF
 WOODPECKER_SERVER=${SERVER}
 WOODPECKER_AGENT_SECRET=${SECRET}
@@ -139,7 +177,9 @@ WOODPECKER_BACKEND=local
 WOODPECKER_HOSTNAME=${AGENT_NAME}
 WOODPECKER_AGENT_LABELS=${LABELS}
 WOODPECKER_MAX_WORKFLOWS=${MAX_WORKFLOWS}
+WOODPECKER_BACKEND_LOCAL_ISOLATED_HOME=true
 WOODPECKER_HEALTHCHECK=false
+BUILDX_CONFIG=${buildx_cfg}
 EOF
 chmod 600 "${tmpdir}/agent.env"
 # Drop a stale agent id from a previous control plane.
@@ -183,6 +223,36 @@ fi
 install -m 0600 "${tmpdir}/agent.env" /etc/woodpecker/agent.env
 chown root:root /etc/woodpecker/agent.env
 install -m 0644 "${tmpdir}/agent.service" /etc/systemd/system/woodpecker-agent.service
+
+cat >"${tmpdir}/docker-gc.service" <<EOF
+[Unit]
+Description=Acahti local docker GC
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=${run_user}
+Group=${run_user}
+Environment=BUILDX_CONFIG=${buildx_cfg}
+ExecStart=/usr/local/bin/acahti-pipe docker-gc
+WorkingDirectory=${run_home}
+EOF
+cat >"${tmpdir}/docker-gc.timer" <<'EOF'
+[Unit]
+Description=Acahti local docker GC hourly
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+install -m 0644 "${tmpdir}/docker-gc.service" /etc/systemd/system/acahti-docker-gc.service
+install -m 0644 "${tmpdir}/docker-gc.timer" /etc/systemd/system/acahti-docker-gc.timer
+
 if ((need_restart)); then
   systemctl daemon-reload
   systemctl enable woodpecker-agent.service
@@ -192,3 +262,7 @@ if ((need_restart)); then
 else
   echo "OK: runner ${AGENT_NAME} already active; pipes updated in place"
 fi
+systemctl daemon-reload
+systemctl enable --now acahti-docker-gc.timer
+systemctl start --no-block acahti-docker-gc.service || true
+systemctl --no-pager --full status acahti-docker-gc.timer || true

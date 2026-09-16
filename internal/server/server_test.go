@@ -42,6 +42,37 @@ func TestHooksAndNavTree(t *testing.T) {
 	}
 }
 
+func TestForgejoHookPublishesPoke(t *testing.T) {
+	hub := events.New()
+	h := New(config.Config{
+		SessionSecret: "test",
+		RootURL:       "http://127.0.0.1",
+		Org:           "acme",
+		DataDir:       t.TempDir(),
+	}, forgejo.New("http://127.0.0.1:9", ""), woodpecker.New("http://127.0.0.1:9", ""), hub)
+	raw := `{"action":"opened","pull_request":{"title":"secret"},"repository":{"full_name":"saidc/hidden"},"pusher":{"email":"leak@example.com"}}`
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/hooks/forgejo", strings.NewReader(raw)))
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("forgejo hook %d", rr.Code)
+	}
+	got := hub.Recent()
+	if len(got) != 1 || got[0].Type != "forgejo" {
+		t.Fatalf("%+v", got)
+	}
+	body, err := json.Marshal(got[0].Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "leak@example.com") || strings.Contains(string(body), "saidc/hidden") {
+		t.Fatalf("raw webhook leaked: %s", body)
+	}
+	data, _ := got[0].Data.(map[string]any)
+	if data["ok"] != true {
+		t.Fatalf("%s", body)
+	}
+}
+
 func TestMuxRegisters(t *testing.T) {
 	h := testHandler(t, "http://127.0.0.1:9")
 	rr := httptest.NewRecorder()

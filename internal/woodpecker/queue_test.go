@@ -2,6 +2,40 @@ package woodpecker
 
 import "testing"
 
+func TestAnnotateSkipsCDWhenCIFailed(t *testing.T) {
+	p := Pipeline{
+		Repo:   "saidc/api-gateway",
+		Number: 49,
+		Status: "running",
+		Jobs: []Job{
+			{Name: "ci", State: "failure"},
+			{Name: "cd.office", State: "killed", Steps: []Step{
+				{Name: "clone", State: "killed"},
+				{Name: "deploy", State: "failure"},
+			}},
+		},
+	}
+	q := QueueInfo{Pending: []QueueTask{{
+		Name: "cd.office", Repo: "saidc/api-gateway", Number: 49,
+		Wait: WaitConcurrency, QueuePosition: 11,
+	}}}
+	got := Annotate(p, q)
+	if got.Status != "failure" || got.Wait != "" {
+		t.Fatalf("pipeline %+v", got)
+	}
+	if got.Jobs[1].State != "skipped" || got.Jobs[1].Wait != "" {
+		t.Fatalf("cd %+v", got.Jobs[1])
+	}
+	for _, s := range got.Jobs[1].Steps {
+		if s.State != "skipped" {
+			t.Fatalf("step %s %s", s.Name, s.State)
+		}
+	}
+	if !BlockedOnFailed(p) {
+		t.Fatal("index row must be droppable")
+	}
+}
+
 func TestAnnotateQueuePosition(t *testing.T) {
 	p := Pipeline{
 		Repo:   "saidc/tm-web",

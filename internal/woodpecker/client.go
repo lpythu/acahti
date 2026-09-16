@@ -113,30 +113,37 @@ func (p Pipeline) Steps() []Step {
 }
 
 func FormatLog(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" || s == "null" {
+		return ""
+	}
 	var lines []struct {
 		Out  string `json:"out"`
 		Data string `json:"data"`
 	}
-	if json.Unmarshal([]byte(raw), &lines) == nil && len(lines) > 0 {
-		var b strings.Builder
-		for _, l := range lines {
-			if l.Out != "" {
-				b.WriteString(l.Out)
-				continue
-			}
-			if l.Data == "" {
-				continue
-			}
-			dec, err := base64.StdEncoding.DecodeString(l.Data)
-			if err != nil {
-				b.WriteString(l.Data)
-				continue
-			}
-			b.Write(dec)
-		}
-		return b.String()
+	if err := json.Unmarshal([]byte(s), &lines); err != nil {
+		return raw
 	}
-	return raw
+	if len(lines) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, l := range lines {
+		if l.Out != "" {
+			b.WriteString(l.Out)
+			continue
+		}
+		if l.Data == "" {
+			continue
+		}
+		dec, err := base64.StdEncoding.DecodeString(l.Data)
+		if err != nil {
+			b.WriteString(l.Data)
+			continue
+		}
+		b.Write(dec)
+	}
+	return b.String()
 }
 
 type Agent struct {

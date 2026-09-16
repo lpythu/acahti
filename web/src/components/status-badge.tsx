@@ -50,23 +50,38 @@ const LABEL: Record<string, MessageKey> = {
   closed: "statusClosed",
 }
 
+const DANGER = new Set(["failure", "error", "failed", "killed", "declined"])
+
+function waitTone(wait?: string): Tone | null {
+  switch (wait) {
+    case "queue":
+      return "queue"
+    case "concurrency":
+      return "warning"
+    case "deps":
+      return "waiting"
+    default:
+      return null
+  }
+}
+
 export function resolveTone(status: string, wait?: string): Tone {
   const s = status.toLowerCase()
-  if (s === "pending") {
-    if (wait === "queue") return "queue"
-    if (wait === "concurrency") return "warning"
-    if (wait === "deps") return "waiting"
-  }
+  if (DANGER.has(s)) return "danger"
+  const w = waitTone(wait)
+  if (w) return w
   return TONE[s] ?? "pending"
 }
 
 export function statusText(status: string, t: (key: MessageKey) => string, wait?: string): string {
   const s = status.toLowerCase()
-  if (s === "pending") {
-    if (wait === "queue") return t("statusQueued")
-    if (wait === "deps") return t("statusWaiting")
-    if (wait === "concurrency") return t("statusSlot")
+  if (DANGER.has(s)) {
+    const key = LABEL[s]
+    return key ? t(key) : status
   }
+  if (wait === "queue") return t("statusQueued")
+  if (wait === "deps") return t("statusWaiting")
+  if (wait === "concurrency") return t("statusSlot")
   const key = LABEL[s]
   return key ? t(key) : status
 }

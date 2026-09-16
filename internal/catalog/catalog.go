@@ -936,6 +936,9 @@ func (c *Catalog) captureTerminalLogs(p woodpecker.Pipeline) woodpecker.Pipeline
 				continue
 			}
 			s.LogTail = woodpecker.FormatLog(raw)
+			if s.LogTail == "" && s.Error != "" {
+				s.LogTail = s.Error
+			}
 		}
 	}
 	return p
@@ -948,17 +951,24 @@ func (c *Catalog) CancelPipeline(user, repo string, number int64) (woodpecker.Pi
 			return woodpecker.Pipeline{}, err
 		}
 	}
-	fresh, err := c.Refresh(repo, number)
+	if c.WP == nil || !c.WP.Ready() {
+		return woodpecker.Pipeline{}, fmt.Errorf("ci unavailable")
+	}
+	raw, err := c.WP.GetPipeline(repo, number)
 	if err != nil {
 		return woodpecker.Pipeline{}, err
 	}
-	if !woodpecker.InFlight(fresh.Status) {
-		return fresh, nil
+	raw.Repo = repo
+	if !woodpecker.InFlight(raw.Status) {
+		return c.Remember(raw), nil
 	}
 	if err := c.WP.Cancel(repo, number); err != nil {
-		again, rerr := c.Refresh(repo, number)
-		if rerr == nil && !woodpecker.InFlight(again.Status) {
-			return again, nil
+		again, rerr := c.WP.GetPipeline(repo, number)
+		if rerr == nil {
+			again.Repo = repo
+			if !woodpecker.InFlight(again.Status) {
+				return c.Remember(again), nil
+			}
 		}
 		return woodpecker.Pipeline{}, err
 	}

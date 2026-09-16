@@ -225,6 +225,20 @@ func TestExpandMergesExistingFromSecret(t *testing.T) {
 	}
 }
 
+func TestExpandDockerGc(t *testing.T) {
+	got, err := Expand([]byte(`steps:
+  gc:
+    pipe: docker-gc@v1
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(got)
+	if !strings.Contains(text, "acahti-pipe docker-gc") {
+		t.Fatalf("missing docker-gc:\n%s", text)
+	}
+}
+
 func TestExpandOciGc(t *testing.T) {
 	got, err := Expand([]byte(`steps:
   gc:
@@ -332,7 +346,7 @@ func TestHandleConfigIssuesJob(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("office %d %s", rr.Code, rr.Body.String())
 	}
-	if !strings.Contains(rr.Body.String(), "deploy-office") {
+	if !strings.Contains(rr.Body.String(), "deploy-office-saidc-tm-web") {
 		t.Fatalf("missing concurrency: %s", rr.Body.String())
 	}
 }
@@ -344,29 +358,29 @@ func TestExpandFileInjectsOfficeConcurrency(t *testing.T) {
     with:
       release: app
       namespace: default
-`), Ident{})
+`), Ident{Repo: "saidc/tm-web"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(got)
-	if !strings.Contains(text, "group: deploy-office") || !strings.Contains(text, "limit: 1") {
+	if !strings.Contains(text, "group: deploy-office-saidc-tm-web") || !strings.Contains(text, "limit: 1") {
 		t.Fatalf("missing concurrency:\n%s", text)
 	}
 }
 
 func TestExpandFileInjectsHkAndPkg(t *testing.T) {
-	hk, err := ExpandFile("cd.hk.yaml", []byte("steps:\n  x:\n    image: bash\n    commands: [true]\n"), Ident{})
+	hk, err := ExpandFile("cd.hk.yaml", []byte("steps:\n  x:\n    image: bash\n    commands: [true]\n"), Ident{Repo: "saidc/exhub"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(hk), "group: deploy-hk") {
+	if !strings.Contains(string(hk), "group: deploy-hk-saidc-exhub") {
 		t.Fatalf("hk:\n%s", hk)
 	}
-	pkg, err := ExpandFile("pkg.yaml", []byte("steps:\n  x:\n    image: bash\n    commands: [true]\n"), Ident{})
+	pkg, err := ExpandFile("pkg.yaml", []byte("steps:\n  x:\n    image: bash\n    commands: [true]\n"), Ident{Repo: "saidc/saidc-ui"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(pkg), "group: pkg") {
+	if !strings.Contains(string(pkg), "group: pkg-saidc-saidc-ui") {
 		t.Fatalf("pkg:\n%s", pkg)
 	}
 }

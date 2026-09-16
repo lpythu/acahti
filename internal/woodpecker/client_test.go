@@ -150,6 +150,25 @@ func TestDeletePath(t *testing.T) {
 	}
 }
 
+func TestFormatLog(t *testing.T) {
+	if got := FormatLog("null"); got != "" {
+		t.Fatalf("json null: %q", got)
+	}
+	if got := FormatLog("[]"); got != "" {
+		t.Fatalf("empty array: %q", got)
+	}
+	if got := FormatLog(""); got != "" {
+		t.Fatalf("empty: %q", got)
+	}
+	in := `[{"out":"hello\n"},{"data":"d29ybGQ="}]`
+	if got := FormatLog(in); got != "hello\nworld" {
+		t.Fatalf("lines: %q", got)
+	}
+	if got := FormatLog("plain text"); got != "plain text" {
+		t.Fatalf("plain: %q", got)
+	}
+}
+
 func TestQueueInfo(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {

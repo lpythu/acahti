@@ -52,7 +52,7 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 	pages := web.New(cfg, cat, fj, wp, a, inv, oa, hub)
 	pages.Passwords = passwords
 	mc := mcp.New(cfg, a, fj, wp, cat)
-	rest := &api.API{Cfg: cfg, Auth: a, Hub: hub, MCP: mc}
+	rest := &api.API{Cfg: cfg, Auth: a, Hub: hub, Cat: cat, MCP: mc}
 	fjProxy := reverse(cfg.ForgejoURL)
 
 	mux := http.NewServeMux()
@@ -163,7 +163,7 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 		if p, ok := cat.IngestForgejo(payload); ok {
 			hub.Publish("pipeline.updated", p)
 		} else {
-			hub.Publish("forgejo", payload)
+			hub.Publish("forgejo", map[string]any{"ok": true})
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})

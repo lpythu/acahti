@@ -63,9 +63,11 @@ func HandleConfig(token string, issue func(author, repo, sha string) Ident) http
 			return
 		}
 		var id Ident
+		repo := repoFullName(req)
 		if issue != nil {
-			id = issue(strings.TrimSpace(req.Pipeline.Author), repoFullName(req), strings.TrimSpace(req.Pipeline.Commit))
+			id = issue(strings.TrimSpace(req.Pipeline.Author), repo, strings.TrimSpace(req.Pipeline.Commit))
 		}
+		id.Repo = repo
 		out := make([]fileMeta, 0, len(req.Configuration))
 		for _, cfg := range req.Configuration {
 			data, err := ExpandFile(cfg.Name, []byte(cfg.Data), id)

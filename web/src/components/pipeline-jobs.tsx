@@ -44,6 +44,7 @@ function JobNode({
           <SidebarMenuSub>
             {job.steps.map((s) => {
               const selected = !activeFile && activeStep?.pid === s.pid && activeStep.name === s.name
+              const state = job.state === "skipped" && s.state !== "success" ? "skipped" : s.state
               return (
                 <SidebarMenuSubItem key={`${s.pid}-${s.name}`}>
                   <SidebarMenuSubButton
@@ -55,7 +56,7 @@ function JobNode({
                       />
                     }
                   >
-                    <RunStatusIcon status={s.state} wait={s.state === "pending" ? job.wait : undefined} />
+                    <RunStatusIcon status={state} wait={state === "pending" ? job.wait : undefined} />
                     <span>{s.name || `#${s.pid}`}</span>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>

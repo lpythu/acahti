@@ -24,9 +24,9 @@ export function jobsOf(p: Pipeline): Job[] {
     out.push({
       name,
       state: j.state || p.status,
-      wait: j.wait || p.wait,
-      queue_position: j.queue_position || p.queue_position,
-      agent: j.agent || p.agent,
+      wait: j.wait,
+      queue_position: j.queue_position,
+      agent: j.agent,
       steps: j.steps?.length ? j.steps : [],
     })
   }
@@ -157,6 +157,9 @@ export function waitLine(p: { status?: string; wait?: string; queue_position?: n
 } | null {
   const status = (p.status || "").toLowerCase()
   if (status === "blocked") return { key: "statusBlocked" }
+  if (status === "failure" || status === "error" || status === "failed" || status === "killed" || status === "declined") {
+    return null
+  }
   if (p.wait === "queue") {
     if (p.queue_position && p.queue_position > 0) return { key: "waitQueuedN", vars: { n: String(p.queue_position) } }
     return { key: "statusQueued" }

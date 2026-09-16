@@ -9,7 +9,7 @@ cd "$ROOT"
 network="$(input NETWORK)"
 network="${network:-host}"
 builder="$(input BUILDER)"
-builder="${builder:-default}"
+builder="${builder:-$ACAHTI_BUILDER}"
 push="$(input PUSH)"
 push="${push:-true}"
 
@@ -40,7 +40,12 @@ add_bk_secret acahti_token "${ACAHTI_TOKEN:-}"
 echo "==> docker-build secrets acahti_user acahti_token"
 
 ensure_host_builder() {
+	if [[ "$builder" == "$ACAHTI_BUILDER" ]]; then
+		ensure_acahti_builder "$builder" || exit 1
+		return 0
+	fi
 	local info driver
+	persist_buildx_config
 	info="$(docker buildx inspect "$builder" 2>/dev/null)" || {
 		echo "error: buildx builder ${builder} not found" >&2
 		exit 1
@@ -90,22 +95,7 @@ build_one() {
 		--provenance=false
 		--network="$network"
 		-t "$primary"
-		--load
 	)
-	[[ -n "$file" ]] && args+=(-f "$file")
-	if ((${#secret_args[@]})); then
-		args+=("${secret_args[@]}")
-	fi
-	if ((${#bargs[@]})); then
-		args+=("${bargs[@]}")
-	fi
-	args+=("$context")
-	echo "==> build ${primary}"
-	docker buildx build "${args[@]}"
-	if [[ "$push" == "true" ]]; then
-		echo "==> push ${primary}"
-		docker push "$primary"
-	fi
 	local extra
 	local -a extras=()
 	IFS=',' read -r -a extras <<<"$also"
@@ -113,13 +103,25 @@ build_one() {
 		extra="${extra#"${extra%%[![:space:]]*}"}"
 		extra="${extra%"${extra##*[![:space:]]}"}"
 		[[ -z "$extra" ]] && continue
-		echo "==> tag ${primary} → ${extra}"
-		docker tag "$primary" "$extra"
-		if [[ "$push" == "true" ]]; then
-			echo "==> push ${extra}"
-			docker push "$extra"
-		fi
+		args+=(-t "$extra")
 	done
+	[[ -n "$file" ]] && args+=(-f "$file")
+	if ((${#secret_args[@]})); then
+		args+=("${secret_args[@]}")
+	fi
+	if ((${#bargs[@]})); then
+		args+=("${bargs[@]}")
+	fi
+	if [[ "$push" == "true" ]]; then
+		args+=(--push)
+	fi
+	args+=("$context")
+	if [[ "$push" == "true" ]]; then
+		echo "==> build+push ${primary}"
+	else
+		echo "==> build ${primary}"
+	fi
+	docker buildx build "${args[@]}"
 	echo "OK docker-build ${primary}"
 }
 
@@ -129,3 +131,8 @@ while IFS= read -r line; do
 	[[ $# -eq 0 || -z "${1:-}" ]] && continue
 	build_one "$@"
 done < <(each_line "$(expand_ci "$(input IMAGES)")")
+
+gc="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/docker-gc/run.sh"
+if [[ -f "$gc" ]]; then
+	bash "$gc" || true
+fi

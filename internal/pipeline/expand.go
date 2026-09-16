@@ -22,12 +22,14 @@ var official = map[string]struct{}{
 	"pypi-publish": {},
 	"oss-put":      {},
 	"oci-gc":       {},
+	"docker-gc":    {},
 }
 
-// Ident is the Acahti user this run is (the person who triggered it).
+// Ident is the Acahti user this run is (the person who triggered it), plus the repo for CD/pkg concurrency.
 type Ident struct {
 	User  string
 	Token string
+	Repo  string
 }
 
 // Expand rewrites pipe: name@v1 steps into image: bash + acahti-pipe <name>.
@@ -54,7 +56,7 @@ func ExpandFile(name string, src []byte, id Ident) ([]byte, error) {
 	if _, ok := doc["uses"]; ok {
 		return nil, fmt.Errorf("uses: is not supported; use pipe:")
 	}
-	injectConcurrency(doc, name)
+	injectConcurrency(doc, name, id.Repo)
 	if steps, ok := doc["steps"]; ok {
 		if err := expandSteps(steps, id); err != nil {
 			return nil, err
@@ -241,18 +243,18 @@ func expandStep(name string, step map[string]any, id Ident) error {
 	return nil
 }
 
-func injectConcurrency(doc map[string]any, file string) {
+func injectConcurrency(doc map[string]any, file, repo string) {
 	if _, ok := doc["concurrency"]; ok {
 		return
 	}
-	group := concurrencyGroup(file)
-	if group == "" {
+	kind := concurrencyKind(file)
+	if kind == "" {
 		return
 	}
-	doc["concurrency"] = map[string]any{"limit": 1, "group": group}
+	doc["concurrency"] = map[string]any{"limit": 1, "group": scopedGroup(kind, repo)}
 }
 
-func concurrencyGroup(file string) string {
+func concurrencyKind(file string) string {
 	base := strings.ToLower(path.Base(strings.TrimSpace(file)))
 	base = strings.TrimSuffix(base, ".yaml")
 	base = strings.TrimSuffix(base, ".yml")
@@ -266,6 +268,15 @@ func concurrencyGroup(file string) string {
 	default:
 		return ""
 	}
+}
+
+func scopedGroup(kind, repo string) string {
+	repo = strings.ToLower(strings.TrimSpace(repo))
+	repo = strings.ReplaceAll(repo, "/", "-")
+	if repo == "" {
+		return kind
+	}
+	return kind + "-" + repo
 }
 
 func stringify(v any) string {

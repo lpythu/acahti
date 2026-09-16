@@ -81,14 +81,40 @@ func WaitFingerprint(p Pipeline) string {
 
 func Annotate(p Pipeline, q QueueInfo) Pipeline {
 	p = StripWait(p)
-	if !InFlight(p.Status) {
-		return p
-	}
 	for i := range p.Jobs {
 		annotateJob(&p.Jobs[i], p, q)
 	}
+	if BlockedOnFailed(p) {
+		p.Status = "failure"
+		p.Wait = ""
+		p.QueuePosition = 0
+		p.Agent = ""
+		return p
+	}
+	if !InFlight(p.Status) {
+		return p
+	}
 	p.Wait, p.QueuePosition, p.Agent = pipelineWait(p)
 	return p
+}
+
+func BlockedOnFailed(p Pipeline) bool {
+	fail, run, leftover := false, false, false
+	for _, j := range p.Jobs {
+		st := strings.ToLower(j.State)
+		if failedStatus(st) {
+			fail = true
+			continue
+		}
+		if st == "running" {
+			run = true
+			continue
+		}
+		if st == "pending" || st == "skipped" {
+			leftover = true
+		}
+	}
+	return fail && !run && leftover
 }
 
 func annotateJob(j *Job, p Pipeline, q QueueInfo) {
@@ -98,6 +124,10 @@ func annotateJob(j *Job, p Pipeline, q QueueInfo) {
 		if strings.EqualFold(j.State, "pending") {
 			j.State = "running"
 		}
+		return
+	}
+	if upstreamFailed(p, *j) && !strings.EqualFold(j.State, "running") && !strings.EqualFold(j.State, "success") {
+		skipOrphan(j)
 		return
 	}
 	if t, ok := findTask(q.WaitingOnDeps, p, j.Name); ok {
@@ -117,6 +147,36 @@ func annotateJob(j *Job, p Pipeline, q QueueInfo) {
 	if strings.EqualFold(j.State, "pending") {
 		j.Wait = inferWait(p, *j)
 	}
+}
+
+func skipOrphan(j *Job) {
+	j.State = "skipped"
+	j.Wait = ""
+	j.QueuePosition = 0
+	j.Agent = ""
+	for i := range j.Steps {
+		if strings.EqualFold(j.Steps[i].State, "success") {
+			continue
+		}
+		j.Steps[i].State = "skipped"
+		j.Steps[i].Error = ""
+	}
+}
+
+func upstreamFailed(p Pipeline, job Job) bool {
+	rank := declaredRank(job.Name)
+	for _, other := range p.Jobs {
+		if other.Name == job.Name {
+			continue
+		}
+		if declaredRank(other.Name) >= rank {
+			continue
+		}
+		if failedStatus(other.State) {
+			return true
+		}
+	}
+	return false
 }
 
 func findTask(tasks []QueueTask, p Pipeline, job string) (QueueTask, bool) {

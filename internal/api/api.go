@@ -20,6 +20,7 @@ type API struct {
 	Cfg  config.Config
 	Auth *auth.Service
 	Hub  *events.Hub
+	Cat  *catalog.Catalog
 	MCP  *mcp.Server
 }
 
@@ -37,11 +38,16 @@ func (a *API) token(r *http.Request) string {
 func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/acahti/v1")
 	if path == "/events" && r.Method == http.MethodGet {
-		if _, ok := a.Auth.Parse(a.token(r)); !ok {
+		login, ok := a.Auth.Parse(a.token(r))
+		if !ok {
 			oauth.Challenge(w, a.Cfg.RootURL+"/.well-known/oauth-protected-resource")
 			return
 		}
-		a.Hub.SSE(w, r)
+		var allow func(events.Event) bool
+		if a.Cat != nil {
+			allow = a.Cat.AllowHubEvent(login)
+		}
+		a.Hub.SSE(w, r, allow)
 		return
 	}
 	tok := a.token(r)

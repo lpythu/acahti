@@ -130,6 +130,23 @@ func TestLiveAgentsDropsStale(t *testing.T) {
 	}
 }
 
+func TestPresentSkipsCDWhenCIFailed(t *testing.T) {
+	c := New(config.Config{}, nil, nil, nil)
+	p := c.Present(woodpecker.Pipeline{
+		Status: "running",
+		Jobs: []woodpecker.Job{
+			{Name: "ci", State: "failure"},
+			{Name: "cd.office", State: "pending"},
+		},
+	})
+	if p.Status != "failure" || p.Wait != "" {
+		t.Fatalf("pipeline %+v", p)
+	}
+	if p.Jobs[1].State != "skipped" || p.Jobs[1].Wait != "" {
+		t.Fatalf("cd %+v", p.Jobs[1])
+	}
+}
+
 func TestPresentInfersWait(t *testing.T) {
 	c := New(config.Config{}, nil, nil, nil)
 	p := c.Present(woodpecker.Pipeline{

@@ -62,7 +62,7 @@ export function PipelinePage() {
     setLogLoading(true)
     api
       .pipelineLog(owner, name, n, stepLogId)
-      .then((r) => setLog(r.log || ""))
+      .then((r) => setLog(!r.log || r.log === "null" ? "" : r.log))
       .catch(() => setLog(""))
       .finally(() => setLogLoading(false))
   }, [owner, name, n, stepLogId, file])

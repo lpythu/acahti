@@ -64,3 +64,38 @@ expand_ci() {
 	s="${s//'${CI_COMMIT_TAG#v}'/$tag}"
 	printf '%s' "$s"
 }
+
+# Isolated HOME per workflow would hide named buildx builders. Keep instances
+# on the runner user's real ~/.docker/buildx (auth stays in isolated HOME).
+persist_buildx_config() {
+	if [[ -n "${BUILDX_CONFIG:-}" ]]; then
+		mkdir -p "$BUILDX_CONFIG"
+		return 0
+	fi
+	local home
+	home="$(getent passwd "$(id -un)" | cut -d: -f6)"
+	home="${home:-${HOME:-/}}"
+	export BUILDX_CONFIG="${home}/.docker/buildx"
+	mkdir -p "$BUILDX_CONFIG"
+}
+
+ACAHTI_BUILDER="${ACAHTI_BUILDER:-acahti}"
+
+ensure_acahti_builder() {
+	persist_buildx_config
+	local name="${1:-$ACAHTI_BUILDER}"
+	local info driver
+	if info="$(docker buildx inspect "$name" 2>/dev/null)"; then
+		driver="$(printf '%s\n' "$info" | awk -F': *' '/^Driver:/{print $2; exit}')"
+		if [[ "$driver" == "docker" ]]; then
+			return 0
+		fi
+		if printf '%s\n' "$info" | grep -qiE 'Network:[[:space:]]*host'; then
+			return 0
+		fi
+		echo "error: builder ${name} must use host network" >&2
+		return 1
+	fi
+	echo "==> buildx create ${name} docker-container network=host"
+	docker buildx create --name "$name" --driver docker-container --driver-opt network=host >/dev/null
+}

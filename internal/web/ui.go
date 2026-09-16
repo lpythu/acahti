@@ -34,14 +34,15 @@ func (p *Pages) NavTree(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Pages) Events(w http.ResponseWriter, r *http.Request) {
-	if _, _, ok := p.requireJSON(w, r); !ok {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
 		return
 	}
 	if p.Hub == nil {
 		writeErr(w, http.StatusServiceUnavailable, "events unavailable")
 		return
 	}
-	p.Hub.SSE(w, r)
+	p.Hub.SSE(w, r, p.Cat.AllowHubEvent(user))
 }
 
 func (p *Pages) Repos(w http.ResponseWriter, r *http.Request) {

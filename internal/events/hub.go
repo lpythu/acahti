@@ -68,7 +68,11 @@ func (h *Hub) Recent() []Event {
 	return out
 }
 
-func (h *Hub) SSE(w http.ResponseWriter, r *http.Request) {
+func pass(allow func(Event) bool, ev Event) bool {
+	return allow != nil && allow(ev)
+}
+
+func (h *Hub) SSE(w http.ResponseWriter, r *http.Request, allow func(Event) bool) {
 	fl, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "stream unsupported", http.StatusInternalServerError)
@@ -80,7 +84,9 @@ func (h *Hub) SSE(w http.ResponseWriter, r *http.Request) {
 	ch, cancel := h.Subscribe()
 	defer cancel()
 	for _, ev := range h.Recent() {
-		writeSSE(w, ev)
+		if pass(allow, ev) {
+			writeSSE(w, ev)
+		}
 	}
 	fl.Flush()
 	ctx := r.Context()
@@ -91,6 +97,9 @@ func (h *Hub) SSE(w http.ResponseWriter, r *http.Request) {
 		case ev, ok := <-ch:
 			if !ok {
 				return
+			}
+			if !pass(allow, ev) {
+				continue
 			}
 			writeSSE(w, ev)
 			fl.Flush()

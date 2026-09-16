@@ -32,7 +32,7 @@ flowchart LR
 | Host | Runs |
 |---|---|
 | **Acahti** | control plane. No Runner on this host. |
-| **Runner** | `ACAHTI_BUILD` — executes `.acahti/pipelines/` after Acahti expands `pipe:`. One `woodpecker-agent`, `WOODPECKER_MAX_WORKFLOWS` default 4. Excess workflows stay in the Woodpecker queue (`pending` / `waiting_on_deps`). |
+| **Runner** | `ACAHTI_BUILD` — executes `.acahti/pipelines/` after Acahti expands `pipe:`. One `woodpecker-agent`. `WOODPECKER_MAX_WORKFLOWS` is host-derived (`nproc` / memory) unless pinned in the agent env. Excess workflows stay in the Woodpecker queue (`pending` / `waiting_on_deps`). |
 
 Public identity is Acahti: SPA, MCP, `/acahti/v1`, git HTTPS, `/api/packages`. Closed to the internet: `/ci`, git-kernel HTML, `/api/v1`.
 
@@ -284,7 +284,7 @@ flowchart LR
 2. Gateway `Remember`s the pipeline: merge declared jobs from YAML, upsert `acahti.pipelines`, publish `pipeline.updated`.
 3. Woodpecker progress also arrives as Forgejo `status` webhooks or `POST /hooks/woodpecker`. Same `Remember`.
 4. Startup backfill lists Woodpecker runs per active repo and `Remember`s them.
-5. `WatchPipelines` refreshes indexed `running` and `pending` rows from Woodpecker. Queue `wait` / `queue_position` is painted live from `GET /api/queue/info` (not stored). A running step whose log has not grown for 15m is `Cancel`ed (Woodpecker does not close a step when the process dies without a Done RPC).
+5. `WatchPipelines` refreshes indexed `running` and `pending` rows from Woodpecker. Queue `wait` / `queue_position` is painted live from `GET /api/queue/info` (not stored). Leftover CD still pending after CI failed is `Cancel`ed (frees deploy concurrency). A running step whose log has not grown for 15m is `Cancel`ed (Woodpecker does not close a step when the process dies without a Done RPC).
 
 **Read (query)**
 
@@ -310,7 +310,7 @@ One screen, one JSON. The SPA renders fields; it does not walk kernels.
 | `GET /ui/nav/tree` | `[{ team, repos }]` from the org catalog; trailing `{ team: "" }` is unassigned repos |
 | `GET /ui/repos?teams=1` | team names and counts |
 | `GET /ui/users` | page of users with `teams` and this page’s `repos` ACL |
-| `GET /ui/events` | SSE: `pipeline.updated`, `catalog.updated`, or `forgejo` (PRs) |
+| `GET /ui/events` | SSE: `pipeline.updated`, `catalog.updated`, or `forgejo` (PRs). Filtered per user with the same visible-repo ACL as list APIs; `forgejo` is `{ok:true}` only |
 
 MCP `pipeline_list` / `pipeline_get` return the same in-flight `wait` fields. `agent_status` returns runners plus the queue snapshot.
 
