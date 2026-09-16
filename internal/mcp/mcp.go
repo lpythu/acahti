@@ -94,6 +94,7 @@ func tools() []toolSpec {
 		{Name: "inbox", Description: "Island inbox: open PRs or pipelines needing attention (blocked/failed latest per repo)", InputSchema: obj(map[string]any{"section": str, "page": num, "page_size": num})},
 		{Name: "pkg_publish", Description: "Publish a language package (pypi wheel URL or npm tarball URL)", InputSchema: obj(map[string]any{"kind": str, "url": str, "filename": str}, "kind", "url")},
 		{Name: "pkg_list", Description: "List language packages", InputSchema: obj(map[string]any{"owner": str, "kind": str, "page": num, "page_size": num})},
+		{Name: "pkg_delete", Description: "Delete a language package version. Org admin. Omit version to delete every version of that name", InputSchema: obj(map[string]any{"owner": str, "kind": str, "name": str, "version": str}, "kind", "name")},
 		{Name: "whoami", Description: "Acahti git identity: git_name, git_email, clone_url_template, skill_url, skill_sha, apply_when_remote_host, setup_local, org_admin", InputSchema: obj(map[string]any{})},
 		{Name: "agent_status", Description: "Host runners plus Woodpecker queue stats (pending, waiting_on_deps, running)", InputSchema: obj(pg)},
 		{Name: "deploy_approve", Description: "Approve a gated deploy pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
@@ -283,6 +284,8 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 			owner = org
 		}
 		return s.FJ.ListPackages(owner, str("kind"), str("q"), pq, token)
+	case "pkg_delete":
+		return s.deletePackage(token, str)
 	case "pkg_publish":
 		return s.publish(token, str("kind"), str("url"), str("filename"))
 	case "agent_status":
@@ -411,6 +414,48 @@ func (s *Server) putSecret(token string, str func(string) string, a map[string]a
 		return s.Cat.PutRepoSecret(token, owner, name, secret, str("value"), events)
 	}
 	return s.Cat.PutOrgSecret(token, secret, str("value"), events)
+}
+
+func (s *Server) deletePackage(token string, str func(string) string) (any, error) {
+	if s.Cat == nil || !s.Cat.IsOrgAdmin(token) {
+		return nil, catalog.ErrNotFound
+	}
+	kind := strings.ToLower(strings.TrimSpace(str("kind")))
+	name := strings.TrimSpace(str("name"))
+	version := strings.TrimSpace(str("version"))
+	if kind == "" || name == "" {
+		return nil, fmt.Errorf("%w: kind and name required", catalog.ErrInvalid)
+	}
+	owner := str("owner")
+	if owner == "" {
+		owner = s.Cfg.Org
+	}
+	if version != "" {
+		if err := s.FJ.DeletePackage(owner, kind, name, version, token); err != nil {
+			return nil, err
+		}
+		return map[string]any{"ok": true, "deleted": []string{name + "@" + version}}, nil
+	}
+	all, err := page.Walk(func(q page.Query) (page.Result[forgejo.Package], error) {
+		return s.FJ.ListPackages(owner, kind, name, q, token)
+	})
+	if err != nil {
+		return nil, err
+	}
+	deleted := make([]string, 0)
+	for _, p := range all {
+		if p.Name != name || !strings.EqualFold(p.Type, kind) {
+			continue
+		}
+		if err := s.FJ.DeletePackage(owner, p.Type, p.Name, p.Version, token); err != nil {
+			return nil, err
+		}
+		deleted = append(deleted, p.Name+"@"+p.Version)
+	}
+	if len(deleted) == 0 {
+		return nil, catalog.ErrNotFound
+	}
+	return map[string]any{"ok": true, "deleted": deleted}, nil
 }
 
 func (s *Server) deleteSecret(token string, str func(string) string) (any, error) {

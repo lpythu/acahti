@@ -1056,6 +1056,12 @@ func (c *Client) ListPackages(owner, typ, query string, q page.Query, sudo strin
 	return listPage[Package](c, "/api/v1/packages/"+url.PathEscape(owner), q, extra, sudo)
 }
 
+func (c *Client) DeletePackage(owner, typ, name, version, sudo string) error {
+	path := "/api/v1/packages/" + url.PathEscape(owner) + "/" + url.PathEscape(typ) + "/" + url.PathEscape(name) + "/" + url.PathEscape(version)
+	_, _, err := c.do(http.MethodDelete, path, "", sudo, nil)
+	return err
+}
+
 func (c *Client) ListComments(owner, name string, number int, q page.Query) (page.Result[Comment], error) {
 	return listPage[Comment](c, fmt.Sprintf("/api/v1/repos/%s/%s/issues/%d/comments", url.PathEscape(owner), url.PathEscape(name), number), q, nil, "")
 }

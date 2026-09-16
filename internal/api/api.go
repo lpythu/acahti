@@ -96,8 +96,11 @@ func route(path, method string, args map[string]any) (string, map[string]any) {
 	if len(parts) == 1 && parts[0] == "repos" && method == http.MethodPost {
 		return "repo_create", extra
 	}
-	if len(parts) == 1 && parts[0] == "packages" {
+	if len(parts) == 1 && parts[0] == "packages" && method == http.MethodGet {
 		return "pkg_list", extra
+	}
+	if len(parts) == 1 && parts[0] == "packages" && method == http.MethodDelete {
+		return "pkg_delete", extra
 	}
 	if len(parts) == 1 && parts[0] == "agents" {
 		return "agent_status", extra

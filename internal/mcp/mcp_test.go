@@ -24,7 +24,7 @@ func TestToolSet(t *testing.T) {
 		"pr_create", "pr_list", "pr_get", "pr_comment", "pr_comments", "pr_merge", "pr_close",
 		"checks_wait", "pipeline_list", "pipeline_get", "pipeline_log",
 		"pipeline_rerun", "pipeline_trigger", "pipeline_cancel", "pipeline_delete", "inbox",
-		"pkg_publish", "pkg_list", "agent_status", "deploy_approve",
+		"pkg_publish", "pkg_list", "pkg_delete", "agent_status", "deploy_approve",
 		"secret_list", "secret_put", "secret_delete",
 	}
 	have := map[string]bool{}
