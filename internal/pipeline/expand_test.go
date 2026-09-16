@@ -286,3 +286,32 @@ func TestExpandIdentInjectsJob(t *testing.T) {
 		t.Fatalf("missing token:\n%s", text)
 	}
 }
+
+func TestHandleConfigIssuesJob(t *testing.T) {
+	h := HandleConfig("secret", func(author, repo, sha string) Ident {
+		if author != "acahti" || repo != "saidc/tm-web" || sha != "abc" {
+			t.Fatalf("issue args %q %q %q", author, repo, sha)
+		}
+		return Ident{User: "lipeiyang", Token: "tok"}
+	})
+	var cfg configRequest
+	cfg.Configuration = []fileMeta{{
+		Name: ".acahti/pipelines/ci.yaml",
+		Data: "steps:\n  build:\n    pipe: docker-build@v1\n    with:\n      images: |\n        app:dev\n",
+	}}
+	cfg.Pipeline.Author = "acahti"
+	cfg.Pipeline.Commit = "abc"
+	cfg.Repo.Owner = "saidc"
+	cfg.Repo.Name = "tm-web"
+	body, _ := json.Marshal(cfg)
+	req := httptest.NewRequest(http.MethodPost, "/hooks/pipeline-config", strings.NewReader(string(body)))
+	req.SetBasicAuth("pipe", "secret")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("code %d %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "ACAHTI_USER: lipeiyang") {
+		t.Fatalf("body=%s", rr.Body.String())
+	}
+}

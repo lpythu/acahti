@@ -29,6 +29,19 @@ func Email(login, domain string) string {
 	return login + "@noreply." + domain
 }
 
+func LoginFromNoreply(email, domain string) string {
+	email = strings.ToLower(strings.TrimSpace(email))
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	if email == "" || domain == "" {
+		return ""
+	}
+	user, ok := strings.CutSuffix(email, "@noreply."+domain)
+	if !ok || user == "" || strings.Contains(user, "@") {
+		return ""
+	}
+	return user
+}
+
 func Name(login, author string) string {
 	if s := strings.TrimSpace(author); s != "" {
 		return s

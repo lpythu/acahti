@@ -182,7 +182,7 @@ Laptop / agent installs use the same identity as git. Repo files only name the r
 @saidc:registry=https://acahti.saidc.ai/api/packages/saidc/npm/
 ```
 
-Local `~/.npmrc` (not committed): username = Acahti login; `_password` = login password or MCP `access_token`; `always-auth=true`.
+Local `~/.npmrc` (not committed): username = Acahti login; `_password` = **base64** of the login password or MCP `access_token`; `always-auth=true`. Dockerfile `pnpm` steps do the same with `RUN --network=host` and `--mount=type=secret,id=acahti_user` plus `id=acahti`.
 
 **PyPI** (committed `pyproject.toml` is the index URL):
 

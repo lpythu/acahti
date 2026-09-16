@@ -29,7 +29,7 @@ func TestWithAuthorsUsesFullNameThenLogin(t *testing.T) {
 func TestGitAuthorPrefersCommitName(t *testing.T) {
 	cm := forgejo.Commit{Author: &forgejo.CommitUser{Login: "acahti", FullName: "acahti"}}
 	cm.Commit.Author.Name = "兰佳硕"
-	name, login, _ := gitAuthor(cm)
+	name, login, _, _ := gitAuthor(cm)
 	if name != "兰佳硕" || login != "acahti" {
 		t.Fatal(name, login)
 	}
@@ -37,7 +37,7 @@ func TestGitAuthorPrefersCommitName(t *testing.T) {
 
 func TestGitAuthorFallsBackToForgejoUser(t *testing.T) {
 	cm := forgejo.Commit{Author: &forgejo.CommitUser{Login: "lan", FullName: "兰佳硕"}}
-	name, login, _ := gitAuthor(cm)
+	name, login, _, _ := gitAuthor(cm)
 	if name != "兰佳硕" || login != "lan" {
 		t.Fatal(name, login)
 	}
@@ -48,5 +48,23 @@ func TestApplyCommitAuthorKeepsWoodpeckerWhenNoCommit(t *testing.T) {
 	p := c.applyCommitAuthor(woodpecker.Pipeline{Author: "acahti"})
 	if p.Author != "acahti" {
 		t.Fatal(p.Author)
+	}
+}
+
+func TestJobUserPrefersNoreplyOverForgeLogin(t *testing.T) {
+	got := JobUser("acahti", "lipeiyang@noreply.acahti.saidc.ai", "李沛阳", "acahti", "acahti", "acahti.saidc.ai", map[string]string{
+		"lipeiyang": "李沛阳",
+	})
+	if got != "lipeiyang" {
+		t.Fatal(got)
+	}
+}
+
+func TestJobUserMapsDisplayName(t *testing.T) {
+	got := JobUser("acahti", "", "兰佳硕", "acahti", "acahti", "acahti.saidc.ai", map[string]string{
+		"lan": "兰佳硕",
+	})
+	if got != "lan" {
+		t.Fatal(got)
 	}
 }

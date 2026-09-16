@@ -16,16 +16,34 @@ type configRequest struct {
 	Configuration []fileMeta `json:"configuration"`
 	Pipeline      struct {
 		Author string `json:"author"`
+		Commit string `json:"commit"`
 	} `json:"pipeline"`
+	Repo struct {
+		FullName string `json:"full_name"`
+		Owner    string `json:"owner"`
+		Name     string `json:"name"`
+	} `json:"repo"`
 }
 
 type configResponse struct {
 	Configs []fileMeta `json:"configs"`
 }
 
+func repoFullName(req configRequest) string {
+	if n := strings.TrimSpace(req.Repo.FullName); n != "" {
+		return n
+	}
+	owner := strings.TrimSpace(req.Repo.Owner)
+	name := strings.TrimSpace(req.Repo.Name)
+	if owner != "" && name != "" {
+		return owner + "/" + name
+	}
+	return ""
+}
+
 // HandleConfig expands pipe: in pipeline YAML. Auth is basic user "pipe" or query token=.
 // issue mints an Acahti token for the user who triggered the run (job identity).
-func HandleConfig(token string, issue func(string) string) http.HandlerFunc {
+func HandleConfig(token string, issue func(author, repo, sha string) Ident) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, pass, ok := r.BasicAuth()
 		q := r.URL.Query().Get("token")
@@ -44,12 +62,9 @@ func HandleConfig(token string, issue func(string) string) http.HandlerFunc {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
-		id := Ident{}
-		author := strings.TrimSpace(req.Pipeline.Author)
-		if author != "" && issue != nil {
-			if tok := strings.TrimSpace(issue(author)); tok != "" {
-				id = Ident{User: author, Token: tok}
-			}
+		var id Ident
+		if issue != nil {
+			id = issue(strings.TrimSpace(req.Pipeline.Author), repoFullName(req), strings.TrimSpace(req.Pipeline.Commit))
 		}
 		out := make([]fileMeta, 0, len(req.Configuration))
 		for _, cfg := range req.Configuration {

@@ -16,6 +16,7 @@ import (
 	"acahti/internal/config"
 	"acahti/internal/events"
 	"acahti/internal/forgejo"
+	"acahti/internal/identity"
 	"acahti/internal/invite"
 	"acahti/internal/mcp"
 	"acahti/internal/oauth"
@@ -141,7 +142,13 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 		}
 		pages.Index(w, r)
 	})
-	mux.HandleFunc("POST /hooks/pipeline-config", pipeline.HandleConfig(cfg.ConfigToken, a.Issue))
+	mux.HandleFunc("POST /hooks/pipeline-config", pipeline.HandleConfig(cfg.ConfigToken, func(author, repo, sha string) pipeline.Ident {
+		login := cat.JobLogin(repo, sha, author, cfg.AdminUser, identity.Domain(cfg.RootURL, cfg.Domain))
+		if login == "" {
+			return pipeline.Ident{}
+		}
+		return pipeline.Ident{User: login, Token: a.Issue(login)}
+	}))
 	mux.HandleFunc("POST /hooks/woodpecker", func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
 		if p, ok := cat.IngestWoodpecker(raw); ok {

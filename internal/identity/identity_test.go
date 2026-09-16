@@ -10,6 +10,12 @@ func TestEmailAndHosts(t *testing.T) {
 	if Email("alice", "acahti.saidc.ai") != "alice@noreply.acahti.saidc.ai" {
 		t.Fatalf("email=%s", Email("alice", "acahti.saidc.ai"))
 	}
+	if LoginFromNoreply("lipeiyang@noreply.acahti.saidc.ai", "acahti.saidc.ai") != "lipeiyang" {
+		t.Fatal("noreply login")
+	}
+	if LoginFromNoreply("other@example.com", "acahti.saidc.ai") != "" {
+		t.Fatal("foreign email")
+	}
 	if Name("alice", "") != "alice" || Name("  alice  ", "  ") != "alice" || Name("alice", "Ada") != "Ada" {
 		t.Fatal("name")
 	}

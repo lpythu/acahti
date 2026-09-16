@@ -16,6 +16,7 @@ type commitWho struct {
 	Name   string
 	Login  string
 	Avatar string
+	Email  string
 }
 
 type memo struct {
