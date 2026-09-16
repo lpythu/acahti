@@ -38,7 +38,7 @@ Public identity is Acahti: SPA, MCP, `/acahti/v1`, git HTTPS, `/api/packages`. C
 
 ## Pipes
 
-A pipeline file in `.acahti/pipelines/` is a **job**. A **pipeline** run contains those jobs; each job has **steps**. A **pipe** is an official reusable step (`pipe: helm@v1` + `with:`). Acahti expands those steps; the Runner runs `acahti-pipe`. See [pipes.md](pipes.md).
+A pipeline file in `.acahti/pipelines/` is a **job**. A **pipeline** run contains those jobs; each job has **steps**. A **pipe** is an official reusable step (`pipe: helm@v1` + `with:`). **Expand** is Acahti’s pre-run YAML rewrite: `pipe:` becomes `acahti-pipe`, island-external `secrets:` maps become env, and `docker-build` / publish receive the triggering user’s identity (`ACAHTI_USER` / `ACAHTI_TOKEN`). Harbor and ACR are not auto-injected — YAML must name them. The Runner then runs `acahti-pipe`. See [pipes.md](pipes.md).
 
 ```mermaid
 sequenceDiagram
@@ -71,7 +71,7 @@ flowchart TB
 | `/ui/*` | people (cookie) | catalog BFF |
 | `/mcp`, `/acahti/v1` | agents (OAuth) | same catalog |
 | `/{org}/{repo}.git` | git | reverse proxy → git kernel (admin token + `Sudo`) |
-| `/api/packages/*` | package clients | reverse proxy → git kernel |
+| `/api/packages/*` | package clients | same identity proxy as git HTTPS → git kernel |
 | `/hooks/*` | kernels | index upsert + SSE |
 | `/api/v1/*`, `/ci/*` | — | 404 |
 
@@ -126,6 +126,75 @@ A **team folder** (`team_repos`) is grouping in the nav. Git and UI visibility i
 - Repo file browser / commits / PRs still `GetRepo` (git ACL + live metadata). Team label comes from `team_repos`.
 - `IsOrgAdmin` still checks Forgejo Owners (memo 30s).
 
+## Identity, packages, and pipeline secrets
+
+One Acahti identity. Git and packages share `$ROOT_URL` and the same credentials. Pipeline secrets are only for island-external systems (Harbor/ACR, kubeconfig, OSS, argos, Codeup git). People and agents use their login; a CI job uses **the user who triggered that run**.
+
+```mermaid
+flowchart TB
+  subgraph identity [Acahti_identity]
+    human[login_password]
+    agent[MCP_OAuth]
+    job[triggering_user]
+  end
+  gw[Acahti]
+  run[Runner]
+  human --> gw
+  agent --> gw
+  job --> gw
+  orgAdmin[org_admin] -->|"secret_put Harbor kube OSS"| gw
+  gw -->|"island_external_secrets"| run
+  run -->|"ROOT_URL plus job identity"| gw
+```
+
+| | What | Who holds it | How we say it |
+|--|--------|--------|------------|
+| **Acahti identity** | login + password, or MCP `access_token`. CI = job identity (same pair as clone; pipes inject it) | person, agent, running job | same as git. No PAT, no second name |
+| **Pipeline secrets** | Harbor/ACR, kubeconfig, OSS, argos, `codeup_netrc` | org / repo; repo sees the effective set | Org secrets / Repo secrets. Not identity |
+
+Same secret name: **repo overrides org**. YAML `secrets:` only names which secret a step uses.
+
+| Who | git / npm / pypi | Harbor / kube / OSS |
+|----|------------------|---------------------|
+| person / agent | Acahti login + password or OAuth | do not read pipeline secrets to install packages |
+| CI | job identity, injected by `docker-build` / publish | YAML names them (`DOCKER_PASSWORD: harbor_password`, `KUBECONFIG: kubeconfig_office`) |
+
+Packages live at `$ROOT_URL/api/packages/$ORG/{npm\|pypi}` and use the same identity proxy as git HTTPS. Org members who can see repos can install. Publish uses the triggering user (`npm-publish` / `pypi-publish` / `pkg_publish`). BuildKit pulls packages with `RUN --network=host` against `$ROOT_URL` (no LAN origin).
+
+Harbor (office) and ACR (hk) are a pair. YAML names both username and password. Do not auto-inject only Harbor.
+
+| Secret | Pipe | YAML |
+|--------|------|------|
+| triggering user (install/publish Acahti packages) | `docker-build` / `npm-publish` / `pypi-publish` | do not write; expand injects it |
+| `harbor_username` / `harbor_password` | office `docker-login` | name as `DOCKER_USERNAME` / `DOCKER_PASSWORD` |
+| `acr_username` / `acr_password` | hk `docker-login` | same mapping |
+| `kubeconfig_office` / `kubeconfig_hk` | `helm` | name as `KUBECONFIG` |
+| `argos_dash` | `argos` | name as `ARGOS_DASH` |
+| `oss_*` | `oss-put` | name them |
+| `codeup_netrc` | still cloning Codeup | name it |
+| `npm_token` / `acahti_publish_token` | none | delete |
+
+Laptop / agent installs use the same identity as git. Repo files only name the registry. Credentials stay in `~/.npmrc` or env, not in git.
+
+**npm** (committed `.npmrc` is registry-only):
+
+```
+@saidc:registry=https://acahti.saidc.ai/api/packages/saidc/npm/
+```
+
+Local `~/.npmrc` (not committed): username = Acahti login; `_password` = login password or MCP `access_token`; `always-auth=true`.
+
+**PyPI** (committed `pyproject.toml` is the index URL):
+
+```toml
+[[tool.uv.index]]
+name = "saidc"
+url = "https://acahti.saidc.ai/api/packages/saidc/pypi/simple/"
+authenticate = "always"
+```
+
+Local env: `UV_INDEX_SAIDC_USERNAME` / `UV_INDEX_SAIDC_PASSWORD`. Dockerfile `pnpm` / `uv` steps use `RUN --network=host` and `--mount=type=secret,id=acahti_user` plus `id=acahti`.
+
 ## Pipeline secrets
 
 Secrets live on Acahti (SPA + MCP). The pipeline kernel encrypts values and injects them as env at job time. Acahti never stores values. The Runner has no credential files.
@@ -151,7 +220,11 @@ flowchart LR
 
 **Run**
 
-YAML `secrets: [name]` or mapped `secrets: { ENV: name }`. Expander passes lists through and rewrites maps to `environment.from_secret`. Pipes read env (`DOCKER_PASSWORD`, `KUBECONFIG` document, `ACAHTI_PUBLISH_TOKEN`, …).
+YAML `secrets: [name]` or mapped `secrets: { ENV: name }` for island-external secrets. Acahti rewrites maps to `environment.from_secret`. Pipes read env (`DOCKER_PASSWORD`, `KUBECONFIG` document, …). Acahti packages use the triggering user's identity (`ACAHTI_USER` / `ACAHTI_TOKEN`), not a pipeline secret.
+
+In `commands:`, the runner interpolates `${NAME}` from the job context **before** the shell starts. Step `environment:` is not in that pass. Write `$IMAGE`, not `${IMAGE}`.
+
+`GET /ui/repos/{owner}/{name}/secrets` is the effective set (org inherited + repo override). Admin `/admin/secrets` is the org catalog. Repo admins see inherited org names as read-only. Members get 404 and no tab. There is no `secret_get`.
 
 ## Pipeline read / write
 
@@ -214,8 +287,8 @@ One screen, one JSON. The SPA renders fields; it does not walk kernels.
 | `GET /ui/pipelines` | latest run per repo with stored `jobs` |
 | `GET /ui/repos/{owner}/{name}/pipelines` | that repo’s run history |
 | `GET /ui/pipelines/{owner}/{name}/{n}` | `{ pipeline, team, files }` — `pipeline.jobs[].steps` |
-| `GET /ui/secrets` | org pipeline secret names (Owners) |
-| `GET /ui/repos/{owner}/{name}/secrets` | repo pipeline secret names (repo admin) |
+| `GET /ui/secrets` | Org secrets catalog (Owners) |
+| `GET /ui/repos/{owner}/{name}/secrets` | effective set: org inherited + repo override (repo admin) |
 | `GET /ui/nav/tree` | `[{ team, repos }]` from the org catalog; trailing `{ team: "" }` is unassigned repos |
 | `GET /ui/repos?teams=1` | team names and counts |
 | `GET /ui/users` | page of users with `teams` and this page’s `repos` ACL |

@@ -102,7 +102,7 @@ func TestExpandRejectsMix(t *testing.T) {
 }
 
 func TestHandleConfigAuthAndExpand(t *testing.T) {
-	h := HandleConfig("secret")
+	h := HandleConfig("secret", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/hooks/pipeline-config", strings.NewReader(`{}`)))
 	if rr.Code != http.StatusUnauthorized {
@@ -137,21 +137,20 @@ func TestHandleConfigAuthAndExpand(t *testing.T) {
 
 func TestExpandSecretsList(t *testing.T) {
 	got, err := Expand([]byte(`steps:
-  publish:
-    pipe: npm-publish@v1
+  login:
+    pipe: docker-login@v1
     with:
-      path: packages/pkg
-      registry: https://acahti.example.com/api/packages/acme/npm
-    secrets: [acahti_publish_token]
+      registry: harbor.example
+    secrets: [harbor_password]
 `))
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(got)
-	if !strings.Contains(text, "from_secret: acahti_publish_token") {
+	if !strings.Contains(text, "from_secret: harbor_password") {
 		t.Fatalf("missing from_secret:\n%s", text)
 	}
-	if !strings.Contains(text, "ACAHTI_PUBLISH_TOKEN") {
+	if !strings.Contains(text, "HARBOR_PASSWORD") {
 		t.Fatalf("list secret not uppercased:\n%s", text)
 	}
 	if strings.Contains(text, "secrets:") {
@@ -246,7 +245,7 @@ func TestExpandOciGc(t *testing.T) {
 	}
 }
 
-func TestExpandDockerLoginInjectsHarbor(t *testing.T) {
+func TestExpandDockerLoginDoesNotInjectHarbor(t *testing.T) {
 	got, err := Expand([]byte(`steps:
   login:
     pipe: docker-login@v1
@@ -260,7 +259,30 @@ func TestExpandDockerLoginInjectsHarbor(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(got)
-	if !strings.Contains(text, "from_secret: harbor_password") {
-		t.Fatalf("missing harbor pull secret:\n%s", text)
+	if strings.Contains(text, "harbor_password") {
+		t.Fatalf("harbor must not be auto-injected:\n%s", text)
+	}
+	if !strings.Contains(text, "from_secret: acr_password") {
+		t.Fatalf("missing acr password:\n%s", text)
+	}
+}
+
+func TestExpandIdentInjectsJob(t *testing.T) {
+	got, err := ExpandIdent([]byte(`steps:
+  build:
+    pipe: docker-build@v1
+    with:
+      images: |
+        app:dev
+`), Ident{User: "lipeiyang", Token: "tok"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(got)
+	if !strings.Contains(text, "ACAHTI_USER: lipeiyang") {
+		t.Fatalf("missing user:\n%s", text)
+	}
+	if !strings.Contains(text, "ACAHTI_TOKEN: tok") {
+		t.Fatalf("missing token:\n%s", text)
 	}
 }

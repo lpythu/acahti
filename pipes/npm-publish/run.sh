@@ -11,9 +11,10 @@ if [[ ! -d "${ROOT}/${pkg_path}/dist" ]] || [[ -z "$(ls -A "${ROOT}/${pkg_path}/
 	exit 1
 fi
 
-token="${ACAHTI_PUBLISH_TOKEN:-}"
-if [[ -z "$token" ]]; then
-	echo "error: ACAHTI_PUBLISH_TOKEN secret is required" >&2
+token="${ACAHTI_TOKEN:-}"
+user="${ACAHTI_USER:-}"
+if [[ -z "$token" || -z "$user" ]]; then
+	echo "error: job Acahti identity is required" >&2
 	exit 1
 fi
 
@@ -28,7 +29,7 @@ if [[ -z "$org" ]]; then
 	org="${org%%/*}"
 fi
 user="$(input USER)"
-user="${user:-acahti}"
+user="${user:-$ACAHTI_USER}"
 host="${origin#https://}"
 host="${host#http://}"
 host="${host%%/*}"

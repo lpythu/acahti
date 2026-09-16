@@ -238,6 +238,7 @@ export type PipelineDetail = {
 export type PipelineSecret = {
   name: string
   events?: string[]
+  scope?: "org" | "repo"
 }
 
 export type NavTeam = {

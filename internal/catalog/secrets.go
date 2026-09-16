@@ -68,7 +68,14 @@ func (c *Catalog) ListOrgSecrets(user string, q page.Query) (page.Result[woodpec
 	if err != nil {
 		return page.Result[woodpecker.Secret]{}, err
 	}
-	return wp.ListOrgSecrets(c.Cfg.Org, q)
+	listed, err := wp.ListOrgSecrets(c.Cfg.Org, q)
+	if err != nil {
+		return page.Result[woodpecker.Secret]{}, err
+	}
+	for i := range listed.Items {
+		listed.Items[i].Scope = "org"
+	}
+	return listed, nil
 }
 
 func (c *Catalog) ListRepoSecrets(user, owner, name string, q page.Query) (page.Result[woodpecker.Secret], error) {
@@ -79,7 +86,33 @@ func (c *Catalog) ListRepoSecrets(user, owner, name string, q page.Query) (page.
 	if err != nil {
 		return page.Result[woodpecker.Secret]{}, err
 	}
-	return wp.ListRepoSecrets(owner+"/"+name, q)
+	repo, err := wp.ListRepoSecrets(owner+"/"+name, page.Query{Page: 1, Size: page.MaxSize})
+	if err != nil {
+		return page.Result[woodpecker.Secret]{}, err
+	}
+	org, err := wp.ListOrgSecrets(c.Cfg.Org, page.Query{Page: 1, Size: page.MaxSize})
+	if err != nil {
+		return page.Result[woodpecker.Secret]{}, err
+	}
+	return page.Clip(mergeEffectiveSecrets(org.Items, repo.Items), q), nil
+}
+
+func mergeEffectiveSecrets(org, repo []woodpecker.Secret) []woodpecker.Secret {
+	seen := map[string]struct{}{}
+	out := make([]woodpecker.Secret, 0, len(org)+len(repo))
+	for _, s := range repo {
+		s.Scope = "repo"
+		out = append(out, s)
+		seen[s.Name] = struct{}{}
+	}
+	for _, s := range org {
+		if _, ok := seen[s.Name]; ok {
+			continue
+		}
+		s.Scope = "org"
+		out = append(out, s)
+	}
+	return out
 }
 
 func (c *Catalog) PutOrgSecret(user, name, value string, events []string) (woodpecker.Secret, error) {

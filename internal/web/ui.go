@@ -375,13 +375,14 @@ func (p *Pages) Pipeline(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Pages) Packages(w http.ResponseWriter, r *http.Request) {
-	if _, _, ok := p.requireJSON(w, r); !ok {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
 		return
 	}
 	kind, name := r.PathValue("kind"), r.PathValue("name")
 	q := page.Parse(r)
 	if kind != "" && name != "" {
-		out, err := p.Cat.ListPackageVersions(kind, name, q)
+		out, err := p.Cat.ListPackageVersions(user, kind, name, q)
 		if err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())
 			return
@@ -389,7 +390,7 @@ func (p *Pages) Packages(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
-	out, err := p.Cat.ListPackageRows(r.URL.Query().Get("kind"), q)
+	out, err := p.Cat.ListPackageRows(user, r.URL.Query().Get("kind"), q)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return

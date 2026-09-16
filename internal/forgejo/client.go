@@ -1045,7 +1045,7 @@ func RollupStatus(st []Status) string {
 	return "success"
 }
 
-func (c *Client) ListPackages(owner, typ, query string, q page.Query) (page.Result[Package], error) {
+func (c *Client) ListPackages(owner, typ, query string, q page.Query, sudo string) (page.Result[Package], error) {
 	extra := url.Values{}
 	if typ != "" {
 		extra.Set("type", typ)
@@ -1053,7 +1053,7 @@ func (c *Client) ListPackages(owner, typ, query string, q page.Query) (page.Resu
 	if query != "" {
 		extra.Set("q", query)
 	}
-	return listPage[Package](c, "/api/v1/packages/"+url.PathEscape(owner), q, extra, "")
+	return listPage[Package](c, "/api/v1/packages/"+url.PathEscape(owner), q, extra, sudo)
 }
 
 func (c *Client) ListComments(owner, name string, number int, q page.Query) (page.Result[Comment], error) {

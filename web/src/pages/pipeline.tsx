@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/empty-state"
@@ -18,11 +18,13 @@ import { api } from "@/lib/api"
 import { formatUnix } from "@/lib/format"
 import { langOf } from "@/lib/lang"
 import { pipelineHref } from "@/lib/nav"
-import { asPipeline, jobsOf, triggerKey, triggerVars } from "@/lib/pipeline"
+import { asPipeline, jobsOf, namedSecrets, triggerKey, triggerVars } from "@/lib/pipeline"
+import { useRepo } from "@/pages/repo-layout"
 
 export function PipelinePage() {
   const t = useT()
   const nav = useNavigate()
+  const { data: repoData } = useRepo()
   const { owner = "", name = "", number = "" } = useParams()
   const n = Number(number)
   const { data, error, loading, reload, apply } = useLoad(() => api.pipeline(owner, name, n), [owner, name, n])
@@ -41,6 +43,7 @@ export function PipelinePage() {
   })
 
   const jobs = useMemo(() => (p ? jobsOf(p) : []), [p])
+  const yamlSecretNames = useMemo(() => namedSecrets(files), [files])
   const activeStep = useMemo(() => {
     if (step && jobs.some((j) => j.steps.some((s) => s.pid === step.pid && s.name === step.name))) {
       return step
@@ -147,6 +150,11 @@ export function PipelinePage() {
             {p.commit ? ` · ${p.commit.slice(0, 7)}` : ""}
             {` · ${formatUnix(p.started || p.created)}`}
           </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {yamlSecretNames.length
+              ? t("yamlSecrets", { names: yamlSecretNames.join(", ") })
+              : t("yamlSecretsNone")}
+          </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {p.status === "blocked" ? (
@@ -167,6 +175,11 @@ export function PipelinePage() {
           <Button size="sm" variant="outline" disabled={busy} onClick={() => void rerun()}>
             {t("rerun")}
           </Button>
+          {repoData?.repo.can_manage_secrets ? (
+            <Button size="sm" variant="outline" render={<Link to={`/repos/${owner}/${name}/secrets`} />}>
+              {t("secretsPage")}
+            </Button>
+          ) : null}
         </div>
       </div>
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">

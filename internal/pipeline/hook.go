@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 )
 
 type fileMeta struct {
@@ -13,6 +14,9 @@ type fileMeta struct {
 
 type configRequest struct {
 	Configuration []fileMeta `json:"configuration"`
+	Pipeline      struct {
+		Author string `json:"author"`
+	} `json:"pipeline"`
 }
 
 type configResponse struct {
@@ -20,7 +24,8 @@ type configResponse struct {
 }
 
 // HandleConfig expands pipe: in pipeline YAML. Auth is basic user "pipe" or query token=.
-func HandleConfig(token string) http.HandlerFunc {
+// issue mints an Acahti token for the user who triggered the run (job identity).
+func HandleConfig(token string, issue func(string) string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, pass, ok := r.BasicAuth()
 		q := r.URL.Query().Get("token")
@@ -39,9 +44,16 @@ func HandleConfig(token string) http.HandlerFunc {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
+		id := Ident{}
+		author := strings.TrimSpace(req.Pipeline.Author)
+		if author != "" && issue != nil {
+			if tok := strings.TrimSpace(issue(author)); tok != "" {
+				id = Ident{User: author, Token: tok}
+			}
+		}
 		out := make([]fileMeta, 0, len(req.Configuration))
 		for _, cfg := range req.Configuration {
-			data, err := Expand([]byte(cfg.Data))
+			data, err := ExpandIdent([]byte(cfg.Data), id)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return

@@ -95,6 +95,13 @@ func TestSecretsACL(t *testing.T) {
 	if strings.Contains(string(raw), "nope") {
 		t.Fatalf("value leaked: %s", raw)
 	}
+	got := map[string]string{}
+	for _, s := range repoListed.Items {
+		got[s.Name] = s.Scope
+	}
+	if got["harbor_password"] != "org" || got["svc_token"] != "repo" {
+		t.Fatalf("effective set %+v", got)
+	}
 
 	if _, err := c.PutOrgSecret("bob", "harbor_password", "x", nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("member put: %v", err)

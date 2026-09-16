@@ -20,11 +20,13 @@ export function SecretsPanel({
   onPut,
   onDelete,
   deps = [],
+  canDelete,
 }: {
   load: (q: PageQuery) => Promise<Page<PipelineSecret>>
   onPut: (name: string, value: string, events: string[]) => Promise<unknown>
   onDelete: (name: string) => Promise<unknown>
   deps?: readonly unknown[]
+  canDelete?: (s: PipelineSecret) => boolean
 }) {
   const t = useT()
   const page = usePage(load, deps)
@@ -110,34 +112,40 @@ export function SecretsPanel({
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("name")}</TableHead>
+                  <TableHead>{t("secretScope")}</TableHead>
                   <TableHead>{t("secretEvents")}</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {page.items.map((s) => (
-                  <TableRow key={s.name}>
+                  <TableRow key={`${s.scope || "repo"}:${s.name}`}>
                     <TableCell className="font-mono text-sm">{s.name}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {s.scope === "org" ? t("secretScopeOrg") : t("secretScopeRepo")}
+                    </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {(s.events || []).join(", ") || "—"}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          if (!window.confirm(t("deleteSecretConfirm", { name: s.name }))) return
-                          void onDelete(s.name)
-                            .then(async () => {
-                              toast.success(t("secretDeleted"))
-                              await page.reload()
-                            })
-                            .catch((err) => toast.error(err instanceof Error ? err.message : t("loadError")))
-                        }}
-                      >
-                        {t("remove")}
-                      </Button>
+                      {canDelete && !canDelete(s) ? null : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            if (!window.confirm(t("deleteSecretConfirm", { name: s.name }))) return
+                            void onDelete(s.name)
+                              .then(async () => {
+                                toast.success(t("secretDeleted"))
+                                await page.reload()
+                              })
+                              .catch((err) => toast.error(err instanceof Error ? err.message : t("loadError")))
+                          }}
+                        >
+                          {t("remove")}
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

@@ -1,4 +1,4 @@
-import { type FormEvent, useMemo, useState } from "react"
+import { type FormEvent, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 
 import { MenuPanel } from "@/components/menu-panel"
@@ -41,9 +41,14 @@ export function PermSelect({
   const t = useT()
   const current = PERMS.includes(value as AccessPerm) ? value : "read"
   return (
-    <Select value={current} disabled={disabled} onValueChange={(v) => onChange((String(v ?? "read") as AccessPerm) || "read")}>
+    <Select
+      value={current}
+      disabled={disabled}
+      onValueChange={(v) => onChange((String(v ?? "read") as AccessPerm) || "read")}
+      itemToStringLabel={(v) => permLabel(t, String(v ?? "read"))}
+    >
       <SelectTrigger size="sm" className={className ?? "w-28"} disabled={disabled}>
-        <SelectValue />
+        <SelectValue>{permLabel(t, current)}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         {PERMS.map((p) => (
@@ -72,13 +77,15 @@ export function AddPersonMenu({
   exclude = [],
 }: {
   title: string
-  onAdd: (login: string, permission: AccessPerm) => Promise<void>
+  onAdd: (logins: string[], permission: AccessPerm) => Promise<void>
   exclude?: string[]
 }) {
   const t = useT()
   const [open, setOpen] = useState(false)
-  const [login, setLogin] = useState("")
+  const [logins, setLogins] = useState<string[]>([])
   const [permission, setPermission] = useState<AccessPerm>("write")
+  const [busy, setBusy] = useState(false)
+  const inflight = useRef(false)
   const users = useLoad(() => loadUsers(), [], open)
   const taken = useMemo(() => new Set(exclude), [exclude])
   const options = useMemo(
@@ -88,17 +95,26 @@ export function AddPersonMenu({
         .sort((a, b) => displayName(a).localeCompare(displayName(b), undefined, { sensitivity: "base" })),
     [users.data, taken],
   )
+  const labels = useMemo(
+    () => Object.fromEntries(options.map((u) => [u.login, displayName(u)])),
+    [options],
+  )
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!login) return
+    if (!logins.length || inflight.current) return
+    inflight.current = true
+    setBusy(true)
     try {
-      await onAdd(login, permission)
-      setLogin("")
+      await onAdd(logins, permission)
+      setLogins([])
       setPermission("write")
       setOpen(false)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t("loadError"))
+    } finally {
+      inflight.current = false
+      setBusy(false)
     }
   }
 
@@ -108,7 +124,7 @@ export function AddPersonMenu({
       onOpenChange={(next) => {
         setOpen(next)
         if (next) {
-          setLogin("")
+          setLogins([])
           setPermission("write")
           void users.reload()
         }
@@ -121,7 +137,13 @@ export function AddPersonMenu({
           <FieldGroup>
             <Field>
               <FieldLabel>{t("selectUser")}</FieldLabel>
-              <Select value={login || null} onValueChange={(v) => setLogin(String(v ?? ""))}>
+              <Select
+                multiple
+                modal={false}
+                value={logins}
+                onValueChange={setLogins}
+                items={labels}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder={t("selectUser")} />
                 </SelectTrigger>
@@ -138,7 +160,7 @@ export function AddPersonMenu({
               <FieldLabel>{t("permission")}</FieldLabel>
               <PermSelect value={permission} onChange={setPermission} className="w-full" />
             </Field>
-            <Button type="submit" disabled={!login}>
+            <Button type="submit" disabled={!logins.length || busy}>
               {t("create")}
             </Button>
           </FieldGroup>

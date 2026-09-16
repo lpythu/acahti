@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
 import { PagedList } from "@/components/paged-list"
@@ -45,9 +45,16 @@ export function RepoPipelinesPage() {
       emptyText={t("noPipelines")}
       skeleton="lines"
       header={
-        <Button className="w-fit" disabled={busy || !data} onClick={() => void runPipe()}>
-          {t("run")}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button className="w-fit" disabled={busy || !data} onClick={() => void runPipe()}>
+            {t("run")}
+          </Button>
+          {data?.repo.can_manage_secrets ? (
+            <Button className="w-fit" variant="outline" render={<Link to={`/repos/${owner}/${name}/secrets`} />}>
+              {t("secretsPage")}
+            </Button>
+          ) : null}
+        </div>
       }
     >
       {(items) => (

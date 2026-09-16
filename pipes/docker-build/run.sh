@@ -32,9 +32,28 @@ add_bk_secret() {
 	chmod 600 "$src"
 	secret_args+=(--secret "id=${id},src=${src}")
 }
-add_bk_secret npm_token "${NPM_TOKEN:-}"
+add_bk_secret acahti_user "${ACAHTI_USER:-}"
+add_bk_secret acahti "${ACAHTI_TOKEN:-}"
 add_bk_secret codeup_netrc "${CODEUP_NETRC:-}"
 
+ensure_host_builder() {
+	local info driver
+	info="$(docker buildx inspect "$builder" 2>/dev/null)" || {
+		echo "error: buildx builder ${builder} not found" >&2
+		exit 1
+	}
+	driver="$(printf '%s\n' "$info" | awk -F': *' '/^Driver:/{print $2; exit}')"
+	if [[ "$driver" == "docker" ]]; then
+		return 0
+	fi
+	if printf '%s\n' "$info" | grep -qiE 'Network:[[:space:]]*host'; then
+		return 0
+	fi
+	echo "error: builder ${builder} must use host network (docker driver, or --driver-opt network=host)" >&2
+	exit 1
+}
+
+ensure_host_builder
 ensure_harbor_login
 
 build_one() {

@@ -97,9 +97,9 @@ func tools() []toolSpec {
 		{Name: "whoami", Description: "Acahti git identity. git_name is the admin-set commit author (default login). Also git_email, clone_url_template, skill_url, skill_sha, apply_when_remote_host, setup_local, org_admin", InputSchema: obj(map[string]any{})},
 		{Name: "agent_status", Description: "Host agent last contact", InputSchema: obj(pg)},
 		{Name: "deploy_approve", Description: "Approve a gated deploy pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
-		{Name: "secret_list", Description: "List pipeline secret names. Admin only. Values are never returned. scope is org or repo", InputSchema: obj(map[string]any{"scope": str, "repo": str, "owner": str, "name": str, "page": num, "page_size": num})},
-		{Name: "secret_put", Description: "Create or replace a pipeline secret. Admin only. Does not echo value. name is the secret. repo or owner+name for repo scope", InputSchema: obj(map[string]any{"scope": str, "name": str, "secret": str, "value": str, "events": map[string]any{"type": "array", "items": str}, "repo": str, "owner": str}, "value")},
-		{Name: "secret_delete", Description: "Delete a pipeline secret. Admin only", InputSchema: obj(map[string]any{"scope": str, "name": str, "secret": str, "repo": str, "owner": str})},
+		{Name: "secret_list", Description: "List pipeline secret names (never values). scope org is org admins. scope repo is the effective set (org inherited plus repo) for repo admins. repo or owner+name for repo scope", InputSchema: obj(map[string]any{"scope": str, "repo": str, "owner": str, "name": str, "page": num, "page_size": num})},
+		{Name: "secret_put", Description: "Create or replace a pipeline secret. Does not echo value. org scope needs org admin. repo scope needs repo admin. name is the secret", InputSchema: obj(map[string]any{"scope": str, "name": str, "secret": str, "value": str, "events": map[string]any{"type": "array", "items": str}, "repo": str, "owner": str}, "value")},
+		{Name: "secret_delete", Description: "Delete a pipeline secret. org scope needs org admin. repo scope needs repo admin and only deletes the repo override", InputSchema: obj(map[string]any{"scope": str, "name": str, "secret": str, "repo": str, "owner": str})},
 	}
 }
 
@@ -282,7 +282,7 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		if owner == "" {
 			owner = org
 		}
-		return s.FJ.ListPackages(owner, str("kind"), str("q"), pq)
+		return s.FJ.ListPackages(owner, str("kind"), str("q"), pq, token)
 	case "pkg_publish":
 		return s.publish(token, str("kind"), str("url"), str("filename"))
 	case "agent_status":

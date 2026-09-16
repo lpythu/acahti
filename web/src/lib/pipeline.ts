@@ -129,3 +129,23 @@ export function runEventKey(event?: string): MessageKey {
       return "runManual"
   }
 }
+
+export function namedSecrets(files: { content?: string }[] | undefined): string[] {
+  const names = new Set<string>()
+  for (const f of files || []) {
+    const text = f.content || ""
+    for (const m of text.matchAll(/secrets:\s*\[([^\]]+)\]/g)) {
+      for (const part of m[1].split(",")) {
+        const n = part.replace(/['"]/g, "").trim()
+        if (n) names.add(n)
+      }
+    }
+    for (const m of text.matchAll(/secrets:\s*\n((?:[ \t]+[A-Za-z0-9_]+:[ \t]*[A-Za-z0-9_]+\n?)+)/g)) {
+      for (const line of m[1].split("\n")) {
+        const kv = line.match(/^[ \t]+[A-Za-z0-9_]+:[ \t]*([A-Za-z0-9_]+)\s*$/)
+        if (kv) names.add(kv[1])
+      }
+    }
+  }
+  return [...names].sort()
+}

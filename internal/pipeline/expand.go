@@ -23,8 +23,18 @@ var official = map[string]struct{}{
 	"oci-gc":       {},
 }
 
+// Ident is the Acahti user this run is (the person who triggered it).
+type Ident struct {
+	User  string
+	Token string
+}
+
 // Expand rewrites pipe: name@v1 steps into image: bash + acahti-pipe <name>.
 func Expand(src []byte) ([]byte, error) {
+	return ExpandIdent(src, Ident{})
+}
+
+func ExpandIdent(src []byte, id Ident) ([]byte, error) {
 	if len(strings.TrimSpace(string(src))) == 0 {
 		return src, nil
 	}
@@ -39,7 +49,7 @@ func Expand(src []byte) ([]byte, error) {
 		return nil, fmt.Errorf("uses: is not supported; use pipe:")
 	}
 	if steps, ok := doc["steps"]; ok {
-		if err := expandSteps(steps); err != nil {
+		if err := expandSteps(steps, id); err != nil {
 			return nil, err
 		}
 	}
@@ -50,7 +60,7 @@ func Expand(src []byte) ([]byte, error) {
 	return out, nil
 }
 
-func expandSteps(steps any) error {
+func expandSteps(steps any, id Ident) error {
 	switch s := steps.(type) {
 	case map[string]any:
 		for name, raw := range s {
@@ -58,7 +68,7 @@ func expandSteps(steps any) error {
 			if !ok {
 				return fmt.Errorf("step %s: expected a mapping", name)
 			}
-			if err := expandStep(name, step); err != nil {
+			if err := expandStep(name, step, id); err != nil {
 				return err
 			}
 		}
@@ -72,7 +82,7 @@ func expandSteps(steps any) error {
 			if n, ok := step["name"].(string); ok && n != "" {
 				name = n
 			}
-			if err := expandStep(name, step); err != nil {
+			if err := expandStep(name, step, id); err != nil {
 				return err
 			}
 		}
@@ -154,12 +164,25 @@ func rewriteSecrets(name string, step map[string]any) error {
 	}
 }
 
-func expandStep(name string, step map[string]any) error {
+func expandStep(name string, step map[string]any, id Ident) error {
 	if _, ok := step["uses"]; ok {
 		return fmt.Errorf("step %s: uses: is not supported; use pipe:", name)
 	}
 	if err := rewriteSecrets(name, step); err != nil {
 		return err
+	}
+	if id.User != "" && id.Token != "" {
+		env, err := stepEnv(step)
+		if err != nil {
+			return fmt.Errorf("step %s: %w", name, err)
+		}
+		if _, exists := env["ACAHTI_USER"]; !exists {
+			env["ACAHTI_USER"] = id.User
+		}
+		if _, exists := env["ACAHTI_TOKEN"]; !exists {
+			env["ACAHTI_TOKEN"] = id.Token
+		}
+		step["environment"] = env
 	}
 	raw, ok := step["pipe"]
 	if !ok {
@@ -199,11 +222,6 @@ func expandStep(name string, step map[string]any) error {
 			}
 			key := "INPUT_" + strings.ToUpper(strings.ReplaceAll(k, "-", "_"))
 			env[key] = stringify(v)
-		}
-	}
-	if pipeName == "docker-login" || pipeName == "docker-build" {
-		if _, exists := env["HARBOR_PASSWORD"]; !exists {
-			env["HARBOR_PASSWORD"] = map[string]any{"from_secret": "harbor_password"}
 		}
 	}
 	step["image"] = "bash"

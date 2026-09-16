@@ -6,6 +6,8 @@ Acahti expands `pipe:` before the Runner executes. The Runner runs `acahti-pipe 
 
 A step is either `pipe:` + `with:` or raw `commands:` (one-offs stay in the repo). `when`, `depends_on`, and `labels` pass through.
 
+In `commands:`, write `$IMAGE` (shell). `${IMAGE}` is emptied by the runner before the step starts; `${CI_COMMIT_SHA}` is job context and is expanded.
+
 Credentials are **pipeline secrets** (control plane). The Runner has no `/root/.harbor`, kubeconfig files, or npm tokens. YAML names secrets; values never go in git.
 
 ```yaml
@@ -30,38 +32,33 @@ This train only first-party pipes: `pipe: <name>@v1`. Registry URLs, image names
 
 ## Secrets
 
-Secret names are lowercase `snake_case`. Woodpecker injects them as uppercase env. A step must opt in.
+Secret names are lowercase `snake_case`. A step must opt in. Island-external only.
 
-List when the secret name **is** the env the pipe wants:
-
-```yaml
-secrets: [acahti_publish_token]
-```
-
-Map when they differ:
+List when the secret name **is** the env the pipe wants. Map when they differ:
 
 ```yaml
 secrets:
   KUBECONFIG: kubeconfig_office
+  DOCKER_USERNAME: harbor_username
   DOCKER_PASSWORD: harbor_password
 ```
 
 Do not put `env_file`, `token_file`, `password_file`, `auth_file`, or a kubeconfig **path** in `with:`.
 
-Org catalog (Owners put once under Admin → Pipeline secrets):
+Acahti npm/pypi install and publish use the triggering user's identity. Do not name an npm or publish token.
+
+Org catalog (Owners put once under Admin → Org secrets). Harbor (office) and ACR (hk) are a pair:
 
 | Secret | Pipe env |
 |---|---|
-| `harbor_password` | `DOCKER_PASSWORD` (office CD) |
-| `acr_username` / `acr_password` | `DOCKER_USERNAME` / `DOCKER_PASSWORD` (HK CD) |
+| `harbor_username` / `harbor_password` | `DOCKER_USERNAME` / `DOCKER_PASSWORD` (office) |
+| `acr_username` / `acr_password` | `DOCKER_USERNAME` / `DOCKER_PASSWORD` (hk) |
 | `kubeconfig_office` / `kubeconfig_hk` | `KUBECONFIG` |
-| `acahti_publish_token` | `ACAHTI_PUBLISH_TOKEN` |
-| `npm_token` | `NPM_TOKEN` |
-| `codeup_netrc` | `CODEUP_NETRC` (Go private modules still fetched from Codeup) |
+| `codeup_netrc` | `CODEUP_NETRC` (Go modules still fetched from Codeup git) |
 | `oss_access_key_id` / `oss_access_key_secret` | `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` |
 | `argos_dash` | `ARGOS_DASH` |
 
-Only org/repo admins can list or put secrets. Members cannot see names. Values are never returned.
+Only org/repo admins can list or put secrets. Repo Secrets shows the effective set. Members cannot see names. Values are never returned.
 
 ## Catalog
 
@@ -71,9 +68,9 @@ Only org/repo admins can list or put secrets. Members cannot see names. Values a
 
 ### docker-build
 
-`with:` `images` (required). One image per line. First field is the primary tag. Optional `also=` extra tags (comma-separated), `context=` (default `.`), `file=` Dockerfile, other `KEY=VAL` as `--build-arg`. Optional `push` (default `true`); `push: false` is `--load` only (CI). BuildKit secrets: `NPM_TOKEN` → `id=npm_token`, `CODEUP_NETRC` → `id=codeup_netrc`. Builds with `--pull --provenance=false --load`, then pushes primary and `also=` tags when `push` is true.
+`with:` `images` (required). One image per line. First field is the primary tag. Optional `also=` extra tags (comma-separated), `context=` (default `.`), `file=` Dockerfile, other `KEY=VAL` as `--build-arg`. Optional `push` (default `true`); `push: false` is `--load` only (CI). BuildKit secrets: job identity → `id=acahti_user` and `id=acahti`, `CODEUP_NETRC` → `id=codeup_netrc`. Default `--network=host`. Builds with `--pull --provenance=false --load`, then pushes primary and `also=` tags when `push` is true.
 
-OCI tags: office CD `dev-${CI_COMMIT_SHA}`; HK CD `${CI_COMMIT_TAG#v}` (git tag `vX.Y.Z` → `X.Y.Z`). `latest` is a pointer at the same digest. `${CI_COMMIT_TAG#v}` is expanded in the pipe (Woodpecker only interpolates `${CI_COMMIT_TAG}`).
+OCI tags: office CD `dev-${CI_COMMIT_SHA}`; HK CD `${CI_COMMIT_TAG#v}` (git tag `vX.Y.Z` → `X.Y.Z`). `latest` is a pointer at the same digest. `${CI_COMMIT_TAG#v}` is expanded in the pipe (`${CI_COMMIT_TAG}` is interpolated by the runner).
 
 ### oci-gc
 
@@ -93,11 +90,11 @@ OCI tags: office CD `dev-${CI_COMMIT_SHA}`; HK CD `${CI_COMMIT_TAG#v}` (git tag 
 
 ### npm-publish
 
-Build the package first (`commands:`). `with:` `path` (package dir with `dist/`), `registry` (packages npm URL). Token is env `ACAHTI_PUBLISH_TOKEN`. Optional `origin`, `org`, `user` (derived from `registry` when omitted).
+Build the package first (`commands:`). `with:` `path` (package dir with `dist/`), `registry` (Acahti packages npm URL). Auth is the triggering user's Acahti identity. Optional `origin`, `org`, `user` (derived from `registry` when omitted).
 
 ### pypi-publish
 
-`with:` `registry` (uv `--publish-url`). Token is env `ACAHTI_PUBLISH_TOKEN`. Runs `uv build` then `uv publish`.
+`with:` `registry` (uv `--publish-url`). Auth is the triggering user's Acahti identity. Runs `uv build` then `uv publish`.
 
 ### oss-put
 
@@ -115,6 +112,7 @@ steps:
       registry: harbor.example
       username: 'robot$$user'
     secrets:
+      DOCKER_USERNAME: harbor_username
       DOCKER_PASSWORD: harbor_password
   build:
     pipe: docker-build@v1
@@ -122,8 +120,6 @@ steps:
       push: false
       images: |
         app:${CI_COMMIT_SHA} APP=web
-    secrets:
-      NPM_TOKEN: npm_token
 ```
 
 Office CD (push `dev`) publishes Harbor `dev-${CI_COMMIT_SHA}` + `latest`, helm pin is that tag, then GC keeps 3 tags including `latest`. HK CD (tag on `test`) is the same shape with ACR login, image tag `${CI_COMMIT_TAG#v}`, `kubeconfig_hk`, and `jump: thk` (ACK API is VPC-only).
@@ -136,14 +132,13 @@ steps:
       registry: harbor.example
       username: 'robot$$user'
     secrets:
+      DOCKER_USERNAME: harbor_username
       DOCKER_PASSWORD: harbor_password
   build:
     pipe: docker-build@v1
     with:
       images: |
         harbor.example/app:dev-${CI_COMMIT_SHA} also=harbor.example/app:latest APP=web
-    secrets:
-      NPM_TOKEN: npm_token
   deploy:
     pipe: helm@v1
     with:
@@ -188,5 +183,4 @@ steps:
       path: packages/pkg
       registry: https://acahti.example.com/api/packages/acme/npm
       image: harbor.example/library/node:22-alpine
-    secrets: [acahti_publish_token]
 ```

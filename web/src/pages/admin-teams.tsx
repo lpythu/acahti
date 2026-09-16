@@ -159,9 +159,9 @@ export function AdminTeamPage() {
               <AddPersonMenu
                 title={t("addMember")}
                 exclude={(data?.members ?? []).map((m) => m.login)}
-                onAdd={async (login, permission) => {
-                  await api.setTeamMember(team, login, permission)
-                  toast.success(t("memberAdded"))
+                onAdd={async (logins, permission) => {
+                  await Promise.all(logins.map((login) => api.setTeamMember(team, login, permission)))
+                  toast.success(t("memberAdded"), { id: "member-added" })
                   await load.reload()
                 }}
               />

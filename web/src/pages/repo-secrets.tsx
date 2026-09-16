@@ -10,6 +10,7 @@ export function RepoSecretsPage() {
       onPut={(secret, value, events) => api.putRepoSecret(owner, name, secret, value, events)}
       onDelete={(secret) => api.deleteRepoSecret(owner, name, secret)}
       deps={[owner, name]}
+      canDelete={(s) => s.scope !== "org"}
     />
   )
 }

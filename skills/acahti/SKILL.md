@@ -40,7 +40,7 @@ Before any `git commit` in the current repo:
 
 `git_name` is the commit author the admin set on the user (default `login`). `git_email` is `{login}@noreply.$DOMAIN`. Run `setup_local` with `whoami.git_name` and `whoami.git_email`. Do not ask the user for a name or email.
 
-Protection is per repository, not a global train. Before push: `repo_get` `{owner, name}` and `branch_list` `{owner, name}`. Direct-push branches with `protected: false`. For `protected: true`, open a PR (`pr_create`; `base` defaults to `repo_get.default_branch`). Do not assume `dev` / `test` / `main` / `release`. If the remote declines a push, open a PR to the default branch. Operators set default / protection on the repo **Branches** page in the web UI (or Forgejo settings).
+Protection is per repository, not a global train. Before push: `repo_get` `{owner, name}` and `branch_list` `{owner, name}`. Direct-push branches with `protected: false`. For `protected: true`, open a PR (`pr_create`; `base` defaults to `repo_get.default_branch`). Do not assume `dev` / `test` / `main` / `release`. If the remote declines a push, open a PR to the default branch. Operators set default / protection on the repo **Branches** page in the web UI.
 
 ## After push
 
@@ -63,19 +63,27 @@ Trigger CI with `git push`, a tag, or opening a PR. Do not use `pipeline_trigger
 
 ## Pipeline secrets
 
-YAML only names secrets (`secrets: [acahti_publish_token]` or mapped `KUBECONFIG: kubeconfig_office`). Do not put values in git, chat, or `with:`.
+Island-external only (Harbor/ACR, kubeconfig, OSS, argos). YAML names them (`KUBECONFIG: kubeconfig_office`, `DOCKER_PASSWORD: harbor_password`). Do not put values in git, chat, or `with:`.
 
-Admin agent: `repo_get.can_manage_secrets` (or `whoami.org_admin`) → `secret_list` → `secret_put`. Never print `value`. There is no `secret_get`. Do not slurp workspace `secrets/` unless the operator names a file.
+Acahti npm/pypi use the job's Acahti identity (the user who triggered the run). Do not write `NPM_TOKEN` or a publish token.
 
-Non-admin agent: do not call `secret_*`. If a pipe fails missing a secret, tell the operator to add it under Repo → Pipeline secrets (or Admin → Pipeline secrets for org names). Do not ask the human to paste a token into the chat.
+In YAML `commands:`, use `$VAR` for step env. `${VAR}` is interpolated before the shell runs and is empty unless it is job context (`${CI_COMMIT_SHA}`).
+
+`repo_get.can_manage_secrets` or `whoami.org_admin` → `secret_list` (repo scope is the effective set) → `secret_put`. Never print `value`. There is no `secret_get`. Do not slurp workspace `secrets/` unless the operator names a file.
+
+Non-admin agent: do not call `secret_*`. If a pipe fails missing a secret, tell the operator Repo → Secrets (or Admin → Org secrets). Do not ask them to paste a token into the chat.
 
 Laptop `secrets/` is operator tooling (Cloudflare, dash.env download), not Runner or pipeline state.
 
 ## Packages
 
-- PyPI: `$ROOT_URL/api/packages/$ACAHTI_ORG/pypi/simple/`
+Same credentials as git. Username is the Acahti login. Password is the login password or MCP `access_token`.
+
 - npm: `$ROOT_URL/api/packages/$ACAHTI_ORG/npm/`
+- PyPI: `$ROOT_URL/api/packages/$ACAHTI_ORG/pypi/simple/`
 - REST: `$ROOT_URL/acahti/v1/…` same verbs as MCP
+
+Org members who can see repos can install. Publish uses the triggering user's identity (`npm-publish` / `pypi-publish` / `pkg_publish`).
 
 ## Tools
 

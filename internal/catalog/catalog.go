@@ -405,11 +405,11 @@ func (c *Catalog) ListComments(user, owner, name string, number int, q page.Quer
 	return c.FJ.ListComments(owner, name, number, q)
 }
 
-func (c *Catalog) ListPackageVersions(kind, name string, q page.Query) (page.Result[forgejo.Package], error) {
+func (c *Catalog) ListPackageVersions(user, kind, name string, q page.Query) (page.Result[forgejo.Package], error) {
 	if !c.FJ.Ready() {
 		return page.Of([]forgejo.Package{}, q, false), nil
 	}
-	res, err := c.FJ.ListPackages(c.Cfg.Org, kind, name, q)
+	res, err := c.FJ.ListPackages(c.Cfg.Org, kind, name, q, user)
 	if err != nil {
 		return page.Result[forgejo.Package]{}, err
 	}
@@ -422,11 +422,11 @@ func (c *Catalog) ListPackageVersions(kind, name string, q page.Query) (page.Res
 	return page.Of(items, q, res.HasMore), nil
 }
 
-func (c *Catalog) ListPackageRows(kind string, q page.Query) (page.Result[PackageRow], error) {
+func (c *Catalog) ListPackageRows(user, kind string, q page.Query) (page.Result[PackageRow], error) {
 	if !c.FJ.Ready() {
 		return page.Of([]PackageRow{}, q, false), nil
 	}
-	res, err := c.FJ.ListPackages(c.Cfg.Org, kind, "", q)
+	res, err := c.FJ.ListPackages(c.Cfg.Org, kind, "", q, user)
 	if err != nil {
 		return page.Result[PackageRow]{}, err
 	}

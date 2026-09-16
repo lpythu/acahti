@@ -16,6 +16,7 @@ var DefaultSecretEvents = []string{"push", "tag", "manual"}
 type Secret struct {
 	Name   string   `json:"name"`
 	Events []string `json:"events,omitempty"`
+	Scope  string   `json:"scope,omitempty"`
 }
 
 type kernelSecret struct {

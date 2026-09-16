@@ -17,10 +17,12 @@ export function PackageDetailPage() {
   )
   const root = me.root_url.replace(/\/$/, "")
   const org = me.org
+  const host = root.replace(/^https?:\/\//, "")
+  const user = me.user
   const install =
     kind === "npm"
-      ? t("npmHint", { name, url: `${root}/api/packages/${org}/npm/` })
-      : t("pipHint", { name, url: `${root}/api/packages/${org}/pypi/` })
+      ? t("npmHint", { name, url: `${root}/api/packages/${org}/npm/`, host, org, user })
+      : t("pipHint", { name, url: `${root}/api/packages/${org}/pypi/`, host, org, user })
 
   return (
     <PagedList
@@ -38,7 +40,7 @@ export function PackageDetailPage() {
               / {kind} / {name}
             </span>
           </p>
-          <CopyField label={t("install")} value={install} />
+          <CopyField label={t("install")} value={install} multiline />
         </>
       }
     >

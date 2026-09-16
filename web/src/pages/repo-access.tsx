@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react"
+import { type FormEvent, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -7,6 +7,7 @@ import { PageFrame } from "@/components/page-frame"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { MenuPanel } from "@/components/menu-panel"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -125,6 +126,7 @@ export function RepoAccessPage() {
   const data = load.data
   const manage = Boolean(data?.can_manage)
   const admin = Boolean(me?.admin)
+  const grantBusy = useRef(false)
 
   return (
     <PageFrame loading={load.loading && !data} error={load.error}>
@@ -147,21 +149,29 @@ export function RepoAccessPage() {
               )}
             </p>
             {data.team && admin ? (
-              <label className="flex items-center gap-2 text-sm">
+              <div className="flex items-center gap-2 text-sm">
                 <Switch
+                  id="grant-team"
                   checked={Boolean(data.granted)}
                   onCheckedChange={(v) => {
+                    if (grantBusy.current) return
+                    grantBusy.current = true
                     void api
                       .setRepoTeamGrant(owner, name, v === true)
                       .then(async () => {
-                        toast.success(t("accessUpdated"))
+                        toast.success(t("accessUpdated"), { id: "access-updated" })
                         await load.reload()
                       })
                       .catch((e) => toast.error(e instanceof Error ? e.message : t("loadError")))
+                      .finally(() => {
+                        grantBusy.current = false
+                      })
                   }}
                 />
-                {t("grantTeam")}
-              </label>
+                <Label htmlFor="grant-team" className="font-normal">
+                  {t("grantTeam")}
+                </Label>
+              </div>
             ) : null}
             {data.team && data.granted ? <PeopleTable people={data.inherited} empty={t("noInherited")} /> : null}
           </section>
@@ -172,9 +182,11 @@ export function RepoAccessPage() {
                 <AddPersonMenu
                   title={t("addMember")}
                   exclude={[...data.inherited, ...data.direct].map((p) => p.login)}
-                  onAdd={async (login, permission) => {
-                    await api.setCollaborator(owner, name, login, permission)
-                    toast.success(t("memberAdded"))
+                  onAdd={async (logins, permission) => {
+                    await Promise.all(
+                      logins.map((login) => api.setCollaborator(owner, name, login, permission)),
+                    )
+                    toast.success(t("memberAdded"), { id: "member-added" })
                     await load.reload()
                   }}
                 />
@@ -188,7 +200,7 @@ export function RepoAccessPage() {
                 void api
                   .setCollaborator(owner, name, login, perm)
                   .then(async () => {
-                    toast.success(t("accessUpdated"))
+                    toast.success(t("accessUpdated"), { id: "access-updated" })
                     await load.reload()
                   })
                   .catch((e) => toast.error(e instanceof Error ? e.message : t("loadError")))
@@ -197,7 +209,7 @@ export function RepoAccessPage() {
                 void api
                   .removeCollaborator(owner, name, login)
                   .then(async () => {
-                    toast.success(t("accessRemoved"))
+                    toast.success(t("accessRemoved"), { id: "access-removed" })
                     await load.reload()
                   })
                   .catch((e) => toast.error(e instanceof Error ? e.message : t("loadError")))

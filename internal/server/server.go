@@ -141,7 +141,7 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 		}
 		pages.Index(w, r)
 	})
-	mux.HandleFunc("POST /hooks/pipeline-config", pipeline.HandleConfig(cfg.ConfigToken))
+	mux.HandleFunc("POST /hooks/pipeline-config", pipeline.HandleConfig(cfg.ConfigToken, a.Issue))
 	mux.HandleFunc("POST /hooks/woodpecker", func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
 		if p, ok := cat.IngestWoodpecker(raw); ok {
@@ -172,7 +172,7 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 		case closedKernel(p):
 			writeClosed(w)
 		case strings.HasPrefix(p, "/api/packages/"):
-			fjProxy.ServeHTTP(w, r)
+			gitAs(a, fj, cfg.AdminToken, fjProxy, w, r)
 		case gitHTTP(p):
 			gitAs(a, fj, cfg.AdminToken, fjProxy, w, r)
 		default:

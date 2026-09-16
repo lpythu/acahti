@@ -6,7 +6,7 @@ Pinned versions live in [versions.env](versions.env) (`ACAHTI_VERSION` is this r
 
 ## Architecture
 
-See [architecture.md](architecture.md) for the current stack, org and pipeline read models, and page contracts. See [pipes.md](pipes.md) for official pipeline pipes (`pipe: helm@v1`).
+See [architecture.md](architecture.md) for the current stack, **identity vs pipeline secrets**, org and pipeline read models, and page contracts. See [pipes.md](pipes.md) for official pipeline pipes (`pipe: helm@v1`). Git, npm, and pypi use one Acahti login. Pipeline secrets are island-external only.
 
 ```mermaid
 flowchart LR
@@ -70,7 +70,7 @@ Give the first line to any coding agent. It GET `$ROOT_URL/skill.md` this turn, 
 Plugins: [lpythu/acahti-plugin](https://github.com/lpythu/acahti-plugin) (`cursor/` for Cursor, `codex/` for Codex). Do not put `acahti` in `~/.cursor/mcp.json`.
 
 - Git: `https://acahti.example.com/acme/<repo>.git` — username is the Acahti login; password is the account password (same as `/login`) or the OAuth `access_token` the MCP client already holds
-- Packages: `https://acahti.example.com/api/packages/acme/pypi/simple/` and `…/npm/`
+- Packages: same credentials as git — `https://acahti.example.com/api/packages/acme/pypi/simple/` and `…/npm/`. CI uses the triggering user's identity (`docker-build` / publish inject it). Do not add an npm or publish token.
 - REST: `/acahti/v1/…` same verbs as MCP
 - Not public: `/ci` and git-kernel HTML (`/login/oauth`, `/user/login`, `/api/v1`)
 - Acahti upgrade: tag `vX.Y.Z` on `lpythu/acahti` (not a push to `main`)

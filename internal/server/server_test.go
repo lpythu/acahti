@@ -150,6 +150,15 @@ func TestPublicAllowlist(t *testing.T) {
 	hit = ""
 	rr = httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/packages/acme/pypi/simple/", nil))
+	if hit != "" || rr.Code != http.StatusUnauthorized {
+		t.Fatalf("packages without token hit=%q code=%d", hit, rr.Code)
+	}
+
+	hit = ""
+	pkgReq := httptest.NewRequest(http.MethodGet, "/api/packages/acme/pypi/simple/", nil)
+	pkgReq.SetBasicAuth("alice", tok)
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, pkgReq)
 	if hit != "/api/packages/acme/pypi/simple/" || rr.Code != http.StatusTeapot {
 		t.Fatalf("packages proxy hit=%q code=%d", hit, rr.Code)
 	}
