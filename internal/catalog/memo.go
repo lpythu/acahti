@@ -12,17 +12,25 @@ type stamp[T any] struct {
 	v  T
 }
 
+type commitWho struct {
+	Name   string
+	Login  string
+	Avatar string
+}
+
 type memo struct {
 	mu      sync.Mutex
 	admin   map[string]stamp[bool]
 	authors stamp[map[string]string]
 	files   map[string][]FileBlob
+	who     map[string]commitWho
 }
 
 func newMemo() *memo {
 	return &memo{
 		admin: map[string]stamp[bool]{},
 		files: map[string][]FileBlob{},
+		who:   map[string]commitWho{},
 	}
 }
 
@@ -102,10 +110,30 @@ func (m *memo) setFiles(repo, ref string, files []FileBlob) {
 	m.mu.Unlock()
 }
 
+func (m *memo) commitWhoOf(repo, sha string) (commitWho, bool) {
+	if m == nil || repo == "" || sha == "" {
+		return commitWho{}, false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	w, ok := m.who[fileKey(repo, sha)]
+	return w, ok
+}
+
+func (m *memo) setCommitWho(repo, sha string, w commitWho) {
+	if m == nil || repo == "" || sha == "" {
+		return
+	}
+	m.mu.Lock()
+	m.who[fileKey(repo, sha)] = w
+	m.mu.Unlock()
+}
+
 func (m *memo) drop() {
 	m.mu.Lock()
 	m.admin = map[string]stamp[bool]{}
 	m.authors = stamp[map[string]string]{}
+	m.who = map[string]commitWho{}
 	m.mu.Unlock()
 }
 

@@ -749,16 +749,22 @@ func (c *Catalog) CommitDetail(user, owner, name, sha string, q page.Query) (Com
 
 func (c *Catalog) paintPipes(pipes []woodpecker.Pipeline) []woodpecker.Pipeline {
 	out := append([]woodpecker.Pipeline(nil), pipes...)
+	var wg sync.WaitGroup
 	for i := range out {
-		out[i].HydrateJobs()
-		out[i].Author = c.authorOf(out[i].Author)
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			out[i].HydrateJobs()
+			out[i] = c.applyCommitAuthor(out[i])
+		}(i)
 	}
+	wg.Wait()
 	return out
 }
 
 func (c *Catalog) decoratePipe(p woodpecker.Pipeline) woodpecker.Pipeline {
 	p.HydrateJobs()
-	p.Author = c.authorOf(p.Author)
+	p = c.applyCommitAuthor(p)
 	return woodpecker.MergeDeclaredJobs(p, c.declaredJobNames(p))
 }
 

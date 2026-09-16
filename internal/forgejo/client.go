@@ -713,7 +713,7 @@ func (c *Client) ListCommits(owner, name, sha string, q page.Query) (page.Result
 }
 
 func (c *Client) GetCommit(owner, name, sha string) (Commit, error) {
-	b, _, err := c.do(http.MethodGet, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/git/commits/"+url.PathEscape(sha), "", "", nil)
+	b, _, err := c.do(http.MethodGet, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/commits/"+url.PathEscape(sha), "", "", nil)
 	if err != nil {
 		return Commit{}, err
 	}
