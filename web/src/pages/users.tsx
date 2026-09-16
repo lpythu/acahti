@@ -18,7 +18,7 @@ import { useLoad } from "@/hooks/use-load"
 import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api, repoName, splitRepo, type Invite, type UserRepoPerm } from "@/lib/api"
-import { onboardNote } from "@/lib/onboard"
+import { onboardAgent, onboardYou } from "@/lib/onboard"
 import { useSession } from "@/lib/session"
 
 async function copyText(text: string, ok: string, fail: string) {
@@ -181,6 +181,17 @@ function InviteMenu({
   )
 }
 
+function OnboardCopy({ root, login, password }: { root: string; login: string; password: string }) {
+  const t = useT()
+  return (
+    <>
+      <p className="text-sm text-muted-foreground">{t("onboardHint")}</p>
+      <CopyField label={t("onboardYou")} multiline value={onboardYou(root, login, password)} />
+      <CopyField label={t("onboardAgent")} multiline value={onboardAgent(root)} />
+    </>
+  )
+}
+
 function CreateUserMenu({
   admin,
   setAdmin,
@@ -193,16 +204,16 @@ function CreateUserMenu({
   onCreate: (login: string, password: string, admin: boolean) => Promise<string>
 }) {
   const t = useT()
-  const [note, setNote] = useState("")
+  const [created, setCreated] = useState<{ login: string; password: string } | null>(null)
 
   return (
     <Popover
       onOpenChange={(open) => {
-        if (!open) setNote("")
+        if (!open) setCreated(null)
       }}
     >
       <PopoverTrigger render={<Button type="button" size="sm" />}>{t("createUser")}</PopoverTrigger>
-      <PopoverContent className="flex w-96 flex-col gap-3">
+      <PopoverContent className="flex w-[28rem] flex-col gap-3">
         <form
           onSubmit={(e: FormEvent<HTMLFormElement>) => {
             e.preventDefault()
@@ -211,11 +222,9 @@ function CreateUserMenu({
             const password = String(fd.get("password") || "")
             const form = e.currentTarget
             void onCreate(login, password, admin)
-              .then((created) => {
+              .then((name) => {
                 toast.success(t("userCreated"))
-                const text = onboardNote(root, created, password)
-                setNote(text)
-                void copyText(text, t("copied"), t("copyFailed"))
+                setCreated({ login: name, password })
                 form.reset()
                 setAdmin(false)
               })
@@ -240,12 +249,7 @@ function CreateUserMenu({
             <Button type="submit">{t("create")}</Button>
           </FieldGroup>
         </form>
-        {note ? (
-          <>
-            <p className="text-sm text-muted-foreground">{t("onboardHint")}</p>
-            <CopyField multiline value={note} />
-          </>
-        ) : null}
+        {created ? <OnboardCopy root={root} login={created.login} password={created.password} /> : null}
       </PopoverContent>
     </Popover>
   )
@@ -392,38 +396,45 @@ function OnboardMenu({
   onPassword: (pw: string) => void
 }) {
   const t = useT()
-  const [note, setNote] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [password, setPassword] = useState<string | null>(null)
 
   async function prepare() {
     try {
       const r = await api.ensurePassword(login)
       const next = r.password || ""
       if (next) onPassword(next)
-      const text = onboardNote(root, login, next)
-      setNote(text)
-      await copyText(text, t("copied"), t("copyFailed"))
+      setPassword(next)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t("loadError"))
+      setError(err instanceof Error ? err.message : t("loadError"))
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
     <Popover
       onOpenChange={(open) => {
-        if (open) void prepare()
-        else setNote("")
+        if (open) {
+          setError("")
+          setPassword(null)
+          setLoading(true)
+          void prepare()
+        } else {
+          setLoading(false)
+          setError("")
+          setPassword(null)
+        }
       }}
     >
       <PopoverTrigger render={<Button type="button" size="sm" disabled={!root} />}>
         {t("join")}
       </PopoverTrigger>
-      <PopoverContent className="flex w-96 flex-col gap-3">
-        {note ? (
-          <>
-            <p className="text-sm text-muted-foreground">{t("onboardHint")}</p>
-            <CopyField multiline value={note} />
-          </>
-        ) : null}
+      <PopoverContent className="flex w-[28rem] flex-col gap-3">
+        <MenuPanel loading={loading} error={error}>
+          {password !== null ? <OnboardCopy root={root} login={login} password={password} /> : null}
+        </MenuPanel>
       </PopoverContent>
     </Popover>
   )
