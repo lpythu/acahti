@@ -4,7 +4,9 @@ A **pipeline** is one run. Each YAML file in `.acahti/pipelines/` is a **job** i
 
 Acahti expands `pipe:` before the Runner executes. The Runner runs `acahti-pipe <name>`. Do not vendor `.acahti/scripts`. Do not write `uses:`.
 
-A step is either `pipe:` + `with:` or raw `commands:` (one-offs stay in the repo). `when`, `depends_on`, and `labels` pass through. Expand injects Woodpecker `concurrency` when the job file omits it: `cd.office` → group `deploy-office-<owner>-<repo>` (limit 1), `cd.hk` → `deploy-hk-…`, `pkg` → `pkg-…`. Same repo still serializes; different repos run in parallel. YAML `concurrency:` wins. CI files are unlimited except Runner capacity (`WOODPECKER_MAX_WORKFLOWS`, from host nproc/memory unless pinned).
+A step is either `pipe:` + `with:` or raw `commands:` (one-offs stay in the repo). `when`, `depends_on`, and `labels` pass through. Expand injects Woodpecker `concurrency` when the job file omits it: `cd.office` → group `deploy-office-<owner>-<repo>` (limit 1), `cd.hk` → `deploy-hk-…`, `pkg` → `pkg-…`. Same repo still serializes; different repos run in parallel. YAML `concurrency:` wins.
+
+When a `cd.*` / `pkg` job matches the event, expand drops standalone `ci.yaml` (and `depends_on: [ci]`) so that train occupies one Runner slot until it finishes. CI still runs on pull requests and on pushes with no matching CD/pkg. Remaining jobs share `WOODPECKER_MAX_WORKFLOWS` (host nproc/memory unless pinned).
 
 In `commands:`, write `$IMAGE` (shell). `${IMAGE}` is emptied by the runner before the step starts; `${CI_COMMIT_SHA}` is job context and is expanded.
 

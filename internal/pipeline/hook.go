@@ -17,6 +17,9 @@ type configRequest struct {
 	Pipeline      struct {
 		Author string `json:"author"`
 		Commit string `json:"commit"`
+		Event  string `json:"event"`
+		Branch string `json:"branch"`
+		Ref    string `json:"ref"`
 	} `json:"pipeline"`
 	Repo struct {
 		FullName string `json:"full_name"`
@@ -68,8 +71,9 @@ func HandleConfig(token string, issue func(author, repo, sha string) Ident) http
 			id = issue(strings.TrimSpace(req.Pipeline.Author), repo, strings.TrimSpace(req.Pipeline.Commit))
 		}
 		id.Repo = repo
-		out := make([]fileMeta, 0, len(req.Configuration))
-		for _, cfg := range req.Configuration {
+		files := foldFinishJobs(req.Configuration, req.Pipeline.Event, req.Pipeline.Branch, req.Pipeline.Ref)
+		out := make([]fileMeta, 0, len(files))
+		for _, cfg := range files {
 			data, err := ExpandFile(cfg.Name, []byte(cfg.Data), id)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)

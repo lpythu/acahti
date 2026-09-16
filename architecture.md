@@ -32,7 +32,7 @@ flowchart LR
 | Host | Runs |
 |---|---|
 | **Acahti** | control plane. No Runner on this host. |
-| **Runner** | `ACAHTI_BUILD` — executes `.acahti/pipelines/` after Acahti expands `pipe:`. One `woodpecker-agent`. `WOODPECKER_MAX_WORKFLOWS` is host-derived (`nproc` / memory) unless pinned in the agent env. Excess workflows stay in the Woodpecker queue (`pending` / `waiting_on_deps`). |
+| **Runner** | `ACAHTI_BUILD` — executes `.acahti/pipelines/` after Acahti expands `pipe:`. One `woodpecker-agent`. `WOODPECKER_MAX_WORKFLOWS` is host-derived (`nproc` / memory) unless pinned in the agent env. A matching `cd.*` / `pkg` job replaces standalone `ci` so one train keeps the slot until it finishes. Excess workflows stay in the Woodpecker queue (`pending` / `waiting_on_deps`). |
 
 Public identity is Acahti: SPA, MCP, `/acahti/v1`, git HTTPS, `/api/packages`. Closed to the internet: `/ci`, git-kernel HTML, `/api/v1`.
 
