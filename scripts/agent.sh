@@ -164,7 +164,13 @@ buildx_cfg="${run_home}/.docker/buildx"
 install -d -o "${run_user}" -g "${run_user}" -m 0755 "${run_home}/.docker" "${buildx_cfg}"
 if command -v docker >/dev/null; then
   echo "==> buildx builder acahti"
-  if ! sudo -u "${run_user}" env BUILDX_CONFIG="${buildx_cfg}" docker buildx inspect acahti >/dev/null 2>&1; then
+  inspect="$(sudo -u "${run_user}" env BUILDX_CONFIG="${buildx_cfg}" docker buildx inspect acahti 2>/dev/null || true)"
+  if [[ -n "$inspect" ]] && printf '%s\n' "$inspect" | grep -qiE 'network[[:space:]]*[=:][[:space:]]*"?host'; then
+    :
+  elif [[ -n "$inspect" ]] && printf '%s\n' "$inspect" | awk -F': *' '/^Driver:/{print $2; exit}' | grep -qx docker; then
+    :
+  else
+    sudo -u "${run_user}" env BUILDX_CONFIG="${buildx_cfg}" docker buildx rm -f acahti >/dev/null 2>&1 || true
     sudo -u "${run_user}" env BUILDX_CONFIG="${buildx_cfg}" \
       docker buildx create --name acahti --driver docker-container --driver-opt network=host >/dev/null
   fi

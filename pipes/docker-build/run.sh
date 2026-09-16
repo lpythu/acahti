@@ -44,17 +44,13 @@ ensure_host_builder() {
 		ensure_acahti_builder "$builder" || exit 1
 		return 0
 	fi
-	local info driver
+	local info
 	persist_buildx_config
 	info="$(docker buildx inspect "$builder" 2>/dev/null)" || {
 		echo "error: buildx builder ${builder} not found" >&2
 		exit 1
 	}
-	driver="$(printf '%s\n' "$info" | awk -F': *' '/^Driver:/{print $2; exit}')"
-	if [[ "$driver" == "docker" ]]; then
-		return 0
-	fi
-	if printf '%s\n' "$info" | grep -qiE 'Network:[[:space:]]*host'; then
+	if builder_uses_host_network "$info"; then
 		return 0
 	fi
 	echo "error: builder ${builder} must use host network (docker driver, or --driver-opt network=host)" >&2

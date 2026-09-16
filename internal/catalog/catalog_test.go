@@ -130,6 +130,22 @@ func TestLiveAgentsDropsStale(t *testing.T) {
 	}
 }
 
+func TestBoardPipeAttentionIncludesFailedCI(t *testing.T) {
+	p := woodpecker.Pipeline{
+		Status: "running",
+		Jobs: []woodpecker.Job{
+			{Name: "ci", State: "failure"},
+			{Name: "cd.office", State: "pending"},
+		},
+	}
+	if !boardPipeAttention(p) {
+		t.Fatal("failed ci with leftover cd must be on the board")
+	}
+	if boardPipeAttention(woodpecker.Pipeline{Status: "running", Jobs: []woodpecker.Job{{Name: "ci", State: "running"}}}) {
+		t.Fatal("running ci is not inbox")
+	}
+}
+
 func TestPresentSkipsCDWhenCIFailed(t *testing.T) {
 	c := New(config.Config{}, nil, nil, nil)
 	p := c.Present(woodpecker.Pipeline{

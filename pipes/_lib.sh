@@ -81,20 +81,27 @@ persist_buildx_config() {
 
 ACAHTI_BUILDER="${ACAHTI_BUILDER:-acahti}"
 
+# docker-container inspect prints `network: "host"` or `network=host`, not `Network: host`.
+builder_uses_host_network() {
+	local info="$1"
+	local driver
+	driver="$(printf '%s\n' "$info" | awk -F': *' '/^Driver:/{print $2; exit}')"
+	if [[ "$driver" == "docker" ]]; then
+		return 0
+	fi
+	printf '%s\n' "$info" | grep -qiE 'network[[:space:]]*[=:][[:space:]]*"?host'
+}
+
 ensure_acahti_builder() {
 	persist_buildx_config
 	local name="${1:-$ACAHTI_BUILDER}"
-	local info driver
+	local info
 	if info="$(docker buildx inspect "$name" 2>/dev/null)"; then
-		driver="$(printf '%s\n' "$info" | awk -F': *' '/^Driver:/{print $2; exit}')"
-		if [[ "$driver" == "docker" ]]; then
+		if builder_uses_host_network "$info"; then
 			return 0
 		fi
-		if printf '%s\n' "$info" | grep -qiE 'Network:[[:space:]]*host'; then
-			return 0
-		fi
-		echo "error: builder ${name} must use host network" >&2
-		return 1
+		echo "==> rebuild ${name} docker-container network=host"
+		docker buildx rm -f "$name" >/dev/null 2>&1 || true
 	fi
 	echo "==> buildx create ${name} docker-container network=host"
 	docker buildx create --name "$name" --driver docker-container --driver-opt network=host >/dev/null

@@ -1310,19 +1310,19 @@ func (c *Catalog) BoardPipes(user string, q page.Query) (page.Result[woodpecker.
 	}
 	var attention []woodpecker.Pipeline
 	for _, p := range latest {
-		if boardPipeAttention(p.Status) {
+		if boardPipeAttention(p) {
 			attention = append(attention, p)
 		}
 	}
 	return c.pagePipes(attention, q), nil
 }
 
-func boardPipeAttention(status string) bool {
-	switch strings.ToLower(status) {
+func boardPipeAttention(p woodpecker.Pipeline) bool {
+	switch strings.ToLower(p.Status) {
 	case "blocked", "failure", "error", "killed", "declined":
 		return true
 	default:
-		return false
+		return woodpecker.BlockedOnFailed(p)
 	}
 }
 
