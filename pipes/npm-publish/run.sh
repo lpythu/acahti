@@ -49,7 +49,6 @@ chmod 600 "$npmrc"
 	printf 'always-auth=true\n'
 } >"$npmrc"
 
-ensure_harbor_login
 echo "==> npm install+build ${pkg_name} (${image})"
 docker run --rm --network=host \
 	-e PKG_NAME="$pkg_name" \

@@ -8,4 +8,4 @@ inputs:
     description: Directory with pyproject.toml (default .)
   image:
     required: false
-    description: Python image (default python:3.12-slim-bookworm). uv is installed if missing. Harbor/ACR images need a prior docker-login, or the Runner Harbor login.
+    description: Python image (default python:3.12-slim-bookworm). uv is installed if missing. Private registry images need a prior docker-login.

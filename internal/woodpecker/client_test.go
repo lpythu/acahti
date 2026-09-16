@@ -198,4 +198,10 @@ func TestQueueInfo(t *testing.T) {
 	if len(q.Running) != 1 || q.Running[0].Agent != "buildof" || q.Running[0].Repo != "saidc/ops" {
 		t.Fatalf("running %+v", q.Running)
 	}
+	if !q.Fetched {
+		t.Fatal("live fetch")
+	}
+	if q.Stats.RunningCount != 1 || q.Stats.PendingCount != 1 {
+		t.Fatalf("pipeline stats %+v", q.Stats)
+	}
 }

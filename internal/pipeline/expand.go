@@ -27,9 +27,11 @@ var official = map[string]struct{}{
 
 // Ident is the Acahti user this run is (the person who triggered it), plus the repo for CD/pkg concurrency.
 type Ident struct {
-	User  string
-	Token string
-	Repo  string
+	User    string
+	Token   string
+	Repo    string
+	RootURL string
+	Org     string
 }
 
 // Expand rewrites pipe: name@v1 steps into image: bash + acahti-pipe <name>.
@@ -190,6 +192,16 @@ func expandStep(name string, step map[string]any, id Ident) error {
 		}
 		if _, exists := env["ACAHTI_TOKEN"]; !exists {
 			env["ACAHTI_TOKEN"] = id.Token
+		}
+		if id.RootURL != "" {
+			if _, exists := env["ACAHTI_ROOT_URL"]; !exists {
+				env["ACAHTI_ROOT_URL"] = id.RootURL
+			}
+		}
+		if id.Org != "" {
+			if _, exists := env["ACAHTI_ORG"]; !exists {
+				env["ACAHTI_ORG"] = id.Org
+			}
 		}
 		step["environment"] = env
 	}

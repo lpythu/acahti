@@ -38,21 +38,93 @@ each_item() {
 	each_line "$blob"
 }
 
-# FROM bases live on office Harbor. HK CD logs into ACR; do not overwrite
-# an existing Harbor robot login from docker-login.
-ensure_harbor_login() {
-	local dest="${HOME}/.docker/config.json"
-	if [[ -f "$dest" ]] && grep -q '"harbor.saidc"' "$dest"; then
-		return
+# Public packages URL host + org. Expand injects ACAHTI_ROOT_URL / ACAHTI_ORG.
+acahti_pkg_origin() {
+	local origin="${ACAHTI_ROOT_URL:-${ROOT_URL:-${CI_FORGE_URL:-}}}"
+	origin="${origin%/}"
+	printf '%s' "$origin"
+}
+
+acahti_pkg_org() {
+	printf '%s' "${ACAHTI_ORG:-${CI_REPO_OWNER:-}}"
+}
+
+acahti_pkg_host() {
+	local origin="$1"
+	local host="${origin#https://}"
+	host="${host#http://}"
+	host="${host%%/*}"
+	printf '%s' "$host"
+}
+
+# User-level npmrc: HTTP Basic (username + base64 _password). Not Bearer.
+format_acahti_npmrc() {
+	local user="${ACAHTI_USER:-}" token="${ACAHTI_TOKEN:-}"
+	[[ -n "$user" && -n "$token" ]] || return 0
+	local origin org host
+	origin="$(acahti_pkg_origin)"
+	org="$(acahti_pkg_org)"
+	host="$(acahti_pkg_host "$origin")"
+	if [[ -z "$host" || -z "$org" ]]; then
+		echo "error: ACAHTI_ROOT_URL and ACAHTI_ORG required to write npm package auth" >&2
+		return 1
 	fi
-	if [[ -n "${HARBOR_PASSWORD:-}" ]]; then
-		printf '%s\n' "$HARBOR_PASSWORD" | docker login harbor.saidc -u 'robot$saidc' --password-stdin >/dev/null
-		return
+	local path="/api/packages/${org}/npm/"
+	printf '//%s%s:username=%s\n' "$host" "$path" "$user"
+	printf '//%s%s:_password=%s\n' "$host" "$path" "$(printf '%s' "$token" | base64 | tr -d '\n')"
+	printf 'always-auth=true\n'
+}
+
+format_acahti_netrc() {
+	local user="${ACAHTI_USER:-}" token="${ACAHTI_TOKEN:-}"
+	[[ -n "$user" && -n "$token" ]] || return 0
+	local origin host
+	origin="$(acahti_pkg_origin)"
+	host="$(acahti_pkg_host "$origin")"
+	if [[ -z "$host" ]]; then
+		echo "error: ACAHTI_ROOT_URL required to write pypi package auth" >&2
+		return 1
 	fi
-	local pw
-	pw="$(getent passwd "$(id -un)" | cut -d: -f6)/.harbor/robot-saidc.secret"
-	[[ -f "$pw" ]] || return 0
-	docker login harbor.saidc -u 'robot$saidc' --password-stdin <"$pw" >/dev/null
+	printf 'machine %s\nlogin %s\npassword %s\n' "$host" "$user" "$token"
+}
+
+truthy() {
+	case "${1:-}" in
+	true | TRUE | yes | YES | 1) return 0 ;;
+	*) return 1 ;;
+	esac
+}
+
+# Hostname from a docker-login registry value (strip scheme and path).
+registry_host() {
+	local h="${1:-}"
+	h="${h#http://}"
+	h="${h#https://}"
+	h="${h%%/*}"
+	printf '%s' "$h"
+}
+
+# HTTP/insecure is declared in product YAML (`docker-login` with.http). Merge
+# into the shared builder config and recreate when the host is new.
+ensure_registry_http() {
+	local host="$1"
+	host="$(registry_host "$host")"
+	[[ -n "$host" ]] || return 0
+	persist_buildx_config
+	local cfg="${ACAHTI_BUILDKITD_CONFIG}"
+	local dir
+	dir="$(dirname "$cfg")"
+	mkdir -p "$dir"
+	local lock="${cfg}.lock"
+	(
+		flock 9
+		if [[ -f "$cfg" ]] && grep -Fq "[registry.\"${host}\"]" "$cfg"; then
+			exit 0
+		fi
+		printf '[registry."%s"]\n  http = true\n  insecure = true\n\n' "$host" >>"$cfg"
+		docker buildx rm -f "$ACAHTI_BUILDER" >/dev/null 2>&1 || true
+		create_acahti_builder "$ACAHTI_BUILDER"
+	) 9>"$lock"
 }
 
 # Woodpecker only interpolates ${CI_COMMIT_TAG}, not bash ${CI_COMMIT_TAG#v}.
@@ -96,7 +168,7 @@ builder_uses_host_network() {
 create_acahti_builder() {
 	local name="${1:-$ACAHTI_BUILDER}"
 	local -a args=(--name "$name" --driver docker-container --driver-opt network=host)
-	if [[ -f "$ACAHTI_BUILDKITD_CONFIG" ]]; then
+	if [[ -s "$ACAHTI_BUILDKITD_CONFIG" ]]; then
 		args+=(--config "$ACAHTI_BUILDKITD_CONFIG")
 	fi
 	echo "==> buildx create ${name} docker-container network=host"

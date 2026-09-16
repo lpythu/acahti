@@ -137,3 +137,83 @@ func TestWaitFingerprintChanges(t *testing.T) {
 		t.Fatal("position must change fingerprint")
 	}
 }
+
+func TestAnnotateEmptyQueueSettlesStaleRunning(t *testing.T) {
+	p := Pipeline{
+		Repo:   "saidc/tm-cs",
+		Number: 56,
+		Status: "running",
+		Jobs: []Job{
+			{Name: "ci", State: "running"},
+			{Name: "cd.office", State: "running"},
+		},
+	}
+	got := Annotate(p, QueueInfo{Fetched: true})
+	if got.Status != "pending" || got.Wait != "" {
+		t.Fatalf("pipeline %+v", got)
+	}
+	for _, j := range got.Jobs {
+		if j.State != "pending" || j.Wait != "" {
+			t.Fatalf("job %+v", j)
+		}
+	}
+}
+
+func TestAnnotateEmptyQueueFailureNotQueued(t *testing.T) {
+	p := Pipeline{
+		Repo:   "saidc/api-gateway",
+		Number: 50,
+		Status: "running",
+		Jobs: []Job{
+			{Name: "ci", State: "failure"},
+			{Name: "cd.office", State: "running"},
+		},
+	}
+	got := Annotate(p, QueueInfo{Fetched: true})
+	if got.Status != "failure" || got.Wait != "" {
+		t.Fatalf("pipeline %+v", got)
+	}
+	if got.Jobs[1].State != "skipped" || got.Jobs[1].Wait != "" {
+		t.Fatalf("cd %+v", got.Jobs[1])
+	}
+}
+
+func TestAnnotateEmptyQueueDoesNotInferWait(t *testing.T) {
+	p := Pipeline{
+		Repo:   "saidc/voidgate",
+		Number: 36,
+		Status: "pending",
+		Jobs:   []Job{{Name: "ci", State: "pending"}},
+	}
+	got := Annotate(p, QueueInfo{Fetched: true})
+	if got.Status != "pending" || got.Wait != "" || got.Jobs[0].Wait != "" {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestPipelineStatsCountsPipelines(t *testing.T) {
+	q := QueueInfo{
+		Running: []QueueTask{{Repo: "saidc/a", Number: 1, Name: "ci"}},
+		Pending: []QueueTask{{Repo: "saidc/b", Number: 2, Name: "ci"}},
+		WaitingOnDeps: []QueueTask{
+			{Repo: "saidc/a", Number: 1, Name: "cd.office"},
+			{Repo: "saidc/b", Number: 2, Name: "cd.office"},
+			{Repo: "saidc/c", Number: 3, Name: "cd.office"},
+		},
+	}
+	s := pipelineStats(q)
+	if s.RunningCount != 1 || s.PendingCount != 2 {
+		t.Fatalf("%+v", s)
+	}
+}
+
+func TestInQueue(t *testing.T) {
+	p := Pipeline{Repo: "saidc/tm-web", Number: 12, ID: 9}
+	q := QueueInfo{Pending: []QueueTask{{Repo: "saidc/tm-web", Number: 12}}}
+	if !InQueue(p, q) {
+		t.Fatal("pending task must match")
+	}
+	if InQueue(p, QueueInfo{Fetched: true}) {
+		t.Fatal("empty queue")
+	}
+}

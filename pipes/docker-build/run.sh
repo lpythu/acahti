@@ -33,11 +33,15 @@ add_bk_secret() {
 	secret_args+=(--secret "id=${id},src=${src}")
 }
 add_bk_secret codeup_netrc "${CODEUP_NETRC:-}"
-# Job identity from expand (ACAHTI_USER / ACAHTI_TOKEN), not YAML secrets.
-# Do not materialize .npmrc / .netrc here. App Dockerfiles mount these ids.
-add_bk_secret acahti_user "${ACAHTI_USER:-}"
-add_bk_secret acahti_token "${ACAHTI_TOKEN:-}"
-echo "==> docker-build secrets acahti_user acahti_token"
+# Job identity as user-level npmrc / netrc (HTTP Basic). YAML does not name tokens.
+# Dockerfiles mount id=npmrc → /root/.npmrc and id=netrc → /root/.netrc.
+npmrc_body="$(format_acahti_npmrc)"
+netrc_body="$(format_acahti_netrc)"
+add_bk_secret npmrc "$npmrc_body"
+add_bk_secret netrc "$netrc_body"
+if [[ -n "$npmrc_body" || -n "$netrc_body" ]]; then
+	echo "==> docker-build secrets npmrc netrc"
+fi
 
 ensure_host_builder() {
 	if [[ "$builder" == "$ACAHTI_BUILDER" ]]; then
@@ -58,7 +62,6 @@ ensure_host_builder() {
 }
 
 ensure_host_builder
-ensure_harbor_login
 
 build_one() {
 	local primary="${1:-}"

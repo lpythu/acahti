@@ -148,7 +148,7 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 		if login == "" {
 			return pipeline.Ident{}
 		}
-		return pipeline.Ident{User: login, Token: a.Issue(login)}
+		return pipeline.Ident{User: login, Token: a.Issue(login), RootURL: cfg.RootURL, Org: cfg.Org}
 	}))
 	mux.HandleFunc("POST /hooks/woodpecker", func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)

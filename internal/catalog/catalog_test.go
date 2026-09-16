@@ -2,6 +2,8 @@ package catalog
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -174,6 +176,42 @@ func TestPresentInfersWait(t *testing.T) {
 	})
 	if p.Jobs[1].Wait != woodpecker.WaitDeps {
 		t.Fatalf("%+v", p.Jobs)
+	}
+}
+
+func TestPaintPipesRefreshesAbsentFromQueue(t *testing.T) {
+	var gotGet bool
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/queue/info"):
+			_, _ = w.Write([]byte(`{"pending":[],"waiting_on_deps":[],"running":[],"stats":{}}`))
+		case strings.Contains(r.URL.Path, "/lookup/"):
+			_, _ = w.Write([]byte(`{"id":1,"full_name":"saidc/tm-cs"}`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/pipelines/56"):
+			gotGet = true
+			_, _ = w.Write([]byte(`{"number":56,"status":"failure","workflows":[{"name":"ci","state":"failure","children":[{"name":"test","state":"failure","error":"boom"}]}]}`))
+		case strings.Contains(r.URL.Path, "/logs/"):
+			_, _ = w.Write([]byte(`[]`))
+		case strings.HasSuffix(r.URL.Path, "/web-config.js"):
+			_, _ = w.Write([]byte(`WOODPECKER_CSRF = "tok";`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(s.Close)
+	c := New(config.Config{}, nil, woodpecker.New(s.URL, "t"), nil)
+	out := c.paintPipes([]woodpecker.Pipeline{{
+		Repo:   "saidc/tm-cs",
+		Number: 56,
+		Status: "running",
+		Jobs:   []woodpecker.Job{{Name: "ci", State: "running"}},
+	}})
+	if !gotGet {
+		t.Fatal("must refresh kernel when queue is empty")
+	}
+	if len(out) != 1 || out[0].Status != "failure" || out[0].Wait != "" {
+		t.Fatalf("%+v", out)
 	}
 }
 

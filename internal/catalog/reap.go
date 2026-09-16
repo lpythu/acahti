@@ -14,6 +14,7 @@ import (
 // helm --wait is 5m. Longer than that with no new log is a Woodpecker zombie.
 const (
 	reapEvery  = time.Minute
+	queueEvery = 3 * time.Second
 	staleAfter = 15 * time.Minute
 )
 
@@ -27,11 +28,17 @@ func (c *Catalog) WatchPipelines() {
 	queueFP := map[string]string{}
 	c.Reap(time.Now(), watches)
 	c.reapQueue(queueFP)
-	t := time.NewTicker(reapEvery)
-	defer t.Stop()
-	for range t.C {
-		c.Reap(time.Now(), watches)
-		c.reapQueue(queueFP)
+	logs := time.NewTicker(reapEvery)
+	defer logs.Stop()
+	queue := time.NewTicker(queueEvery)
+	defer queue.Stop()
+	for {
+		select {
+		case <-logs.C:
+			c.Reap(time.Now(), watches)
+		case <-queue.C:
+			c.reapQueue(queueFP)
+		}
 	}
 }
 
@@ -59,7 +66,10 @@ func (c *Catalog) Reap(now time.Time, watches map[string]logWatch) {
 }
 
 func (c *Catalog) reapOne(p woodpecker.Pipeline, now time.Time, prev, keep map[string]logWatch) {
-	fresh, err := c.Refresh(p.Repo, p.Number)
+	if c.WP == nil || !c.WP.Ready() {
+		return
+	}
+	raw, err := c.WP.GetPipeline(p.Repo, p.Number)
 	if err != nil {
 		for _, s := range runningSteps(p) {
 			key := watchKey(p.Repo, p.Number, stepID(s))
@@ -69,11 +79,15 @@ func (c *Catalog) reapOne(p woodpecker.Pipeline, now time.Time, prev, keep map[s
 		}
 		return
 	}
-	if !strings.EqualFold(fresh.Status, "running") {
+	raw.Repo = p.Repo
+	raw.HydrateJobs()
+	kernelRunning := strings.EqualFold(raw.Status, "running")
+	steps := runningSteps(raw)
+	fresh := c.Remember(raw)
+	if !kernelRunning {
 		c.emit(fresh)
 		return
 	}
-	steps := runningSteps(fresh)
 	if len(steps) == 0 {
 		steps = []woodpecker.Step{{}}
 	}

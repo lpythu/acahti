@@ -14,11 +14,12 @@ const (
 	WaitConcurrency = "concurrency"
 )
 
+// QueueStats counts pipelines (one run), not jobs. A pipeline with a running
+// ci and a cd still waiting on deps counts as running.
 type QueueStats struct {
-	WorkerCount        int `json:"worker_count"`
-	PendingCount       int `json:"pending_count"`
-	WaitingOnDepsCount int `json:"waiting_on_deps_count"`
-	RunningCount       int `json:"running_count"`
+	WorkerCount  int `json:"worker_count"`
+	PendingCount int `json:"pending_count"`
+	RunningCount int `json:"running_count"`
 }
 
 type QueueTask struct {
@@ -38,6 +39,7 @@ type QueueTask struct {
 }
 
 type QueueInfo struct {
+	Fetched       bool        `json:"-"`
 	Paused        bool        `json:"paused"`
 	Stats         QueueStats  `json:"stats"`
 	Pending       []QueueTask `json:"pending"`
@@ -94,8 +96,69 @@ func Annotate(p Pipeline, q QueueInfo) Pipeline {
 	if !InFlight(p.Status) {
 		return p
 	}
+	if q.Fetched && !InQueue(p, q) {
+		p.Wait = ""
+		p.QueuePosition = 0
+		p.Agent = ""
+		p.Status = settleFromJobs(p)
+		return p
+	}
 	p.Wait, p.QueuePosition, p.Agent = pipelineWait(p)
 	return p
+}
+
+func settleFromJobs(p Pipeline) string {
+	if len(p.Jobs) == 0 {
+		if InFlight(p.Status) {
+			return "pending"
+		}
+		return p.Status
+	}
+	run, fail, pending := false, false, false
+	for _, j := range p.Jobs {
+		st := strings.ToLower(j.State)
+		if st == "running" {
+			run = true
+		}
+		if failedStatus(st) {
+			fail = true
+		}
+		if st == "pending" || st == "blocked" {
+			pending = true
+		}
+	}
+	if run {
+		return "running"
+	}
+	if fail {
+		return "failure"
+	}
+	if pending {
+		return "pending"
+	}
+	if !InFlight(p.Status) {
+		return p.Status
+	}
+	return "success"
+}
+
+func InQueue(p Pipeline, q QueueInfo) bool {
+	for _, t := range q.Running {
+		if taskMatchesPipeline(t, p) {
+			return true
+		}
+	}
+	for _, t := range q.Pending {
+		if taskMatchesPipeline(t, p) {
+			return true
+		}
+	}
+	for _, t := range q.WaitingOnDeps {
+		if taskMatchesPipeline(t, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func BlockedOnFailed(p Pipeline) bool {
@@ -126,6 +189,9 @@ func annotateJob(j *Job, p Pipeline, q QueueInfo) {
 		}
 		return
 	}
+	if q.Fetched && strings.EqualFold(j.State, "running") {
+		j.State = "pending"
+	}
 	if upstreamFailed(p, *j) && !strings.EqualFold(j.State, "running") && !strings.EqualFold(j.State, "success") {
 		skipOrphan(j)
 		return
@@ -144,7 +210,7 @@ func annotateJob(j *Job, p Pipeline, q QueueInfo) {
 		j.Agent = t.Agent
 		return
 	}
-	if strings.EqualFold(j.State, "pending") {
+	if strings.EqualFold(j.State, "pending") && (!q.Fetched || InQueue(p, q)) {
 		j.Wait = inferWait(p, *j)
 	}
 }
@@ -285,20 +351,54 @@ func (c *Client) QueueInfo() (QueueInfo, error) {
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return QueueInfo{}, err
 	}
-	q := QueueInfo{Paused: raw.Paused, Stats: raw.Stats}
+	q := QueueInfo{Paused: raw.Paused, Stats: raw.Stats, Fetched: true}
 	q.Pending = c.publicTasks(raw.Pending, WaitQueue)
 	q.WaitingOnDeps = c.publicTasks(raw.WaitingOnDeps, WaitDeps)
 	q.Running = c.publicTasks(raw.Running, "")
-	if q.Stats.PendingCount == 0 {
-		q.Stats.PendingCount = len(q.Pending)
-	}
-	if q.Stats.WaitingOnDepsCount == 0 {
-		q.Stats.WaitingOnDepsCount = len(q.WaitingOnDeps)
-	}
-	if q.Stats.RunningCount == 0 {
-		q.Stats.RunningCount = len(q.Running)
-	}
+	workers := q.Stats.WorkerCount
+	q.Stats = pipelineStats(q)
+	q.Stats.WorkerCount = workers
 	return q, nil
+}
+
+func pipelineStats(q QueueInfo) QueueStats {
+	rank := map[string]int{}
+	bump := func(tasks []QueueTask, r int) {
+		for _, t := range tasks {
+			k := pipelineKey(t)
+			if k == "" {
+				continue
+			}
+			if r > rank[k] {
+				rank[k] = r
+			}
+		}
+	}
+	bump(q.Running, 2)
+	bump(q.Pending, 1)
+	bump(q.WaitingOnDeps, 1)
+	var s QueueStats
+	for _, r := range rank {
+		if r == 2 {
+			s.RunningCount++
+			continue
+		}
+		s.PendingCount++
+	}
+	return s
+}
+
+func pipelineKey(t QueueTask) string {
+	if t.Repo != "" && t.Number > 0 {
+		return t.Repo + "#" + strconv.FormatInt(t.Number, 10)
+	}
+	if t.PipelineID > 0 {
+		return "id:" + strconv.FormatInt(t.PipelineID, 10)
+	}
+	if t.Number > 0 {
+		return "n:" + strconv.FormatInt(t.Number, 10)
+	}
+	return ""
 }
 
 func (c *Client) publicTasks(in []kernelTask, wait string) []QueueTask {

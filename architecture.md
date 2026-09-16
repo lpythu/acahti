@@ -159,9 +159,9 @@ Same secret name: **repo overrides org**. YAML `secrets:` only names which secre
 | person / agent | Acahti login + password or OAuth | do not read pipeline secrets to install packages |
 | CI | job identity, injected by `docker-build` / publish | YAML names them (`DOCKER_PASSWORD: harbor_password`, `KUBECONFIG: kubeconfig_office`) |
 
-Packages live at `$ROOT_URL/api/packages/$ORG/{npm\|pypi}` and use the same identity proxy as git HTTPS. Org members who can see repos can install. Publish uses the triggering user (`npm-publish` / `pypi-publish` / `pkg_publish`). `docker-build` forwards job identity as BuildKit secrets `id=acahti_user` / `id=acahti_token` and runs `docker buildx --network=host`. It does not write `.npmrc` or `.netrc`. Scopes like `@saidc` belong in the business repo `.npmrc`. App Dockerfiles mount the secrets on install `RUN`s; they do not set `--network=host`.
+Packages live at `$ROOT_URL/api/packages/$ORG/{npm\|pypi}` and use the same identity proxy as git HTTPS. Org members who can see repos can install. Publish uses the triggering user (`npm-publish` / `pypi-publish` / `pkg_publish`). `docker-build` writes job identity as BuildKit secrets `id=npmrc` (HTTP Basic `username` + base64 `_password`) and `id=netrc`, then `docker buildx --network=host`. Repo `.npmrc` / `[[tool.uv.index]]` name the registry only. App Dockerfiles mount `id=npmrc` at `/root/.npmrc` and `id=netrc` at `/root/.netrc` on install `RUN`s; they do not set `--network=host` and they do not mount raw username/password.
 
-Harbor (office) and ACR (hk) are a pair. YAML names both username and password. Do not auto-inject only Harbor.
+Harbor (office) and ACR (hk) are a pair of **user** registries. YAML names the host, username, and password. Do not auto-inject either. Image names (`BASE_IMAGE=…`) live in product YAML. HTTP vs HTTPS is `docker-login` `http: true` (or `registry: http://host`) — Acahti has no registry hostname. `buildx --config` is create-time on the shared `acahti` builder; the login pipe merges YAML-declared HTTP hosts into `buildkitd.toml`. A job that pulls FROM one registry and pushes to another logs into both.
 
 | Secret | Pipe | YAML |
 |--------|------|------|
@@ -190,7 +190,7 @@ Local `~/.npmrc` (not committed): username = Acahti login; `_password` = **base6
 always-auth=true
 ```
 
-CI: YAML does not name npm tokens. Expand injects `ACAHTI_USER` / `ACAHTI_TOKEN`; `docker-build` passes them as BuildKit secrets. Dockerfile `COPY .npmrc` (registry only) then `RUN --mount=type=secret,id=acahti_user` / `id=acahti_token` around `pnpm install`, and strips auth after so it is not in the runtime layer.
+CI: YAML does not name npm tokens. Expand injects `ACAHTI_USER` / `ACAHTI_TOKEN` / `ACAHTI_ROOT_URL` / `ACAHTI_ORG`. `docker-build` writes a user-level npmrc secret. Dockerfile `COPY .npmrc` (registry only) then `RUN --mount=type=secret,id=npmrc,target=/root/.npmrc` around `pnpm install`. Auth never enters a committed file or an image layer.
 
 **PyPI** (committed `pyproject.toml` is the index URL):
 
@@ -209,7 +209,7 @@ login YOUR_LOGIN
 password YOUR_PASSWORD_OR_MCP_TOKEN
 ```
 
-CI: `docker-build` forwards `ACAHTI_USER` / `ACAHTI_TOKEN` as BuildKit secrets. Dockerfile `RUN --mount=type=secret,id=acahti_user,env=UV_INDEX_SAIDC_USERNAME` / `id=acahti_token,env=UV_INDEX_SAIDC_PASSWORD` then `uv sync`. No `.netrc` in the build context.
+CI: `docker-build` writes a netrc secret. Dockerfile `RUN --mount=type=secret,id=netrc,target=/root/.netrc` then `uv sync`. No `.netrc` in the build context.
 
 ## Pipeline secrets
 
@@ -284,11 +284,11 @@ flowchart LR
 2. Gateway `Remember`s the pipeline: merge declared jobs from YAML, upsert `acahti.pipelines`, publish `pipeline.updated`.
 3. Woodpecker progress also arrives as Forgejo `status` webhooks or `POST /hooks/woodpecker`. Same `Remember`.
 4. Startup backfill lists Woodpecker runs per active repo and `Remember`s them.
-5. `WatchPipelines` refreshes indexed `running` and `pending` rows from Woodpecker. Queue `wait` / `queue_position` is painted live from `GET /api/queue/info` (not stored). Leftover CD still pending after CI failed is `Cancel`ed (frees deploy concurrency). A running step whose log has not grown for 15m is `Cancel`ed (Woodpecker does not close a step when the process dies without a Done RPC).
+5. `WatchPipelines` refreshes indexed `running` and `pending` rows from Woodpecker (queue paint every 3s; 15m silent-log cancel every 1m). Queue `wait` / `queue_position` is painted live from `GET /api/queue/info` (not stored). A row not in that snapshot is not running or queued: stale `running` jobs are demoted, leftover CD after failed CI is skipped/`Cancel`ed. A running step whose log has not grown for 15m is `Cancel`ed (Woodpecker does not close a step when the process dies without a Done RPC). List/board paint uses the same queue snapshot as `GET /ui/queue`; in-flight rows absent from the queue are `GetPipeline`d so icons match the strip on first load.
 
 **Read (query)**
 
-1. `GET /ui/pipelines` — newest run per repo (`created DESC`). Later numbers replace earlier branches and tags. Visibility from the org catalog. Rows use stored `jobs` (no YAML fetch).
+1. `GET /ui/pipelines` — newest run per repo (`created DESC`). Later numbers replace earlier branches and tags. Visibility from the org catalog. Rows use stored `jobs`, then live queue paint (no YAML fetch).
 2. `GET /ui/repos/{owner}/{name}/pipelines` — that repo’s full run history.
 3. Board — latest blocked/failed pipeline per visible repo.
 4. Detail — index row. Miss or in-flight (`running` / `pending` / `blocked`) → Woodpecker `GetPipeline` and write-back. In-flight rows also get `wait` (`queue` / `deps` / `concurrency`) and `queue_position` from the Woodpecker queue. `files[]` loads YAML on `(repo, commit)` cache miss.
@@ -300,10 +300,10 @@ One screen, one JSON. The SPA renders fields; it does not walk kernels.
 
 | Request | Returns |
 |---|---|
-| `GET /ui/pipelines` | latest run per repo with stored `jobs` |
+| `GET /ui/pipelines` | latest run per repo; live queue paint (refresh kernel if in-flight but not in queue) |
 | `GET /ui/repos/{owner}/{name}/pipelines` | that repo’s run history |
 | `GET /ui/pipelines/{owner}/{name}/{n}` | `{ pipeline, team, files }` — `pipeline.jobs[].steps`; in-flight `wait` / `queue_position` / `agent` |
-| `GET /ui/queue` | Owners: Woodpecker queue snapshot (`paused`, stats, pending / waiting_on_deps / running) |
+| `GET /ui/queue` | Owners: Woodpecker queue snapshot. `stats` counts pipelines (`running` / `queued`). Task lists stay jobs. |
 | `GET /ui/agents` | Owners: runners (`capacity`, `running`) plus `queue` |
 | `GET /ui/secrets` | Org secrets catalog (Owners) |
 | `GET /ui/repos/{owner}/{name}/secrets` | effective set: org inherited + repo override (repo admin) |

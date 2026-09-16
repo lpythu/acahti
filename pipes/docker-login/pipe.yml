@@ -2,6 +2,10 @@ name: docker-login
 inputs:
   registry:
     required: true
+    description: Registry hostname. Optional http:// prefix (same as http: true).
+  http:
+    required: false
+    description: "true if the registry is HTTP/insecure (BuildKit). Default false (HTTPS)."
   username:
     required: false
     description: Registry user; password is DOCKER_PASSWORD (or DOCKER_USERNAME + DOCKER_PASSWORD)

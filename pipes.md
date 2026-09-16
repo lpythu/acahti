@@ -64,11 +64,11 @@ Only org/repo admins can list or put secrets. Repo Secrets shows the effective s
 
 ### docker-login
 
-`with:` `registry` (required), `username` (or env `DOCKER_USERNAME`). Password is env `DOCKER_PASSWORD`.
+`with:` `registry` (required hostname), optional `http: true` (HTTP/insecure BuildKit; also accepted as `registry: http://host`). `username` (or env `DOCKER_USERNAME`). Password is env `DOCKER_PASSWORD`. Acahti does not hardcode Harbor or ACR — YAML names the host. `http: true` merges that host into the runner’s `buildkitd.toml` and recreates the shared `acahti` builder. HTTPS registries omit `http`. Jobs that pull FROM one registry and push to another login twice.
 
 ### docker-build
 
-`with:` `images` (required). One image per line. First field is the primary tag. Optional `also=` extra tags (comma-separated), `context=` (default `.`), `file=` Dockerfile, other `KEY=VAL` as `--build-arg` (CI names `BASE_IMAGE=harbor.saidc/base/…` or the ACR library equivalent; Dockerfiles stay Harbor-free). Optional `push` (default `true`); `push: false` is `--output=type=cacheonly` (CI, no `--load`). Job identity is forwarded as BuildKit secrets `id=acahti_user` / `id=acahti_token` (`ACAHTI_USER` / `ACAHTI_TOKEN`). The pipe does not write `.npmrc` or `.netrc`. `CODEUP_NETRC` → BuildKit `id=codeup_netrc`. Default builder `acahti` (`docker-container`, host network). Office Harbor is HTTP; `agent.sh` writes `buildkitd.toml` so BuildKit does not hit `:443`. Builds with `--pull --provenance=false`; `push: true` is `buildx --push` for primary and `also=` tags. Empty `images:` lines are skipped. After a successful build the pipe runs `docker-gc`.
+`with:` `images` (required). One image per line. First field is the primary tag. Optional `also=` extra tags (comma-separated), `context=` (default `.`), `file=` Dockerfile, other `KEY=VAL` as `--build-arg` (CI names `BASE_IMAGE=<registry>/base/…`; Dockerfiles stay registry-host-free). Optional `push` (default `true`); `push: false` is `--output=type=cacheonly` (CI, no `--load`). Job identity is written as BuildKit secrets `id=npmrc` and `id=netrc` (HTTP Basic from `ACAHTI_USER` / `ACAHTI_TOKEN`). Dockerfiles mount `id=npmrc` at `/root/.npmrc` and `id=netrc` at `/root/.netrc`. YAML does not name npm tokens. `CODEUP_NETRC` → BuildKit `id=codeup_netrc`. Default builder `acahti` (`docker-container`, host network). HTTP/insecure registries are declared on `docker-login` (`http: true`), not inferred by Acahti. Builds with `--pull --provenance=false`; `push: true` is `buildx --push` for primary and `also=` tags. Empty `images:` lines are skipped. After a successful build the pipe runs `docker-gc`.
 
 OCI tags: office CD `dev-${CI_COMMIT_SHA}`; HK CD `${CI_COMMIT_TAG#v}` (git tag `vX.Y.Z` → `X.Y.Z`). `latest` is a pointer at the same digest. `${CI_COMMIT_TAG#v}` is expanded in the pipe (`${CI_COMMIT_TAG}` is interpolated by the runner).
 
@@ -106,7 +106,7 @@ No `with:` required. Caps the Runner’s local BuildKit cache (`acahti` builder 
 
 ## Examples
 
-CI verifies the image (`push: false`, cache-only). It does not publish. Harbor login is only for `--pull` of private bases.
+CI verifies the image (`push: false`, cache-only). It does not publish. Login is only for `--pull` of private bases. HTTP registries set `http: true`.
 
 ```yaml
 steps:
@@ -114,6 +114,7 @@ steps:
     pipe: docker-login@v1
     with:
       registry: harbor.example
+      http: true
       username: 'robot$$user'
     secrets:
       DOCKER_USERNAME: harbor_username
@@ -126,7 +127,7 @@ steps:
         app:${CI_COMMIT_SHA} APP=web
 ```
 
-Office CD (push `dev`) publishes Harbor `dev-${CI_COMMIT_SHA}` + `latest`, helm pin is that tag, then GC keeps 3 tags including `latest`. HK CD (tag on `test`) is the same shape with ACR login, image tag `${CI_COMMIT_TAG#v}`, `kubeconfig_hk`, and `jump: thk` (ACK API is VPC-only).
+Office CD (push `dev`) publishes `dev-${CI_COMMIT_SHA}` + `latest`, helm pin is that tag, then GC keeps 3 tags including `latest`. HK CD (tag on `test`) is the same shape: login the HTTP base registry if `FROM` still points there, login ACR to push, image tag `${CI_COMMIT_TAG#v}`, `kubeconfig_hk`, and `jump: thk` (ACK API is VPC-only).
 
 ```yaml
 steps:
@@ -134,6 +135,7 @@ steps:
     pipe: docker-login@v1
     with:
       registry: harbor.example
+      http: true
       username: 'robot$$user'
     secrets:
       DOCKER_USERNAME: harbor_username
@@ -172,7 +174,7 @@ steps:
 
 Omit `wait` when there is no public URL. Repository stays in chart values — do not `--set` it.
 
-npm / PyPI package. Harbor image → `docker-login` first. The publish pipe builds and uploads.
+npm / PyPI package. Private image → `docker-login` first. The publish pipe builds and uploads.
 
 ```yaml
 steps:
@@ -180,6 +182,7 @@ steps:
     pipe: docker-login@v1
     with:
       registry: harbor.example
+      http: true
     secrets:
       DOCKER_USERNAME: harbor_username
       DOCKER_PASSWORD: harbor_password
@@ -195,9 +198,19 @@ steps:
 
 ```yaml
 steps:
+  login:
+    pipe: docker-login@v1
+    with:
+      registry: harbor.example
+      http: true
+    secrets:
+      DOCKER_USERNAME: harbor_username
+      DOCKER_PASSWORD: harbor_password
   publish:
+    depends_on:
+      - login
     pipe: pypi-publish@v1
     with:
       registry: https://acahti.example.com/api/packages/acme/pypi
-      image: harbor.example/base/saidc-uv:0.12.0
+      image: harbor.example/base/python:3.12-slim-bookworm
 ```

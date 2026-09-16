@@ -288,7 +288,7 @@ func TestExpandIdentInjectsJob(t *testing.T) {
     with:
       images: |
         app:dev
-`), Ident{User: "lipeiyang", Token: "tok"})
+`), Ident{User: "lipeiyang", Token: "tok", RootURL: "https://acahti.example.com", Org: "acme"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,6 +298,12 @@ func TestExpandIdentInjectsJob(t *testing.T) {
 	}
 	if !strings.Contains(text, "ACAHTI_TOKEN: tok") {
 		t.Fatalf("missing token:\n%s", text)
+	}
+	if !strings.Contains(text, "ACAHTI_ROOT_URL: https://acahti.example.com") {
+		t.Fatalf("missing root url:\n%s", text)
+	}
+	if !strings.Contains(text, "ACAHTI_ORG: acme") {
+		t.Fatalf("missing org:\n%s", text)
 	}
 }
 

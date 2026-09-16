@@ -14,4 +14,4 @@ inputs:
     required: false
   image:
     required: false
-    description: Node image (default node:22-alpine). Harbor/ACR images need a prior docker-login, or the Runner Harbor login.
+    description: Node image (default node:22-alpine). Private registry images need a prior docker-login.

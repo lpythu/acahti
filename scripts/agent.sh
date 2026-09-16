@@ -162,20 +162,19 @@ fi
 install -d -m 0755 /etc/woodpecker
 buildx_cfg="${run_home}/.docker/buildx"
 install -d -o "${run_user}" -g "${run_user}" -m 0755 "${run_home}/.docker" "${buildx_cfg}"
+# Jobs append HTTP registries via docker-login with.http. No hostname in this script.
+touch /etc/woodpecker/buildkitd.toml
+chown "${run_user}:${run_user}" /etc/woodpecker/buildkitd.toml
+chmod 644 /etc/woodpecker/buildkitd.toml
+
 if command -v docker >/dev/null; then
   echo "==> buildx builder acahti"
-  # office Harbor is HTTP on the LAN. BuildKit defaults to https://:443 → connection refused.
-  cat > /etc/woodpecker/buildkitd.toml <<'EOF'
-[registry."harbor.saidc"]
-  http = true
-  insecure = true
-EOF
-  chown "${run_user}:${run_user}" /etc/woodpecker/buildkitd.toml
-  chmod 644 /etc/woodpecker/buildkitd.toml
   sudo -u "${run_user}" env BUILDX_CONFIG="${buildx_cfg}" docker buildx rm -f acahti >/dev/null 2>&1 || true
-  sudo -u "${run_user}" env BUILDX_CONFIG="${buildx_cfg}" \
-    docker buildx create --name acahti --driver docker-container --driver-opt network=host \
-    --config /etc/woodpecker/buildkitd.toml >/dev/null
+  create_args=(--name acahti --driver docker-container --driver-opt network=host)
+  if [[ -s /etc/woodpecker/buildkitd.toml ]]; then
+    create_args+=(--config /etc/woodpecker/buildkitd.toml)
+  fi
+  sudo -u "${run_user}" env BUILDX_CONFIG="${buildx_cfg}" docker buildx create "${create_args[@]}" >/dev/null
 fi
 
 cat >"${tmpdir}/agent.env" <<EOF

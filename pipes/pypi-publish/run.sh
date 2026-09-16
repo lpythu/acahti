@@ -56,7 +56,6 @@ if [[ -n "$index_env" ]]; then
 	done <<<"$index_env"
 fi
 
-ensure_harbor_login
 echo "==> uv build+publish ${pkg_path} (${image})"
 docker run --rm --network=host \
 	"${docker_env[@]}" \

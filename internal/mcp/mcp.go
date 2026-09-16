@@ -96,7 +96,7 @@ func tools() []toolSpec {
 		{Name: "pkg_list", Description: "List language packages", InputSchema: obj(map[string]any{"owner": str, "kind": str, "page": num, "page_size": num})},
 		{Name: "pkg_delete", Description: "Delete a language package version. Org admin. Omit version to delete every version of that name", InputSchema: obj(map[string]any{"owner": str, "kind": str, "name": str, "version": str}, "kind", "name")},
 		{Name: "whoami", Description: "Acahti git identity: git_name, git_email, clone_url_template, skill_url, skill_sha, apply_when_remote_host, setup_local, org_admin", InputSchema: obj(map[string]any{})},
-		{Name: "agent_status", Description: "Host runners plus Woodpecker queue stats (pending, waiting_on_deps, running)", InputSchema: obj(pg)},
+		{Name: "agent_status", Description: "Host runners plus queue stats counted per pipeline (running / queued)", InputSchema: obj(pg)},
 		{Name: "deploy_approve", Description: "Approve a gated deploy pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 		{Name: "secret_list", Description: "List pipeline secret names (never values). scope org is org admins. scope repo is the effective set (org inherited plus repo) for repo admins. repo or owner+name for repo scope", InputSchema: obj(map[string]any{"scope": str, "repo": str, "owner": str, "name": str, "page": num, "page_size": num})},
 		{Name: "secret_put", Description: "Create or replace a pipeline secret. Does not echo value. org scope needs org admin. repo scope needs repo admin. name is the secret", InputSchema: obj(map[string]any{"scope": str, "name": str, "secret": str, "value": str, "events": map[string]any{"type": "array", "items": str}, "repo": str, "owner": str}, "value")},

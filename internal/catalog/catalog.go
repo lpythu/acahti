@@ -758,7 +758,14 @@ func (c *Catalog) paintPipes(pipes []woodpecker.Pipeline) []woodpecker.Pipeline 
 			out[i].HydrateJobs()
 			out[i].SortJobs()
 			out[i] = c.applyCommitAuthor(out[i])
-			out[i] = woodpecker.Annotate(out[i], q)
+			p := out[i]
+			if q.Fetched && woodpecker.InFlight(p.Status) && !woodpecker.InQueue(p, q) {
+				if fresh, err := c.Refresh(p.Repo, p.Number); err == nil {
+					out[i] = fresh
+					return
+				}
+			}
+			out[i] = woodpecker.Annotate(p, q)
 		}(i)
 	}
 	wg.Wait()
