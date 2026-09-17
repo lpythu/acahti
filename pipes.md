@@ -94,7 +94,7 @@ No `with:` required. Hourly timer only (`agent.sh`). Caps the `acahti` builder w
 
 ### npm-publish-acahti
 
-Acahti org npm only. `with:` `path` (package dir). Optional `image` (default `node:22-alpine`). The pipe writes job-identity npm auth for both the public host and the LAN gateway, rewrites lockfile `/api/packages/` tarball URLs onto the gateway, then `pnpm install --frozen-lockfile --ignore-scripts`, `pnpm --filter <package.json name> build`, `npm pack`, and PUT to the LAN gateway (`WOODPECKER_SERVER` host `:8080`, `Host` = `ACAHTI_ROOT_URL`). HTTP 409 (version already on the index) is success. YAML does not name a registry, `docker run`, or write `.npmrc`.
+Acahti org npm only. `with:` `path` (package dir). Optional `image` (default `node:22-alpine`). The pipe writes job-identity npm auth for both the public host and the LAN gateway, then `pnpm install --frozen-lockfile --ignore-scripts`, `pnpm --filter <package.json name> build`, `npm pack`, and PUT to the LAN gateway (`WOODPECKER_SERVER` host `:8080`, `Host` = `ACAHTI_ROOT_URL`). HTTP 409 (version already on the index) is success. YAML does not name a registry, `docker run`, or write `.npmrc`.
 
 ### pypi-publish-acahti
 
