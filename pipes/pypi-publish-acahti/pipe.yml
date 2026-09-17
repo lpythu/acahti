@@ -1,11 +1,8 @@
-name: pypi-publish
+name: pypi-publish-acahti
 inputs:
-  registry:
-    required: true
-    description: uv --publish-url, e.g. https://acahti.example.com/api/packages/acme/pypi
   path:
     required: false
-    description: Directory with pyproject.toml (default .)
+    description: Directory with pyproject.toml (default .). Builds and PUTs to this Acahti org's PyPI.
   image:
     required: false
     description: Python image (default python:3.12-slim-bookworm). uv is installed if missing. Private registry images need a prior docker-login.

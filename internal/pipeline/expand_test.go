@@ -88,9 +88,11 @@ func TestExpandRejectsUses(t *testing.T) {
 }
 
 func TestExpandRejectsUnknown(t *testing.T) {
-	_, err := Expand([]byte("steps:\n  x:\n    pipe: nope@v1\n"))
-	if err == nil || !strings.Contains(err.Error(), "unknown pipe") {
-		t.Fatalf("err=%v", err)
+	for _, name := range []string{"nope", "npm-publish", "pypi-publish"} {
+		_, err := Expand([]byte("steps:\n  x:\n    pipe: " + name + "@v1\n"))
+		if err == nil || !strings.Contains(err.Error(), "unknown pipe") {
+			t.Fatalf("%s err=%v", name, err)
+		}
 	}
 }
 
@@ -259,7 +261,7 @@ func TestExpandRejectsHostSecretFiles(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "kubeconfig") {
 		t.Fatalf("err=%v", err)
 	}
-	_, err = Expand([]byte("steps:\n  x:\n    pipe: npm-publish@v1\n    with:\n      path: pkg\n      registry: https://example/npm\n      env_file: /root/.acahti.env\n"))
+	_, err = Expand([]byte("steps:\n  x:\n    pipe: npm-publish-acahti@v1\n    with:\n      path: pkg\n      env_file: /root/.acahti.env\n"))
 	if err == nil || !strings.Contains(err.Error(), "env_file") {
 		t.Fatalf("err=%v", err)
 	}

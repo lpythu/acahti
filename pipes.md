@@ -28,7 +28,7 @@ steps:
       KUBECONFIG: kubeconfig_office
 ```
 
-This train only first-party pipes: `pipe: <name>@v1`. Registry URLs, image names, wait URLs, and tool argv belong in the repo YAML.
+This train only first-party pipes: `pipe: <name>@v1`. Image names, wait URLs, and tool argv belong in the repo YAML. `npm-publish-acahti` / `pypi-publish-acahti` publish only to this Acahti org — do not pass a registry URL.
 
 ## Secrets
 
@@ -92,13 +92,13 @@ No `with:` required. Caps the Runner’s local BuildKit cache (`acahti` builder 
 
 `with:` `run` (required, one command per line). Optional `project` (directory with `pyproject.toml`, default `.`). Installs `uv` if missing, then `uv run --project <dir> -- bash -c <line>` in a job-local venv (`UV_PROJECT_ENVIRONMENT`). Product YAML supplies the command (for example `argos run all --env office --dash`). Secrets become step env; `--dash` with no file reads `ARGOS_DASH_URL` / `ARGOS_TOKEN`. Argos CLI in CI reads Woodpecker `CI_*` and `ACAHTI_ROOT_URL` so the dash run links back to this pipeline; it prints `argos <sid>` and `dash {url}` (`{ARGOS_DASH_URL}/runs/{sid}`). Acahti shows that URL on the pipeline list and detail when the job name is `e2e.*`.
 
-### npm-publish
+### npm-publish-acahti
 
-`with:` `path` (package dir), `registry` (Acahti packages npm URL). Optional `image` (default `node:22-alpine`). The pipe writes job-identity npm auth in the container (not the workspace), `pnpm install --frozen-lockfile --ignore-scripts`, `pnpm --filter <package.json name> build`, then `npm pack` and PUT. YAML does not `docker run` or write `.npmrc`. Optional `origin`, `org`, `user` (derived from `registry` when omitted).
+Acahti org npm only. `with:` `path` (package dir). Optional `image` (default `node:22-alpine`). The pipe writes job-identity npm auth in the container (not the workspace), `pnpm install --frozen-lockfile --ignore-scripts`, `pnpm --filter <package.json name> build`, then `npm pack` and PUT to the LAN gateway (`WOODPECKER_SERVER` host `:8080`, `Host` = `ACAHTI_ROOT_URL`). YAML does not name a registry, `docker run`, or write `.npmrc`.
 
-### pypi-publish
+### pypi-publish-acahti
 
-`with:` `registry` (uv `--publish-url`). Optional `path` (default `.`), `image` (default `python:3.12-slim-bookworm`). The pipe runs `uv build` then `uv publish` in that image (installs uv if missing). Job identity is `UV_PUBLISH_*` and `UV_INDEX_<NAME>_*` for `[[tool.uv.index]]` entries with `authenticate = always`. YAML does not `docker run` or name a token.
+Acahti org PyPI only. Optional `path` (default `.`), `image` (default `python:3.12-slim-bookworm`). The pipe runs `uv build` in that image (installs uv if missing) then PUT to the LAN gateway the same way. YAML does not name a registry, `docker run`, or a token.
 
 ### oss-put
 
@@ -194,10 +194,9 @@ steps:
   publish:
     depends_on:
       - login
-    pipe: npm-publish@v1
+    pipe: npm-publish-acahti@v1
     with:
       path: packages/pkg
-      registry: https://acahti.example.com/api/packages/acme/npm
       image: harbor.example/library/node:22-alpine
 ```
 
@@ -214,8 +213,7 @@ steps:
   publish:
     depends_on:
       - login
-    pipe: pypi-publish@v1
+    pipe: pypi-publish-acahti@v1
     with:
-      registry: https://acahti.example.com/api/packages/acme/pypi
       image: harbor.example/base/python:3.12-slim-bookworm
 ```

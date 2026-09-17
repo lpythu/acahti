@@ -23,7 +23,7 @@ flowchart LR
   agents -->|"git HTTPS"| acahti
 ```
 
-Gateway is the only HTTP app this repo starts. Bind is `GATEWAY_BIND` (default `127.0.0.1:8080`). TLS and the public hostname are **out of tree**: point your reverse proxy or tunnel at that bind and set `ROOT_URL` / `DOMAIN` to the public URL. Public identity is **Acahti**: SPA, MCP, `/acahti/v1`, git HTTPS, `/api/packages`, pipelines, Runner.
+Gateway is the only HTTP app this repo starts. Bind is `GATEWAY_BIND` (default `127.0.0.1:8080`; with `ACAHTI_BUILD`, loopback is rewritten to `0.0.0.0:8080` so the Runner can PUT packages on LAN). TLS and the public hostname are **out of tree**: point your reverse proxy or tunnel at that bind and set `ROOT_URL` / `DOMAIN` to the public URL. Public identity is **Acahti**: SPA, MCP, `/acahti/v1`, git HTTPS, `/api/packages`, pipelines, Runner.
 
 ## Host roles
 
@@ -41,7 +41,7 @@ Repos declare pipelines in `.acahti/pipelines/`. Steps call official **pipes** (
 Chicken and egg: the laptop agent SSHs to an empty host and follows this list. Do not ask a human to click through UIs. Scripts are non-interactive.
 
 1. Probe with `bash scripts/detect.sh`. Stop if no sudo or memory &lt; 2G.
-2. Set `DOMAIN` and `ROOT_URL`. Optional: `ACAHTI_ORG`, `ACAHTI_BUILD` (SSH spec for the Runner, `ROLE=both`). Laptop or no proxy: `GATEWAY_BIND=0.0.0.0:8080`.
+2. Set `DOMAIN` and `ROOT_URL`. Optional: `ACAHTI_ORG`, `ACAHTI_BUILD` (SSH spec for the Runner, `ROLE=both`). Laptop or no proxy: `GATEWAY_BIND=0.0.0.0:8080`. A remote Runner needs the gateway on LAN (`ACAHTI_BUILD` rewrites loopback to `0.0.0.0:8080`).
 3. Put your reverse proxy or tunnel in front of `GATEWAY_BIND` (default `127.0.0.1:8080`). This repo does not ship Caddy or cloudflared.
 4. On the acahti host, as a sudoer: `bash scripts/install.sh`.
    - `bootstrap.sh` — Docker, `/var/lib/acahti/{forgejo,woodpecker,postgres,gateway}`

@@ -39,6 +39,8 @@ each_item() {
 }
 
 # Public packages URL host + org. Expand injects ACAHTI_ROOT_URL / ACAHTI_ORG.
+# Install auth (docker-build npmrc/netrc) still names this host; PUT uses
+# acahti_packages_origin (LAN gateway), with Host = acahti_packages_public_host.
 acahti_pkg_origin() {
 	local origin="${ACAHTI_ROOT_URL:-${ROOT_URL:-${CI_FORGE_URL:-}}}"
 	origin="${origin%/}"
@@ -55,6 +57,39 @@ acahti_pkg_host() {
 	host="${host#http://}"
 	host="${host%%/*}"
 	printf '%s' "$host"
+}
+
+# Runner → gateway :8080. Never ACAHTI_ROOT_URL (that is the public tunnel).
+acahti_packages_origin() {
+	if [[ -n "${ACAHTI_GATEWAY:-}" ]]; then
+		printf '%s' "${ACAHTI_GATEWAY%/}"
+		return
+	fi
+	if [[ -r /etc/woodpecker/acahti-gateway ]]; then
+		local file_origin
+		file_origin="$(tr -d '[:space:]' </etc/woodpecker/acahti-gateway)"
+		if [[ -n "$file_origin" ]]; then
+			printf '%s' "${file_origin%/}"
+			return
+		fi
+	fi
+	local server="${WOODPECKER_SERVER:-}"
+	local host="${server%%:*}"
+	if [[ -z "$host" || "$host" == "127.0.0.1" || "$host" == "localhost" ]]; then
+		printf '%s' "http://127.0.0.1:8080"
+		return
+	fi
+	printf '%s' "http://${host}:8080"
+}
+
+acahti_packages_public_host() {
+	local host
+	host="$(acahti_pkg_host "$(acahti_pkg_origin)")"
+	if [[ -n "$host" ]]; then
+		printf '%s' "$host"
+		return
+	fi
+	acahti_pkg_host "$(acahti_packages_origin)"
 }
 
 # User-level npmrc: HTTP Basic (username + base64 _password). Not Bearer.

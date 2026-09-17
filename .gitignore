@@ -11,3 +11,5 @@ internal/web/dist
 .idea
 .vscode
 *.swp
+__pycache__/
+*.pyc

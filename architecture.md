@@ -159,13 +159,13 @@ Same secret name: **repo overrides org**. YAML `secrets:` only names which secre
 | person / agent | Acahti login + password or OAuth | do not read pipeline secrets to install packages |
 | CI | job identity, injected by `docker-build` / publish | YAML names them (`DOCKER_PASSWORD: harbor_password`, `KUBECONFIG: kubeconfig_office`) |
 
-Packages live at `$ROOT_URL/api/packages/$ORG/{npm\|pypi}` and use the same identity proxy as git HTTPS. Org members who can see repos can install. Publish uses the triggering user (`npm-publish` / `pypi-publish` / `pkg_publish`). `docker-build` writes job identity as BuildKit secrets `id=npmrc` (HTTP Basic `username` + base64 `_password`) and `id=netrc`, then `docker buildx --network=host`. Repo `.npmrc` / `[[tool.uv.index]]` name the registry only. App Dockerfiles mount `id=npmrc` at `/root/.npmrc` and `id=netrc` at `/root/.netrc` on install `RUN`s; they do not set `--network=host` and they do not mount raw username/password.
+Packages live at `$ROOT_URL/api/packages/$ORG/{npm\|pypi}` and use the same identity proxy as git HTTPS. Org members who can see repos can install. Publish (`npm-publish-acahti` / `pypi-publish-acahti` / `pkg_publish`) PUTs to the gateway LAN bind (`WOODPECKER_SERVER` host `:8080`) with `Host` = `ROOT_URL` — not through the public tunnel. `docker-build` writes job identity as BuildKit secrets `id=npmrc` (HTTP Basic `username` + base64 `_password`) and `id=netrc`, then `docker buildx --network=host`. Repo `.npmrc` / `[[tool.uv.index]]` name the registry only. App Dockerfiles mount `id=npmrc` at `/root/.npmrc` and `id=netrc` at `/root/.netrc` on install `RUN`s; they do not set `--network=host` and they do not mount raw username/password.
 
 Harbor (office) and ACR (hk) are a pair of **user** registries. YAML names the host, username, and password. Do not auto-inject either. Image names (`BASE_IMAGE=…`) live in product YAML. HTTP vs HTTPS is `docker-login` `http: true` (or `registry: http://host`) — Acahti has no registry hostname. `buildx --config` is create-time on the shared `acahti` builder; the login pipe merges YAML-declared HTTP hosts into `buildkitd.toml`. Harbor `base` and `library` are anonymous-pull so CI `--pull` needs no login. Office CD logs in to Harbor to push products; HK CD logs in to ACR for bases and products.
 
 | Secret | Pipe | YAML |
 |--------|------|------|
-| triggering user (install/publish Acahti packages) | `docker-build` / `npm-publish` / `pypi-publish` | do not write; expand injects it |
+| triggering user (install/publish Acahti packages) | `docker-build` / `npm-publish-acahti` / `pypi-publish-acahti` | do not write; expand injects it |
 | `harbor_username` / `harbor_password` | office `docker-login` | name as `DOCKER_USERNAME` / `DOCKER_PASSWORD` |
 | `acr_username` / `acr_password` | hk `docker-login` | same mapping |
 | `kubeconfig_office` / `kubeconfig_hk` | `helm` | name as `KUBECONFIG` |

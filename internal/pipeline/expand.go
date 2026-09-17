@@ -12,16 +12,16 @@ import (
 var pipeRef = regexp.MustCompile(`^([a-z][a-z0-9-]*)@v([0-9]+)$`)
 
 var official = map[string]struct{}{
-	"docker-login": {},
-	"docker-build": {},
-	"helm":         {},
-	"wait-http":    {},
-	"uv":           {},
-	"npm-publish":  {},
-	"pypi-publish": {},
-	"oss-put":      {},
-	"oci-gc":       {},
-	"docker-gc":    {},
+	"docker-login":        {},
+	"docker-build":        {},
+	"helm":                {},
+	"wait-http":           {},
+	"uv":                  {},
+	"npm-publish-acahti":  {},
+	"pypi-publish-acahti": {},
+	"oss-put":             {},
+	"oci-gc":              {},
+	"docker-gc":           {},
 }
 
 // Ident is the Acahti user this run is (the person who triggered it), plus the repo to scope YAML concurrency groups.

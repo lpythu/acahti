@@ -1,0 +1,8 @@
+name: npm-publish-acahti
+inputs:
+  path:
+    required: true
+    description: Package directory (package.json). Installs, builds, packs, and PUTs to this Acahti org's npm.
+  image:
+    required: false
+    description: Node image (default node:22-alpine). Private registry images need a prior docker-login.

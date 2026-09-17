@@ -13,7 +13,7 @@ Follow [../../README.md](../../README.md) as the contract. Do not invent a secon
 - SSH to the **acahti** host (sudoer, not root)
 - Optional `ACAHTI_ORG` (default `acme`)
 - `ACAHTI_BUILD` — SSH spec for the **Runner** (one host, `ROLE=both`)
-- Gateway bind: default `127.0.0.1:8080`. Point the host’s own proxy or tunnel at it. Laptop / no proxy: `GATEWAY_BIND=0.0.0.0:8080`. Do not add Caddy or cloudflared to this compose.
+- Gateway bind: default `127.0.0.1:8080`. Point the host’s own proxy or tunnel at it. Laptop / no proxy: `GATEWAY_BIND=0.0.0.0:8080`. With `ACAHTI_BUILD`, loopback is rewritten to `0.0.0.0:8080` so the Runner can PUT packages on LAN. Do not add Caddy or cloudflared to this compose.
 
 Do not install a Runner on the acahti host.
 

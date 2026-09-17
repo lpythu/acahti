@@ -4,7 +4,6 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib.sh"
 
 require_input PATH
-require_input REGISTRY
 pkg_path="$(input PATH)"
 if [[ ! -f "${ROOT}/${pkg_path}/package.json" ]]; then
 	echo "error: ${pkg_path}/package.json missing" >&2
@@ -18,21 +17,14 @@ if [[ -z "$token" || -z "$user" ]]; then
 	exit 1
 fi
 
-registry="$(input REGISTRY)"
-origin="$(input ORIGIN)"
-if [[ -z "$origin" ]]; then
-	origin="${registry%/api/packages/*}"
+origin="$(acahti_packages_origin)"
+org="$(acahti_pkg_org)"
+public_host="$(acahti_packages_public_host)"
+if [[ -z "$org" || -z "$public_host" ]]; then
+	echo "error: ACAHTI_ORG and ACAHTI_ROOT_URL are required" >&2
+	exit 1
 fi
-org="$(input ORG)"
-if [[ -z "$org" ]]; then
-	org="${registry##*/api/packages/}"
-	org="${org%%/*}"
-fi
-user="$(input USER)"
-user="${user:-$ACAHTI_USER}"
-host="${origin#https://}"
-host="${host#http://}"
-host="${host%%/*}"
+lan_host="$(acahti_pkg_host "$origin")"
 auth_path="/api/packages/${org}/npm/"
 
 image="$(input IMAGE)"
@@ -41,20 +33,41 @@ pkg_name="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['nam
 
 dest="$(mktemp -d)"
 npmrc="$(mktemp)"
-trap 'rm -rf "$dest"; rm -f "$npmrc"' EXIT
+overlay="$(mktemp)"
+pkg_overlay="$(mktemp)"
+trap 'rm -rf "$dest"; rm -f "$npmrc" "$overlay" "$pkg_overlay"' EXIT
 chmod 600 "$npmrc"
 {
-	printf '//%s%s:username=%s\n' "$host" "$auth_path" "$user"
-	printf '//%s%s:_password=%s\n' "$host" "$auth_path" "$(printf '%s' "$token" | base64 | tr -d '\n')"
+	printf '//%s%s:username=%s\n' "$lan_host" "$auth_path" "$user"
+	printf '//%s%s:_password=%s\n' "$lan_host" "$auth_path" "$(printf '%s' "$token" | base64 | tr -d '\n')"
 	printf 'always-auth=true\n'
 } >"$npmrc"
 
-echo "==> npm install+build ${pkg_name} (${image})"
+rewrite_npmrc() {
+	local src="$1" out="$2"
+	if [[ -f "$src" ]]; then
+		sed -E "s#https?://[^/]+/api/packages/#${origin}/api/packages/#g" "$src" >"$out"
+	else
+		printf '@%s:registry=%s/api/packages/%s/npm/\n' "$org" "$origin" "$org" >"$out"
+	fi
+}
+rewrite_npmrc "${ROOT}/.npmrc" "$overlay"
+rewrite_npmrc "${ROOT}/${pkg_path}/.npmrc" "$pkg_overlay"
+
+docker_npmrc_mounts=(
+	-v "${npmrc}:/root/.npmrc:ro"
+	-v "${overlay}:/app/.npmrc:ro"
+)
+if [[ "$pkg_path" != "." && -f "${ROOT}/${pkg_path}/.npmrc" ]]; then
+	docker_npmrc_mounts+=(-v "${pkg_overlay}:/app/${pkg_path}/.npmrc:ro")
+fi
+
+echo "==> npm install+build ${pkg_name} (${image}) origin ${origin}"
 docker run --rm --network=host \
 	-e PKG_NAME="$pkg_name" \
 	-e PKG_PATH="$pkg_path" \
 	-v "${ROOT}:/app" \
-	-v "${npmrc}:/root/.npmrc:ro" \
+	"${docker_npmrc_mounts[@]}" \
 	-v "${dest}:/out" \
 	-w /app \
 	"$image" \
@@ -70,8 +83,8 @@ if ((${#tgz[@]} == 0)); then
 	echo "error: ${pkg_path} produced no tarball" >&2
 	exit 1
 fi
-echo "==> npm PUT ${registry}"
+echo "==> npm PUT ${origin}/api/packages/${org}/npm"
 ACAHTI_ADMIN_TOKEN="${token}" ACAHTI_ORG="${org}" ACAHTI_ADMIN_USER="${user}" \
-	ORIGIN="${origin}" HOST_HEADER="${host}" X_FORWARDED_PROTO=https \
+	ORIGIN="${origin}" HOST_HEADER="${public_host}" X_FORWARDED_PROTO=https \
 	python3 "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/npm-put.py" "${tgz[@]}"
-echo "OK npm-publish ${registry}"
+echo "OK npm-publish-acahti ${pkg_name}"

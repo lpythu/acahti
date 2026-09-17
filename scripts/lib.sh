@@ -69,6 +69,14 @@ ensure_env() {
   : "${ACAHTI_ADMIN_USER:=acahti}"
   : "${ACAHTI_ADMIN_EMAIL:=${ACAHTI_ADMIN_USER}@noreply.${DOMAIN}}"
   : "${GATEWAY_BIND:=127.0.0.1:8080}"
+  # Remote Runner publishes packages over LAN HTTP (gRPC host :8080).
+  if [[ -n "${ACAHTI_BUILD:-}" ]]; then
+    case "${GATEWAY_BIND}" in
+    127.0.0.1:* | localhost:*)
+      GATEWAY_BIND="0.0.0.0:${GATEWAY_BIND##*:}"
+      ;;
+    esac
+  fi
   if [[ -z "${POSTGRES_PASSWORD:-}" ]]; then
     POSTGRES_PASSWORD="$(gen_secret)"
     _upsert_env POSTGRES_PASSWORD "${POSTGRES_PASSWORD}"

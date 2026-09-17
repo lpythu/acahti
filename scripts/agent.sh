@@ -186,6 +186,15 @@ if command -v docker >/dev/null; then
   fi
 fi
 
+server_host="${SERVER%%:*}"
+if [[ "$server_host" == "127.0.0.1" || "$server_host" == "localhost" ]]; then
+  ACAHTI_GATEWAY="http://127.0.0.1:8080"
+else
+  ACAHTI_GATEWAY="http://${server_host}:8080"
+fi
+printf '%s\n' "$ACAHTI_GATEWAY" >"${tmpdir}/acahti-gateway"
+install -m 0644 "${tmpdir}/acahti-gateway" /etc/woodpecker/acahti-gateway
+
 cat >"${tmpdir}/agent.env" <<EOF
 WOODPECKER_SERVER=${SERVER}
 WOODPECKER_AGENT_SECRET=${SECRET}
@@ -196,6 +205,7 @@ WOODPECKER_MAX_WORKFLOWS=${MAX_WORKFLOWS}
 WOODPECKER_HEALTHCHECK=false
 BUILDX_CONFIG=${buildx_cfg}
 ACAHTI_BUILDKITD_CONFIG=/etc/woodpecker/buildkitd.toml
+ACAHTI_GATEWAY=${ACAHTI_GATEWAY}
 EOF
 chmod 600 "${tmpdir}/agent.env"
 # Drop a stale agent id from a previous control plane.

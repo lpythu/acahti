@@ -83,7 +83,7 @@ Same credentials as git. Username is the Acahti login. Password is the login pas
 
 Repo `.npmrc` / `[[tool.uv.index]]` name the registry only (scopes like `@saidc` are the app’s file, not the pipe). Laptop auth is `~/.npmrc` (`username` + `_password` = **base64** of the password or MCP token; `always-auth=true`) or `UV_INDEX_<INDEX>_USERNAME` / `UV_INDEX_<INDEX>_PASSWORD` / `~/.netrc`. CI: `docker-build` writes those files as BuildKit secrets `npmrc` / `netrc`; Dockerfiles mount them at `/root/.npmrc` and `/root/.netrc`. YAML does not name npm tokens. YAML names Harbor/ACR as `BASE_IMAGE=…`.
 
-Org members who can see repos can install. Publish uses the triggering user's identity (`npm-publish` / `pypi-publish` / `pkg_publish`). Those pipes install, build, and upload in a container; YAML does not `docker run` or write `.npmrc` / `.netrc`. Org admins remove a version with `pkg_delete`.
+Org members who can see repos can install. Publish uses the triggering user's identity (`npm-publish-acahti` / `pypi-publish-acahti` / `pkg_publish`). Those pipes install, build, and upload in a container over the LAN gateway; YAML does not name a registry, `docker run`, or write `.npmrc` / `.netrc`. Org admins remove a version with `pkg_delete`.
 
 ## Tools
 
