@@ -78,29 +78,6 @@ func TestExpandPassthroughCommands(t *testing.T) {
 	if strings.Contains(string(got), "acahti-pipe") {
 		t.Fatalf("unexpected dispatch:\n%s", got)
 	}
-	if !strings.Contains(string(got), "partial: false") {
-		t.Fatalf("missing clone pin:\n%s", got)
-	}
-}
-
-func TestExpandKeepsExplicitClone(t *testing.T) {
-	got, err := Expand([]byte("clone:\n  disable: true\nsteps:\n  x:\n    image: bash\n    commands: [echo]\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(got), "partial:") {
-		t.Fatalf("overwrote clone:\n%s", got)
-	}
-}
-
-func TestExpandSkipClone(t *testing.T) {
-	got, err := Expand([]byte("skip_clone: true\nsteps:\n  x:\n    image: bash\n    commands: [echo]\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(got), "partial:") {
-		t.Fatalf("clone on skip:\n%s", got)
-	}
 }
 
 func TestExpandRejectsUses(t *testing.T) {

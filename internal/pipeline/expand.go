@@ -54,7 +54,6 @@ func ExpandIdent(src []byte, id Ident) ([]byte, error) {
 		return nil, fmt.Errorf("uses: is not supported; use pipe:")
 	}
 	scopeConcurrency(doc, id.Repo)
-	pinClone(doc)
 	if steps, ok := doc["steps"]; ok {
 		if err := expandSteps(steps, id); err != nil {
 			return nil, err
@@ -65,23 +64,6 @@ func ExpandIdent(src []byte, id Ident) ([]byte, error) {
 		return nil, err
 	}
 	return out, nil
-}
-
-// pinClone turns off plugin-git's default --filter=tree:0. Partial clone
-// through Cloudflare often 401s into a credential prompt (no TTY → killed
-// or "could not read Username") even when netrc is present.
-func pinClone(doc map[string]any) {
-	if _, ok := doc["clone"]; ok {
-		return
-	}
-	if skip, ok := doc["skip_clone"].(bool); ok && skip {
-		return
-	}
-	doc["clone"] = map[string]any{
-		"git": map[string]any{
-			"settings": map[string]any{"partial": false},
-		},
-	}
 }
 
 func expandSteps(steps any, id Ident) error {
