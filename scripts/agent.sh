@@ -159,9 +159,6 @@ if ! command -v crane >/dev/null; then
   install -m 0755 "${tmpdir}/crane" "${bindir}/crane"
 fi
 
-echo "==> argospy>=0.5.1"
-python3 -m pip install -U 'argospy>=0.5.1'
-
 install -d -m 0755 /etc/woodpecker
 buildx_cfg="${run_home}/.docker/buildx"
 install -d -o "${run_user}" -g "${run_user}" -m 0755 "${run_home}/.docker" "${buildx_cfg}"
