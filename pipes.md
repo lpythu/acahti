@@ -90,7 +90,7 @@ No `with:` required. Hourly timer only (`agent.sh`). Caps the `acahti` builder w
 
 ### uv
 
-`with:` `run` (required, one command per line). Optional `project` (directory with `pyproject.toml`, default `.`). Installs `uv` if missing, then `uv run --project <dir> -- bash -c <line>` in a job-local venv (`UV_PROJECT_ENVIRONMENT`). Product YAML supplies the command (for example `argos run all --env office --dash`). Secrets become step env; `--dash` with no file reads `ARGOS_DASH_URL` / `ARGOS_TOKEN`. Argos CLI in CI reads Woodpecker `CI_*` and `ACAHTI_ROOT_URL` so the dash run links back to this pipeline; it prints `argos <sid>` and `dash {url}` (`{ARGOS_DASH_URL}/runs/{sid}`). Acahti shows that URL on the pipeline list and detail when the job name is `e2e.*` or a step is named `e2e`.
+`with:` `run` (required, one command per line). Optional `project` (directory with `pyproject.toml`, default `.`). Installs `uv` if missing, then `uv run --default-index https://pypi.org/simple --project <dir> -- bash -c <line>` in a job-local venv (`UV_PROJECT_ENVIRONMENT`). Ignores inherited `UV_INDEX_URL` (stale mirrors omit new PyPI versions). Product YAML supplies the command (for example `argos run all --env office --dash`). Secrets become step env; `--dash` with no file reads `ARGOS_DASH_URL` / `ARGOS_TOKEN`. Argos CLI in CI reads Woodpecker `CI_*` and `ACAHTI_ROOT_URL` so the dash run links back to this pipeline; it prints `argos <sid>` and `dash {url}` (`{ARGOS_DASH_URL}/runs/{sid}`). Acahti shows that URL on the pipeline list and detail when the job name is `e2e.*` or a step is named `e2e`.
 
 ### npm-publish-acahti
 
