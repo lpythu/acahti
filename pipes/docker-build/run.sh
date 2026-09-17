@@ -15,12 +15,24 @@ push="${push:-true}"
 
 secret_args=()
 secret_files=()
+heartbeat_pid=""
 cleanup_secrets() {
 	if ((${#secret_files[@]})); then
 		rm -f "${secret_files[@]}"
 	fi
 }
-trap cleanup_secrets EXIT
+stop_heartbeat() {
+	if [[ -n "$heartbeat_pid" ]]; then
+		kill "$heartbeat_pid" 2>/dev/null || true
+		wait "$heartbeat_pid" 2>/dev/null || true
+		heartbeat_pid=""
+	fi
+}
+cleanup() {
+	stop_heartbeat
+	cleanup_secrets
+}
+trap cleanup EXIT
 
 add_bk_secret() {
 	local id="$1" value="$2"
@@ -122,7 +134,18 @@ build_one() {
 	else
 		echo "==> build ${primary} (cache-only)"
 	fi
+	# BuildKit can stay quiet for >15m on large layer/wheel downloads; Acahti
+	# reaps steps whose log fingerprint does not change. Tick so live builds live.
+	(
+		n=0
+		while sleep 60; do
+			n=$((n + 1))
+			echo "==> docker-build still running (${n}m) ${primary}"
+		done
+	) &
+	heartbeat_pid=$!
 	docker buildx build "${args[@]}"
+	stop_heartbeat
 	echo "OK docker-build ${primary}"
 }
 

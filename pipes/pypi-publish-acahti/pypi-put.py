@@ -100,6 +100,9 @@ def main() -> None:
                 print(filename, resp.status)
         except urllib.error.HTTPError as e:
             err = e.read().decode("utf-8", "replace")[:500]
+            if e.code == 409:
+                print(filename, 409, "already exists")
+                continue
             print(filename, e.code, err, file=sys.stderr)
             raise SystemExit(1)
 
