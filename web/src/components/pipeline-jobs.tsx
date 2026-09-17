@@ -30,6 +30,7 @@ function JobNode({
   activeFile?: FileBlob | null
   onStep: (step: Step) => void
 }) {
+  const t = useT()
   const [open, setOpen] = useState(true)
 
   return (
@@ -39,6 +40,17 @@ function JobNode({
           <ChevronRightIcon className={cn("size-4 transition-transform", open && "rotate-90")} />
           <RunStatusIcon status={job.state} />
           <span>{job.name}</span>
+          {job.argos_url ? (
+            <a
+              className="ml-auto text-xs text-sky-700 hover:underline dark:text-sky-400"
+              href={job.argos_url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {t("argosDash")}
+            </a>
+          ) : null}
         </SidebarMenuButton>
         <CollapsibleContent>
           <SidebarMenuSub>

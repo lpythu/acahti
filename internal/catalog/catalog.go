@@ -967,7 +967,9 @@ func (c *Catalog) Remember(p woodpecker.Pipeline) woodpecker.Pipeline {
 	}
 	p = c.decoratePipe(p)
 	p = c.mergeLogTails(p)
+	p = c.mergeArgos(p)
 	p = c.captureTerminalLogs(p)
+	p = c.captureArgos(p)
 	p = woodpecker.StripWait(p)
 	if c.Idx != nil {
 		_ = c.Idx.Upsert(p)
@@ -995,6 +997,82 @@ func (c *Catalog) mergeLogTails(p woodpecker.Pipeline) woodpecker.Pipeline {
 			if p.Jobs[i].Steps[j].LogTail == "" {
 				p.Jobs[i].Steps[j].LogTail = prev[id]
 			}
+		}
+	}
+	return p
+}
+
+func (c *Catalog) mergeArgos(p woodpecker.Pipeline) woodpecker.Pipeline {
+	if c.Idx == nil {
+		return p
+	}
+	old, ok, err := c.Idx.Get(p.Repo, p.Number)
+	if err != nil || !ok {
+		return p
+	}
+	prev := map[string]woodpecker.Job{}
+	for _, job := range old.Jobs {
+		prev[job.Name] = job
+	}
+	for i := range p.Jobs {
+		oldJob, ok := prev[p.Jobs[i].Name]
+		if !ok {
+			continue
+		}
+		if p.Jobs[i].ArgosSID == "" {
+			p.Jobs[i].ArgosSID = oldJob.ArgosSID
+		}
+		if p.Jobs[i].ArgosURL == "" {
+			p.Jobs[i].ArgosURL = oldJob.ArgosURL
+		}
+	}
+	return p
+}
+
+func (c *Catalog) captureArgos(p woodpecker.Pipeline) woodpecker.Pipeline {
+	if c.WP == nil || !c.WP.Ready() {
+		return p
+	}
+	for i := range p.Jobs {
+		job := &p.Jobs[i]
+		if !woodpecker.E2EJob(job.Name) {
+			continue
+		}
+		if job.ArgosSID != "" && job.ArgosURL != "" {
+			continue
+		}
+		state := strings.ToLower(job.State)
+		if state == "" || state == "pending" || state == "created" || state == "skipped" || state == "blocked" {
+			continue
+		}
+		text := ""
+		for _, step := range job.Steps {
+			if step.LogTail != "" {
+				text += step.LogTail + "\n"
+			}
+		}
+		if text == "" {
+			for _, step := range job.Steps {
+				id := stepID(step)
+				if id == 0 {
+					continue
+				}
+				raw, err := c.WP.PipelineLog(p.Repo, p.Number, id)
+				if err != nil {
+					continue
+				}
+				text = woodpecker.FormatLog(raw)
+				if text != "" {
+					break
+				}
+			}
+		}
+		sid, url := woodpecker.ParseArgosLog(text)
+		if job.ArgosSID == "" {
+			job.ArgosSID = sid
+		}
+		if job.ArgosURL == "" {
+			job.ArgosURL = url
 		}
 	}
 	return p

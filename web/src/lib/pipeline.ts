@@ -8,6 +8,8 @@ export type Job = {
   wait?: string
   queue_position?: number
   agent?: string
+  argos_sid?: string
+  argos_url?: string
   steps: Step[]
 }
 
@@ -29,6 +31,8 @@ export function jobsOf(p: Pipeline): Job[] {
       wait: j.wait,
       queue_position: j.queue_position,
       agent: j.agent,
+      argos_sid: j.argos_sid,
+      argos_url: j.argos_url,
       steps: j.steps?.length ? j.steps : [],
     })
   }
@@ -74,6 +78,16 @@ function topoJobs(jobs: Job[]): Job[] {
 
 export function jobDotsOf(p: Pipeline): { name: string; state: string }[] {
   return jobsOf(p).map((j) => ({ name: j.name, state: j.state }))
+}
+
+export function argosLinksOf(p: Pipeline): { name: string; url: string }[] {
+  const out: { name: string; url: string }[] = []
+  for (const job of jobsOf(p)) {
+    const url = (job.argos_url || "").trim()
+    if (!url) continue
+    out.push({ name: job.name, url })
+  }
+  return out
 }
 
 export function asPipeline(data: unknown): Pipeline | null {

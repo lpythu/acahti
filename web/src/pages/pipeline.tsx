@@ -18,7 +18,7 @@ import { api } from "@/lib/api"
 import { formatUnix } from "@/lib/format"
 import { langOf } from "@/lib/lang"
 import { pipelineHref } from "@/lib/nav"
-import { asPipeline, inFlight, jobsOf, namedSecrets, triggerKey, triggerVars, waitLine } from "@/lib/pipeline"
+import { asPipeline, argosLinksOf, inFlight, jobsOf, namedSecrets, triggerKey, triggerVars, waitLine } from "@/lib/pipeline"
 import { useRepo } from "@/pages/repo-layout"
 
 export function PipelinePage() {
@@ -43,6 +43,7 @@ export function PipelinePage() {
   })
 
   const jobs = useMemo(() => (p ? jobsOf(p) : []), [p])
+  const argosLinks = useMemo(() => (p ? argosLinksOf(p) : []), [p])
   const yamlSecretNames = useMemo(() => namedSecrets(files), [files])
   const activeStep = useMemo(() => {
     if (step && jobs.some((j) => j.steps.some((s) => s.pid === step.pid && s.name === step.name))) {
@@ -152,6 +153,12 @@ export function PipelinePage() {
               #{n} {p.title || p.event || t("pipelines")}
             </h2>
             <StatusBadge status={p.status} />
+            {argosLinks.map((item) => (
+              <Button key={item.url} size="sm" variant="outline" render={<a href={item.url} target="_blank" rel="noreferrer" />}>
+                {t("argosDash")}
+                {argosLinks.length > 1 ? ` ${item.name.replace(/^e2e\./, "")}` : ""}
+              </Button>
+            ))}
           </div>
           <p className="mt-1 truncate text-sm text-muted-foreground">
             {t(triggerKey(p.event, p.ref), triggerVars(p))}

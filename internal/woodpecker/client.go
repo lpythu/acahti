@@ -90,6 +90,8 @@ type Job struct {
 	Wait          string   `json:"wait,omitempty"`
 	QueuePosition int      `json:"queue_position,omitempty"`
 	Agent         string   `json:"agent,omitempty"`
+	ArgosSID      string   `json:"argos_sid,omitempty"`
+	ArgosURL      string   `json:"argos_url,omitempty"`
 	Steps         []Step   `json:"steps,omitempty"`
 }
 

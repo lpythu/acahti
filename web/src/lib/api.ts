@@ -41,6 +41,8 @@ export type PipelineJob = {
   wait?: string
   queue_position?: number
   agent?: string
+  argos_sid?: string
+  argos_url?: string
   steps?: Step[]
 }
 

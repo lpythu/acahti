@@ -19,7 +19,7 @@ import { splitRepo, type Pipeline } from "@/lib/api"
 import { formatDuration, formatUnix, formatUnixWhen } from "@/lib/format"
 import { shortSha } from "@/lib/git"
 import { pipelineHref } from "@/lib/nav"
-import { jobDotsOf, runEventKey, runRef, runTitle, triggerKind, triggerVars, waitLine, type TriggerKind } from "@/lib/pipeline"
+import { argosLinksOf, jobDotsOf, runEventKey, runRef, runTitle, triggerKind, triggerVars, waitLine, type TriggerKind } from "@/lib/pipeline"
 
 function TriggerRefIcon({ kind }: { kind: TriggerKind }) {
   switch (kind) {
@@ -83,6 +83,7 @@ export function PipelineRunRow({
   const duration = formatDuration(pipe.started, pipe.finished, pipe.status)
   const wait = waitLine(pipe)
   const jobs = jobDotsOf(pipe)
+  const argos = argosLinksOf(pipe)
   const blocked = pipe.status === "blocked"
 
   return (
@@ -106,8 +107,25 @@ export function PipelineRunRow({
           <span className="mt-0.5 block truncate text-xs text-muted-foreground">{meta}</span>
         </span>
       </Link>
-      <div className="w-56 shrink-0">
+      <div className="flex w-56 shrink-0 flex-col items-start gap-1">
         <PipelineJobDots jobs={jobs} />
+        {argos.length ? (
+          <div className="flex flex-wrap gap-1">
+            {argos.map((item) => (
+              <a
+                key={item.url}
+                className="text-xs text-sky-700 hover:underline dark:text-sky-400"
+                href={item.url}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {t("argosDash")}
+                {argos.length > 1 ? ` ${item.name.replace(/^e2e\./, "")}` : ""}
+              </a>
+            ))}
+          </div>
+        ) : null}
       </div>
       <div className="flex w-40 shrink-0 flex-col items-end gap-0.5 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1.5" title={exact}>
