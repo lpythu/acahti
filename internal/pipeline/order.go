@@ -9,14 +9,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func jobNameFromFile(file string) string {
+func JobName(file string) string {
 	base := path.Base(strings.TrimSpace(file))
 	base = strings.TrimSuffix(base, ".yaml")
 	base = strings.TrimSuffix(base, ".yml")
 	return base
 }
 
-func yamlDependsOn(data string) []string {
+func DependsOn(data string) []string {
 	var doc struct {
 		DependsOn any `yaml:"depends_on"`
 	}
@@ -57,7 +57,7 @@ func orderByDepends(files []fileMeta) []fileMeta {
 	byName := map[string]fileMeta{}
 	deps := map[string][]string{}
 	for i, f := range files {
-		n := jobNameFromFile(f.Name)
+		n := JobName(f.Name)
 		if n == "" {
 			n = f.Name
 		}
@@ -66,7 +66,7 @@ func orderByDepends(files []fileMeta) []fileMeta {
 		}
 		names[i] = n
 		byName[n] = f
-		deps[n] = yamlDependsOn(f.Data)
+		deps[n] = DependsOn(f.Data)
 	}
 	ordered := order.Names(names, deps)
 	out := make([]fileMeta, 0, len(files))

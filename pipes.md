@@ -4,7 +4,7 @@ A **pipeline** is one run. Each YAML file in `.acahti/pipelines/` is a **job** i
 
 Acahti expands `pipe:` before the Runner executes. The Runner runs `acahti-pipe <name>`. Do not vendor `.acahti/scripts`. Do not write `uses:`.
 
-A step is either `pipe:` + `with:` or raw `commands:` (one-offs stay in the repo). `when`, `depends_on`, and `labels` pass through. If YAML declares `concurrency:`, expand repo-scopes `group` (`deploy` + repo `saidc/tm-web` → `deploy-saidc-tm-web`) so Woodpecker’s cluster-wide lock does not serialize unrelated repos. Omit `concurrency` to run freely. Job graph (`depends_on`, filenames) belongs in the repo YAML. The config hook orders those files by `depends_on` (parents before children, same rank by name) so pills read left to right.
+A step is either `pipe:` + `with:` or raw `commands:` (one-offs stay in the repo). `when`, `depends_on`, and `labels` pass through. If YAML declares `concurrency:`, expand repo-scopes `group` (`deploy` + repo `saidc/tm-web` → `deploy-saidc-tm-web`) so Woodpecker’s cluster-wide lock does not serialize unrelated repos. Omit `concurrency` to run freely. Job graph (`depends_on`, filenames) belongs in the repo YAML. The config hook orders those files by `depends_on` (parents before children, same rank by name). Woodpecker still numbers workflows by filename, so the catalog attaches YAML `depends_on` and paints pills left to right.
 
 In `commands:`, write `$IMAGE` (shell). `${IMAGE}` is emptied by the runner before the step starts; `${CI_COMMIT_SHA}` is job context and is expanded.
 

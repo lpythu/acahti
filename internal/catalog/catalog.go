@@ -14,6 +14,7 @@ import (
 	"acahti/internal/config"
 	"acahti/internal/forgejo"
 	"acahti/internal/page"
+	"acahti/internal/pipeline"
 	"acahti/internal/store"
 	"acahti/internal/woodpecker"
 )
@@ -845,9 +846,7 @@ func (c *Catalog) paintPipes(pipes []woodpecker.Pipeline) []woodpecker.Pipeline 
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			out[i].HydrateJobs()
-			out[i].SortJobs()
-			out[i] = c.applyCommitAuthor(out[i])
+			out[i] = c.decoratePipe(out[i])
 			out[i] = woodpecker.Annotate(out[i], q)
 		}(i)
 	}
@@ -856,9 +855,7 @@ func (c *Catalog) paintPipes(pipes []woodpecker.Pipeline) []woodpecker.Pipeline 
 }
 
 func (c *Catalog) Present(p woodpecker.Pipeline) woodpecker.Pipeline {
-	p.HydrateJobs()
-	p.SortJobs()
-	p = c.applyCommitAuthor(p)
+	p = c.decoratePipe(p)
 	return woodpecker.Annotate(p, c.queueInfo())
 }
 
@@ -884,8 +881,24 @@ func (c *Catalog) queueInfo() woodpecker.QueueInfo {
 	return q
 }
 
+func (c *Catalog) jobDepends(p woodpecker.Pipeline) map[string][]string {
+	out := map[string][]string{}
+	for _, f := range c.pipelineFiles(p) {
+		n := pipeline.JobName(f.Name)
+		if n == "" {
+			continue
+		}
+		if d := pipeline.DependsOn(f.Content); len(d) > 0 {
+			out[n] = d
+		}
+	}
+	return out
+}
+
 func (c *Catalog) decoratePipe(p woodpecker.Pipeline) woodpecker.Pipeline {
 	p.HydrateJobs()
+	p.AttachDepends(c.jobDepends(p))
+	p.SortJobs()
 	return c.applyCommitAuthor(p)
 }
 

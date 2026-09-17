@@ -86,6 +86,22 @@ func (p *Pipeline) flattenError() {
 	}
 }
 
+func (p *Pipeline) AttachDepends(deps map[string][]string) {
+	if len(deps) == 0 {
+		return
+	}
+	for i := range p.Jobs {
+		if len(p.Jobs[i].DependsOn) > 0 {
+			continue
+		}
+		d := deps[p.Jobs[i].Name]
+		if len(d) == 0 {
+			continue
+		}
+		p.Jobs[i].DependsOn = append([]string{}, d...)
+	}
+}
+
 func (p *Pipeline) HydrateJobs() {
 	p.flattenError()
 	if len(p.Jobs) > 0 {

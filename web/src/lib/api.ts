@@ -37,6 +37,7 @@ export type PipelineJob = {
   name: string
   state: string
   pid?: number
+  depends_on?: string[]
   wait?: string
   queue_position?: number
   agent?: string

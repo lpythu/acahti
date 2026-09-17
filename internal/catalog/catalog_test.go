@@ -84,6 +84,27 @@ func TestDecoratePipeKeepsKernelJobs(t *testing.T) {
 	}
 }
 
+func TestPresentSortsPillsFromYAML(t *testing.T) {
+	c := New(config.Config{}, nil, nil, nil)
+	c.mem.setFiles("saidc/demo", "abc", []FileBlob{
+		{Name: "cd.office.yaml", Content: "depends_on: [ci]\n"},
+		{Name: "ci.yaml", Content: "steps: {}\n"},
+		{Name: "e2e.office.yaml", Content: "depends_on: [cd.office]\n"},
+	})
+	p := c.Present(woodpecker.Pipeline{
+		Repo:   "saidc/demo",
+		Commit: "abc",
+		Jobs: []woodpecker.Job{
+			{PID: 1, Name: "cd.office"},
+			{PID: 2, Name: "ci"},
+			{PID: 3, Name: "e2e.office"},
+		},
+	})
+	if len(p.Jobs) != 3 || p.Jobs[0].Name != "ci" || p.Jobs[1].Name != "cd.office" || p.Jobs[2].Name != "e2e.office" {
+		t.Fatalf("%+v", p.Jobs)
+	}
+}
+
 func TestStepFailedAndTailLog(t *testing.T) {
 	if !stepFailed("failure") || !stepFailed("killed") || stepFailed("success") {
 		t.Fatal("stepFailed")
@@ -227,8 +248,15 @@ func TestRefreshCancelsPendingAfterFailure(t *testing.T) {
 	if !canceled || gets < 2 {
 		t.Fatalf("canceled=%v gets=%d", canceled, gets)
 	}
-	if got.Status != "failure" || len(got.Jobs) != 2 || got.Jobs[1].State != "skipped" {
+	if got.Status != "failure" {
 		t.Fatalf("%+v", got)
+	}
+	byName := map[string]string{}
+	for _, j := range got.Jobs {
+		byName[j.Name] = j.State
+	}
+	if byName["ci"] != "failure" || byName["cd.office"] != "skipped" {
+		t.Fatalf("%+v", got.Jobs)
 	}
 }
 

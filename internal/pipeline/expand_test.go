@@ -197,7 +197,7 @@ func TestHandleConfigOrdersJobsByDepends(t *testing.T) {
 	if len(resp.Configs) != 3 {
 		t.Fatalf("%+v", resp)
 	}
-	got := jobNameFromFile(resp.Configs[0].Name) + " " + jobNameFromFile(resp.Configs[1].Name) + " " + jobNameFromFile(resp.Configs[2].Name)
+	got := JobName(resp.Configs[0].Name) + " " + JobName(resp.Configs[1].Name) + " " + JobName(resp.Configs[2].Name)
 	if got != "ci cd.office e2e.office" {
 		t.Fatalf("order=%s", got)
 	}

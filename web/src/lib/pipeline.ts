@@ -4,6 +4,7 @@ import type { MessageKey } from "@/i18n/messages"
 export type Job = {
   name: string
   state: string
+  depends_on?: string[]
   wait?: string
   queue_position?: number
   agent?: string
@@ -24,13 +25,51 @@ export function jobsOf(p: Pipeline): Job[] {
     out.push({
       name,
       state: j.state,
+      depends_on: j.depends_on,
       wait: j.wait,
       queue_position: j.queue_position,
       agent: j.agent,
       steps: j.steps?.length ? j.steps : [],
     })
   }
-  return out
+  return topoJobs(out)
+}
+
+function topoJobs(jobs: Job[]): Job[] {
+  if (jobs.length < 2 || !jobs.some((j) => (j.depends_on || []).length > 0)) {
+    return jobs
+  }
+  const names = jobs.map((j) => j.name)
+  const present = new Set(names)
+  const indeg: Record<string, number> = {}
+  const children: Record<string, string[]> = {}
+  const byName = new Map(jobs.map((j) => [j.name, j]))
+  for (const n of names) indeg[n] = 0
+  for (const j of jobs) {
+    const seen = new Set<string>()
+    for (const parent of j.depends_on || []) {
+      if (!present.has(parent) || parent === j.name || seen.has(parent)) continue
+      seen.add(parent)
+      indeg[j.name]++
+      children[parent] = [...(children[parent] || []), j.name]
+    }
+  }
+  let ready = names.filter((n) => indeg[n] === 0).sort()
+  const out: Job[] = []
+  while (ready.length) {
+    const n = ready.shift()!
+    const job = byName.get(n)
+    if (job) out.push(job)
+    const next = [...(children[n] || [])].sort()
+    for (const c of next) {
+      indeg[c]--
+      if (indeg[c] === 0) ready.push(c)
+    }
+    ready.sort()
+  }
+  if (out.length === jobs.length) return out
+  const seen = new Set(out.map((j) => j.name))
+  return [...out, ...jobs.filter((j) => !seen.has(j.name))]
 }
 
 export function jobDotsOf(p: Pipeline): { name: string; state: string }[] {
