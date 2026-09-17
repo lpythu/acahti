@@ -228,7 +228,7 @@ func TestRefreshCancelsPendingAfterFailure(t *testing.T) {
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/pipelines/47"):
 			gets++
 			if canceled {
-				_, _ = w.Write([]byte(`{"number":47,"status":"failure","workflows":[{"name":"ci","state":"failure"},{"name":"cd.office","state":"skipped"}]}`))
+				_, _ = w.Write([]byte(`{"number":47,"status":"killed","workflows":[{"name":"ci","state":"failure"},{"name":"cd.office","state":"skipped"}]}`))
 				return
 			}
 			_, _ = w.Write([]byte(`{"number":47,"status":"running","workflows":[{"name":"ci","state":"failure"},{"name":"cd.office","state":"pending"}]}`))

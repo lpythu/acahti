@@ -102,6 +102,35 @@ func TestAttachDependsFromYAMLThenSort(t *testing.T) {
 	}
 }
 
+func TestCollapseStatusKilledWithFailure(t *testing.T) {
+	p := Pipeline{
+		Status: "killed",
+		Jobs: []Job{
+			{Name: "ci", State: "failure"},
+			{Name: "cd.office", State: "skipped"},
+			{Name: "e2e.office", State: "canceled"},
+		},
+	}
+	p.CollapseStatus()
+	if p.Status != "failure" {
+		t.Fatalf("%+v", p)
+	}
+}
+
+func TestCollapseStatusKilledStaysKilled(t *testing.T) {
+	p := Pipeline{
+		Status: "killed",
+		Jobs: []Job{
+			{Name: "ci", State: "success"},
+			{Name: "cd.office", State: "killed"},
+		},
+	}
+	p.CollapseStatus()
+	if p.Status != "killed" {
+		t.Fatalf("%+v", p)
+	}
+}
+
 func TestSortJobsByPIDThenName(t *testing.T) {
 	p := Pipeline{Jobs: []Job{
 		{PID: 3, Name: "z"},

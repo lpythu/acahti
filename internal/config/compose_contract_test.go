@@ -33,6 +33,9 @@ func TestWoodpeckerForgeOAuthIsInternal(t *testing.T) {
 	if !strings.Contains(text, `WOODPECKER_DEFAULT_PIPELINE_CONFIGS: ".acahti/pipelines/"`) {
 		t.Fatal("server default pipeline path must be the .acahti/pipelines/ directory")
 	}
+	if !strings.Contains(text, `WOODPECKER_AUTHENTICATE_PUBLIC_REPOS: "true"`) {
+		t.Fatal("public repos must still send clone netrc; gateway git HTTPS is never anonymous")
+	}
 	if !strings.Contains(text, "WOODPECKER_CONFIG_SERVICE_ENDPOINT:") {
 		t.Fatal("missing config service endpoint for pipe: expansion")
 	}

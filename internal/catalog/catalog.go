@@ -899,6 +899,7 @@ func (c *Catalog) decoratePipe(p woodpecker.Pipeline) woodpecker.Pipeline {
 	p.HydrateJobs()
 	p.AttachDepends(c.jobDepends(p))
 	p.SortJobs()
+	p.CollapseStatus()
 	return c.applyCommitAuthor(p)
 }
 

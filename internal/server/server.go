@@ -204,10 +204,13 @@ func gitAs(a *auth.Service, fj *forgejo.Client, admin string, p *httputil.Revers
 
 func gitLogin(a *auth.Service, fj *forgejo.Client, r *http.Request) string {
 	if u, pass, ok := r.BasicAuth(); ok {
-		if user, valid := a.Parse(pass); valid && u == user {
+		if user, valid := a.Parse(pass); valid {
 			return user
 		}
 		if fj != nil {
+			if fu, err := fj.TokenUser(pass); err == nil && fu.Login != "" {
+				return fu.Login
+			}
 			if fu, err := fj.BasicUser(u, pass); err == nil && fu.Login == u {
 				return fu.Login
 			}

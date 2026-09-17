@@ -121,6 +121,25 @@ func (p *Pipeline) HydrateJobs() {
 	}
 }
 
+// CollapseStatus remaps Woodpecker's pipeline-level killed/canceled onto
+// failure when a job already failed. Canceling leftover depends_on children
+// after a parent failure is what WP records as killed; the list should show
+// the real outcome.
+func (p *Pipeline) CollapseStatus() {
+	switch strings.ToLower(strings.TrimSpace(p.Status)) {
+	case "killed", "canceled":
+	default:
+		return
+	}
+	for _, j := range p.Jobs {
+		switch strings.ToLower(j.State) {
+		case "failure", "error", "declined":
+			p.Status = "failure"
+			return
+		}
+	}
+}
+
 func syntheticJob(name, state, err string) Job {
 	return Job{
 		Name:  name,

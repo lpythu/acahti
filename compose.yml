@@ -135,6 +135,9 @@ services:
       WOODPECKER_AGENT_SECRET: ${WOODPECKER_AGENT_SECRET:?set WOODPECKER_AGENT_SECRET in .env}
       WOODPECKER_GRPC_SECRET: ${WOODPECKER_GRPC_SECRET:?set WOODPECKER_GRPC_SECRET in .env}
       WOODPECKER_DEFAULT_PIPELINE_CONFIGS: ".acahti/pipelines/"
+      # Gateway git HTTPS always needs credentials; public Forgejo repos
+      # would otherwise clone without netrc and prompt on 401.
+      WOODPECKER_AUTHENTICATE_PUBLIC_REPOS: "true"
       WOODPECKER_CONFIG_SERVICE_ENDPOINT: http://gateway:8080/hooks/pipeline-config?token=${ACAHTI_CONFIG_TOKEN}
       WOODPECKER_EXTENSIONS_ALLOWED_HOSTS: private,gateway
       WOODPECKER_GRPC_ADDR: ${WOODPECKER_GRPC_ADDR:-:9000}
