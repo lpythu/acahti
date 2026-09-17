@@ -17,7 +17,6 @@ export UV_PROJECT_ENVIRONMENT="$venv"
 echo "==> uv $(uv --version 2>/dev/null || true) project=${project}"
 while IFS= read -r line; do
 	[[ -z "$line" ]] && continue
-	# shellcheck disable=SC2086
-	uv run --project "$project" -- ${line}
+	uv run --project "$project" -- bash -c "$line"
 done < <(each_item "$(input RUN)")
 echo "OK uv"

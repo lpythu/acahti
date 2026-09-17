@@ -68,7 +68,7 @@ Only org/repo admins can list or put secrets. Repo Secrets shows the effective s
 
 ### docker-build
 
-`with:` `images` (required). One image per line. First field is the primary tag. Optional `also=` extra tags (comma-separated), `context=` (default `.`), `file=` Dockerfile, other `KEY=VAL` as `--build-arg` (CI names `BASE_IMAGE=<registry>/base/…`; Dockerfiles stay registry-host-free). Optional `push` (default `true`); `push: false` is `--output=type=cacheonly` (CI, no `--load`). Job identity is written as BuildKit secrets `id=npmrc` and `id=netrc` (HTTP Basic from `ACAHTI_USER` / `ACAHTI_TOKEN`). Dockerfiles mount `id=npmrc` at `/root/.npmrc` and `id=netrc` at `/root/.netrc`. YAML does not name npm tokens. `CODEUP_NETRC` → BuildKit `id=codeup_netrc`. Default builder `acahti` (`docker-container`, host network). HTTP/insecure registries are declared on `docker-login` (`http: true`), not inferred by Acahti. Builds with `--pull --provenance=false`; `push: true` is `buildx --push` for primary and `also=` tags. Empty `images:` lines are skipped. After a successful build the pipe runs `docker-gc`.
+`with:` `images` (required). One image per line. First field is the primary tag. Optional `also=` extra tags (comma-separated), `context=` (default `.`), `file=` Dockerfile, other `KEY=VAL` as `--build-arg` (CI names `BASE_IMAGE=<registry>/base/…`; Dockerfiles stay registry-host-free). Optional `push` (default `true`); `push: false` is `--output=type=cacheonly` (CI, no `--load`). Job identity is written as BuildKit secrets `id=npmrc` and `id=netrc` (HTTP Basic from `ACAHTI_USER` / `ACAHTI_TOKEN`). Dockerfiles mount `id=npmrc` at `/root/.npmrc` and `id=netrc` at `/root/.netrc`. YAML does not name npm tokens. `CODEUP_NETRC` → BuildKit `id=codeup_netrc`. Default builder `acahti` (`docker-container`, host network). HTTP/insecure registries are declared on `docker-login` (`http: true`), not inferred by Acahti. `push: true` builds with `--pull --provenance=false` and `buildx --push` for primary and `also=` tags. `push: false` is cache-only and does not `--pull` (CI has no registry login). Empty `images:` lines are skipped. After a successful build the pipe runs `docker-gc`.
 
 OCI tags: office CD `dev-${CI_COMMIT_SHA}`; HK CD `${CI_COMMIT_TAG#v}` (git tag `vX.Y.Z` → `X.Y.Z`). `latest` is a pointer at the same digest. `${CI_COMMIT_TAG#v}` is expanded in the pipe (`${CI_COMMIT_TAG}` is interpolated by the runner).
 
@@ -90,7 +90,7 @@ No `with:` required. Caps the Runner’s local BuildKit cache (`acahti` builder 
 
 ### uv
 
-`with:` `run` (required, one command per line). Optional `project` (directory with `pyproject.toml`, default `.`). Installs `uv` if missing, then `uv run --project <dir> -- <line>` in a job-local venv (`UV_PROJECT_ENVIRONMENT`). Product YAML supplies the argv (for example `argos run '*' --env office --dash`). Secrets become step env; `--dash` with no file reads `ARGOS_DASH_URL` / `ARGOS_TOKEN`.
+`with:` `run` (required, one command per line). Optional `project` (directory with `pyproject.toml`, default `.`). Installs `uv` if missing, then `uv run --project <dir> -- bash -c <line>` in a job-local venv (`UV_PROJECT_ENVIRONMENT`). Product YAML supplies the command (for example `argos run all --env office --dash`). Secrets become step env; `--dash` with no file reads `ARGOS_DASH_URL` / `ARGOS_TOKEN`.
 
 ### npm-publish
 
@@ -174,7 +174,7 @@ steps:
     with:
       project: .acahti/argos
       run: |
-        argos run '*' --env office --dash
+        argos run all --env office --dash
 ```
 
 Omit `wait` when there is no public URL. Repository stays in chart values — do not `--set` it.

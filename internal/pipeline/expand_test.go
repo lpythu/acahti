@@ -274,7 +274,7 @@ func TestExpandUvRunSecrets(t *testing.T) {
     with:
       project: .acahti/argos
       run: |
-        argos run '*' --env office --dash
+        argos run all --env office --dash
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -505,7 +505,7 @@ steps:
     pipe: uv@v1
     with:
       project: .acahti/argos
-      run: argos run '*' --env office --dash
+      run: argos run all --env office --dash
 `), Ident{Repo: "saidc/tm-web"})
 	if err != nil {
 		t.Fatal(err)
