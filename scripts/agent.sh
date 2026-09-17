@@ -159,10 +159,8 @@ if ! command -v crane >/dev/null; then
   install -m 0755 "${tmpdir}/crane" "${bindir}/crane"
 fi
 
-if ! command -v argos >/dev/null || ! argos run --help 2>/dev/null | grep -q -- '--dash'; then
-  echo "==> argospy (CLI --dash)"
-  python3 -m pip install -U 'argospy>=0.5.1'
-fi
+echo "==> argospy>=0.5.1"
+python3 -m pip install -U 'argospy>=0.5.1'
 
 install -d -m 0755 /etc/woodpecker
 buildx_cfg="${run_home}/.docker/buildx"
