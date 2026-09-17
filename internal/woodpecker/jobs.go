@@ -4,6 +4,8 @@ import (
 	"path"
 	"sort"
 	"strings"
+
+	"acahti/internal/order"
 )
 
 func (e PipeError) File() string {
@@ -117,6 +119,32 @@ func syntheticJob(name, state, err string) Job {
 }
 
 func (p *Pipeline) SortJobs() {
+	if len(p.Jobs) < 2 {
+		return
+	}
+	hasDep := false
+	for _, j := range p.Jobs {
+		if len(j.DependsOn) > 0 {
+			hasDep = true
+			break
+		}
+	}
+	if hasDep {
+		names := make([]string, len(p.Jobs))
+		deps := map[string][]string{}
+		byName := map[string]Job{}
+		for i, j := range p.Jobs {
+			names[i] = j.Name
+			deps[j.Name] = j.DependsOn
+			byName[j.Name] = j
+		}
+		out := make([]Job, 0, len(p.Jobs))
+		for _, n := range order.Names(names, deps) {
+			out = append(out, byName[n])
+		}
+		p.Jobs = out
+		return
+	}
 	sort.SliceStable(p.Jobs, func(i, j int) bool {
 		if p.Jobs[i].PID != p.Jobs[j].PID {
 			return p.Jobs[i].PID < p.Jobs[j].PID

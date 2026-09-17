@@ -80,6 +80,7 @@ func HandleConfig(token string, issue func(author, repo, sha string) Ident) http
 			}
 			out = append(out, fileMeta{Name: cfg.Name, Data: string(data)})
 		}
+		out = orderByDepends(out)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(configResponse{Configs: out})
 	}

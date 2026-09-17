@@ -166,11 +166,40 @@ func TestHandleConfigKeepsCIAndCD(t *testing.T) {
 		t.Fatalf("want ci and cd.office, got %+v", resp)
 	}
 	names := resp.Configs[0].Name + " " + resp.Configs[1].Name
-	if !strings.Contains(names, "ci.yaml") || !strings.Contains(names, "cd.office.yaml") {
-		t.Fatalf("names=%s", names)
+	if names != "ci.yaml cd.office.yaml" {
+		t.Fatalf("want ci then cd.office, got %s", names)
 	}
 	if !strings.Contains(resp.Configs[1].Data, "depends_on") {
 		t.Fatalf("cd should keep depends_on ci:\n%s", resp.Configs[1].Data)
+	}
+}
+
+func TestHandleConfigOrdersJobsByDepends(t *testing.T) {
+	h := HandleConfig("secret", nil)
+	body, _ := json.Marshal(configRequest{
+		Configuration: []fileMeta{
+			{Name: ".acahti/pipelines/e2e.office.yaml", Data: "depends_on: [cd.office]\nsteps:\n  x:\n    image: bash\n    commands: [true]\n"},
+			{Name: ".acahti/pipelines/cd.office.yaml", Data: "depends_on: [ci]\nsteps:\n  x:\n    image: bash\n    commands: [true]\n"},
+			{Name: ".acahti/pipelines/ci.yaml", Data: "steps:\n  x:\n    image: bash\n    commands: [true]\n"},
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/hooks/pipeline-config", strings.NewReader(string(body)))
+	req.SetBasicAuth("pipe", "secret")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("%d %s", rr.Code, rr.Body.String())
+	}
+	var resp configResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Configs) != 3 {
+		t.Fatalf("%+v", resp)
+	}
+	got := jobNameFromFile(resp.Configs[0].Name) + " " + jobNameFromFile(resp.Configs[1].Name) + " " + jobNameFromFile(resp.Configs[2].Name)
+	if got != "ci cd.office e2e.office" {
+		t.Fatalf("order=%s", got)
 	}
 }
 

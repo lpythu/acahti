@@ -27,6 +27,17 @@ func TestPipelineJobsFromKernelWorkflows(t *testing.T) {
 	}
 }
 
+func TestDecodeKernelSortsPillsByDependsOn(t *testing.T) {
+	p, err := DecodeKernel([]byte(`{"number":2,"status":"success","workflows":[{"name":"cd.office","pid":1,"state":"success","depends_on":["ci"]},{"name":"ci","pid":2,"state":"success","children":[{"pid":2,"name":"check","state":"success"}]},{"name":"e2e.office","pid":3,"state":"success","depends_on":["cd.office"]}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.SortJobs()
+	if len(p.Jobs) != 3 || p.Jobs[0].Name != "ci" || p.Jobs[1].Name != "cd.office" || p.Jobs[2].Name != "e2e.office" {
+		t.Fatalf("jobs=%v", p.Jobs)
+	}
+}
+
 func TestListReposOmitsAllTrue(t *testing.T) {
 	var raw string
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

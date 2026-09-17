@@ -82,14 +82,15 @@ type PipeError struct {
 
 // Job is one `.acahti/pipelines/*.yaml` file in a run.
 type Job struct {
-	ID            int64  `json:"id,omitempty"`
-	PID           int64  `json:"pid,omitempty"`
-	Name          string `json:"name"`
-	State         string `json:"state"`
-	Wait          string `json:"wait,omitempty"`
-	QueuePosition int    `json:"queue_position,omitempty"`
-	Agent         string `json:"agent,omitempty"`
-	Steps         []Step `json:"steps,omitempty"`
+	ID            int64    `json:"id,omitempty"`
+	PID           int64    `json:"pid,omitempty"`
+	Name          string   `json:"name"`
+	State         string   `json:"state"`
+	DependsOn     []string `json:"depends_on,omitempty"`
+	Wait          string   `json:"wait,omitempty"`
+	QueuePosition int      `json:"queue_position,omitempty"`
+	Agent         string   `json:"agent,omitempty"`
+	Steps         []Step   `json:"steps,omitempty"`
 }
 
 type Step struct {

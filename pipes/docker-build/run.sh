@@ -90,6 +90,7 @@ build_one() {
 	done
 	local -a args=(
 		--builder "$builder"
+		--pull
 		--provenance=false
 		--network="$network"
 		-t "$primary"
@@ -111,7 +112,7 @@ build_one() {
 		args+=("${bargs[@]}")
 	fi
 	if [[ "$push" == "true" ]]; then
-		args+=(--pull --push)
+		args+=(--push)
 	else
 		args+=(--output=type=cacheonly)
 	fi

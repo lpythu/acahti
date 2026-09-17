@@ -23,11 +23,12 @@ func DecodeKernel(data []byte) (Pipeline, error) {
 		Started   int64       `json:"started"`
 		Finished  int64       `json:"finished"`
 		Workflows []struct {
-			ID       int64  `json:"id"`
-			PID      int64  `json:"pid"`
-			Name     string `json:"name"`
-			State    string `json:"state"`
-			Children []Step `json:"children"`
+			ID        int64    `json:"id"`
+			PID       int64    `json:"pid"`
+			Name      string   `json:"name"`
+			State     string   `json:"state"`
+			DependsOn []string `json:"depends_on"`
+			Children  []Step   `json:"children"`
 		} `json:"workflows"`
 	}
 	if err := json.Unmarshal(data, &k); err != nil {
@@ -44,9 +45,10 @@ func DecodeKernel(data []byte) (Pipeline, error) {
 		if len(steps) == 0 && w.PID > 0 {
 			steps = []Step{{PID: w.PID, Name: w.Name, State: w.State}}
 		}
-		p.Jobs = append(p.Jobs, Job{ID: w.ID, PID: w.PID, Name: w.Name, State: w.State, Steps: steps})
+		p.Jobs = append(p.Jobs, Job{ID: w.ID, PID: w.PID, Name: w.Name, State: w.State, DependsOn: w.DependsOn, Steps: steps})
 	}
 	p.flattenError()
+	p.SortJobs()
 	return p, nil
 }
 

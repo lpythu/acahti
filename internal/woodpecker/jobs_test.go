@@ -74,6 +74,18 @@ func TestPipelineErrorsBecomeJobs(t *testing.T) {
 	}
 }
 
+func TestSortJobsByDependsOn(t *testing.T) {
+	p := Pipeline{Jobs: []Job{
+		{PID: 1, Name: "cd.office", DependsOn: []string{"ci"}},
+		{PID: 2, Name: "ci"},
+		{PID: 3, Name: "e2e.office", DependsOn: []string{"cd.office"}},
+	}}
+	p.SortJobs()
+	if p.Jobs[0].Name != "ci" || p.Jobs[1].Name != "cd.office" || p.Jobs[2].Name != "e2e.office" {
+		t.Fatalf("%+v", p.Jobs)
+	}
+}
+
 func TestSortJobsByPIDThenName(t *testing.T) {
 	p := Pipeline{Jobs: []Job{
 		{PID: 3, Name: "z"},
