@@ -18,7 +18,7 @@ import { api } from "@/lib/api"
 import { formatUnix } from "@/lib/format"
 import { langOf } from "@/lib/lang"
 import { pipelineHref } from "@/lib/nav"
-import { asPipeline, jobsOf, namedSecrets, triggerKey, triggerVars, waitLine } from "@/lib/pipeline"
+import { asPipeline, inFlight, jobsOf, namedSecrets, triggerKey, triggerVars, waitLine } from "@/lib/pipeline"
 import { useRepo } from "@/pages/repo-layout"
 
 export function PipelinePage() {
@@ -151,7 +151,7 @@ export function PipelinePage() {
             <h2 className="text-lg font-medium">
               #{n} {p.title || p.event || t("pipelines")}
             </h2>
-            <StatusBadge status={p.status} wait={p.wait} />
+            <StatusBadge status={p.status} />
           </div>
           <p className="mt-1 truncate text-sm text-muted-foreground">
             {t(triggerKey(p.event, p.ref), triggerVars(p))}
@@ -179,12 +179,12 @@ export function PipelinePage() {
               {t("approve")}
             </Button>
           ) : null}
-          {p.status === "running" || p.status === "pending" ? (
+          {inFlight(p.status) && p.status !== "blocked" ? (
             <Button size="sm" variant="outline" disabled={busy} onClick={() => void cancel()}>
               {t("cancel")}
             </Button>
           ) : null}
-          {p.status !== "running" && p.status !== "pending" && p.status !== "blocked" ? (
+          {!inFlight(p.status) ? (
             <Button size="sm" variant="destructive" disabled={busy} onClick={() => void remove()}>
               {t("deletePipeline")}
             </Button>

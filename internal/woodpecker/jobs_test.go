@@ -5,10 +5,10 @@ import (
 )
 
 func TestInFlight(t *testing.T) {
-	if !InFlight("running") || !InFlight("pending") || !InFlight("blocked") {
+	if !InFlight("running") || !InFlight("started") || !InFlight("pending") || !InFlight("created") || !InFlight("blocked") {
 		t.Fatal("in flight")
 	}
-	if InFlight("success") || InFlight("failure") || InFlight("killed") {
+	if InFlight("success") || InFlight("failure") || InFlight("killed") || InFlight("canceled") || InFlight("skipped") {
 		t.Fatal("settled")
 	}
 	if !DeleteAllowed("error") || !DeleteAllowed("failure") || DeleteAllowed("running") || DeleteAllowed("blocked") {

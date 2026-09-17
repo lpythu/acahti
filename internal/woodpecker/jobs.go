@@ -34,7 +34,7 @@ func jobNameFromFile(file string) string {
 
 func InFlight(state string) bool {
 	switch strings.ToLower(state) {
-	case "running", "pending", "blocked":
+	case "running", "started", "pending", "created", "blocked":
 		return true
 	}
 	return false

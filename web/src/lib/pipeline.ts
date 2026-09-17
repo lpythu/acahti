@@ -23,7 +23,7 @@ export function jobsOf(p: Pipeline): Job[] {
     if (!name) continue
     out.push({
       name,
-      state: j.state || p.status,
+      state: j.state,
       wait: j.wait,
       queue_position: j.queue_position,
       agent: j.agent,
@@ -33,8 +33,8 @@ export function jobsOf(p: Pipeline): Job[] {
   return out
 }
 
-export function jobDotsOf(p: Pipeline): { name: string; state: string; wait?: string }[] {
-  return jobsOf(p).map((j) => ({ name: j.name, state: j.state, wait: j.wait }))
+export function jobDotsOf(p: Pipeline): { name: string; state: string }[] {
+  return jobsOf(p).map((j) => ({ name: j.name, state: j.state }))
 }
 
 export function asPipeline(data: unknown): Pipeline | null {
@@ -173,15 +173,25 @@ export function runEventKey(event?: string, ref?: string): MessageKey {
   }
 }
 
+export function inFlight(status?: string) {
+  switch ((status || "").toLowerCase()) {
+    case "running":
+    case "started":
+    case "pending":
+    case "created":
+    case "blocked":
+      return true
+    default:
+      return false
+  }
+}
+
 export function waitLine(p: { status?: string; wait?: string; queue_position?: number; agent?: string }): {
   key: MessageKey
   vars?: Record<string, string>
 } | null {
-  const status = (p.status || "").toLowerCase()
-  if (status === "blocked") return { key: "statusBlocked" }
-  if (status === "failure" || status === "error" || status === "failed" || status === "killed" || status === "declined") {
-    return null
-  }
+  if ((p.status || "").toLowerCase() === "blocked") return { key: "statusBlocked" }
+  if (!inFlight(p.status)) return null
   if (p.wait === "queue") {
     if (p.queue_position && p.queue_position > 0) return { key: "waitQueuedN", vars: { n: String(p.queue_position) } }
     return { key: "statusQueued" }

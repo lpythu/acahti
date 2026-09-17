@@ -88,7 +88,7 @@ export function PipelineRunRow({
   return (
     <li className="flex items-center gap-3 px-3 py-3 hover:bg-muted/50">
       <Link to={href} className="flex min-w-0 flex-1 items-start gap-3">
-        <RunStatusIcon status={pipe.status} wait={pipe.wait} className="mt-0.5 size-5" />
+        <RunStatusIcon status={pipe.status} className="mt-0.5 size-5" />
         <span className="min-w-0 flex-1">
           <span className="flex min-w-0 items-center gap-2">
             <span className="min-w-0 truncate text-sm font-medium hover:underline">{title}</span>

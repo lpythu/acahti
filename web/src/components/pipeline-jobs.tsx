@@ -37,7 +37,7 @@ function JobNode({
       <Collapsible open={open} onOpenChange={setOpen}>
         <SidebarMenuButton tooltip={job.name} onClick={() => setOpen(!open)}>
           <ChevronRightIcon className={cn("size-4 transition-transform", open && "rotate-90")} />
-          <RunStatusIcon status={job.state} wait={job.wait} />
+          <RunStatusIcon status={job.state} />
           <span>{job.name}</span>
         </SidebarMenuButton>
         <CollapsibleContent>
@@ -56,7 +56,7 @@ function JobNode({
                       />
                     }
                   >
-                    <RunStatusIcon status={state} wait={state === "pending" ? job.wait : undefined} />
+                    <RunStatusIcon status={state} />
                     <span>{s.name || `#${s.pid}`}</span>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>

@@ -83,11 +83,11 @@ func WaitFingerprint(p Pipeline) string {
 
 func Annotate(p Pipeline, q QueueInfo) Pipeline {
 	p = StripWait(p)
-	for i := range p.Jobs {
-		annotateJob(&p.Jobs[i], p, q)
-	}
 	if !InFlight(p.Status) {
 		return p
+	}
+	for i := range p.Jobs {
+		annotateJob(&p.Jobs[i], p, q)
 	}
 	p.Wait, p.QueuePosition, p.Agent = pipelineWait(p)
 	return p
@@ -114,11 +114,7 @@ func InQueue(p Pipeline, q QueueInfo) bool {
 
 func annotateJob(j *Job, p Pipeline, q QueueInfo) {
 	if t, ok := findTask(q.Running, p, j.Name); ok {
-		j.Wait = ""
 		j.Agent = t.Agent
-		if strings.EqualFold(j.State, "pending") {
-			j.State = "running"
-		}
 		return
 	}
 	if t, ok := findTask(q.WaitingOnDeps, p, j.Name); ok {

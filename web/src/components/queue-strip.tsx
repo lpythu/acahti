@@ -6,13 +6,13 @@ import type { QueueInfo, QueueTask } from "@/lib/api"
 import { repoName } from "@/lib/api"
 import { pipelineHref } from "@/lib/nav"
 
-function TaskLine({ task }: { task: QueueTask }) {
+function TaskLine({ task, status }: { task: QueueTask; status: "running" | "pending" }) {
   const repo = task.repo || ""
   const [owner, name] = repo.split("/")
   const label = `${repoName(repo) || repo}${task.pipeline_number ? ` #${task.pipeline_number}` : ""} ${task.name}`
   const inner = (
     <span className="flex min-w-0 items-center gap-2 text-sm">
-      <StatusBadge status={task.agent ? "running" : "pending"} wait={task.wait} />
+      <StatusBadge status={status} />
       <span className="truncate">{label}</span>
       {task.agent ? <span className="shrink-0 text-muted-foreground">{task.agent}</span> : null}
     </span>
@@ -55,13 +55,13 @@ export function QueueLists({ queue }: { queue: QueueInfo }) {
   }
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <QueueColumn title={t("statusRunning")} tasks={running} />
-      <QueueColumn title={t("statusQueued")} tasks={pending} />
+      <QueueColumn title={t("statusRunning")} tasks={running} status="running" />
+      <QueueColumn title={t("statusQueued")} tasks={pending} status="pending" />
     </div>
   )
 }
 
-function QueueColumn({ title, tasks }: { title: string; tasks: QueueTask[] }) {
+function QueueColumn({ title, tasks, status }: { title: string; tasks: QueueTask[]; status: "running" | "pending" }) {
   return (
     <div className="flex flex-col gap-2">
       <h3 className="text-sm font-medium">
@@ -71,7 +71,7 @@ function QueueColumn({ title, tasks }: { title: string; tasks: QueueTask[] }) {
         <ul className="flex flex-col gap-1">
           {tasks.map((task, i) => (
             <li key={`${task.repo}-${task.pipeline_number}-${task.name}-${i}`}>
-              <TaskLine task={task} />
+              <TaskLine task={task} status={status} />
             </li>
           ))}
         </ul>

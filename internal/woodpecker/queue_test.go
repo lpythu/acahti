@@ -45,7 +45,24 @@ func TestAnnotateRunningClearsWait(t *testing.T) {
 	}
 	q := QueueInfo{Running: []QueueTask{{Name: "ci", Repo: "saidc/tm-web", Number: 3, Agent: "buildof"}}}
 	got := Annotate(p, q)
-	if got.Wait != "" || got.Jobs[0].Wait != "" || got.Jobs[0].Agent != "buildof" || got.Jobs[0].State != "running" {
+	if got.Wait != "" || got.Jobs[0].Wait != "" || got.Jobs[0].Agent != "buildof" || got.Jobs[0].State != "pending" {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestAnnotateFinishedDoesNotRewriteJobs(t *testing.T) {
+	p := Pipeline{
+		Repo:   "saidc/cluster",
+		Number: 17,
+		Status: "failure",
+		Jobs: []Job{
+			{Name: "cd.office", State: "success"},
+			{Name: "cd.hk", State: "pending"},
+		},
+	}
+	q := QueueInfo{Running: []QueueTask{{Name: "cd.hk", Repo: "saidc/cluster", Number: 17}}}
+	got := Annotate(p, q)
+	if got.Status != "failure" || got.Jobs[1].State != "pending" || got.Jobs[1].Wait != "" {
 		t.Fatalf("%+v", got)
 	}
 }
