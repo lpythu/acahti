@@ -169,12 +169,21 @@ chmod 644 /etc/woodpecker/buildkitd.toml
 
 if command -v docker >/dev/null; then
   echo "==> buildx builder acahti"
-  sudo -u "${run_user}" env BUILDX_CONFIG="${buildx_cfg}" docker buildx rm -f acahti >/dev/null 2>&1 || true
   create_args=(--name acahti --driver docker-container --driver-opt network=host)
   if [[ -s /etc/woodpecker/buildkitd.toml ]]; then
     create_args+=(--config /etc/woodpecker/buildkitd.toml)
   fi
-  sudo -u "${run_user}" env BUILDX_CONFIG="${buildx_cfg}" docker buildx create "${create_args[@]}" >/dev/null
+  bx=(sudo -u "${run_user}" env BUILDX_CONFIG="${buildx_cfg}" docker buildx)
+  if "${bx[@]}" inspect acahti >/dev/null 2>&1; then
+    echo "    using existing acahti builder"
+  elif err="$("${bx[@]}" create "${create_args[@]}" 2>&1)"; then
+    :
+  elif "${bx[@]}" inspect acahti >/dev/null 2>&1 || [[ "${err}" == *"existing instance"* ]]; then
+    echo "    using existing acahti builder"
+  else
+    printf '%s\n' "${err}" >&2
+    exit 1
+  fi
 fi
 
 cat >"${tmpdir}/agent.env" <<EOF
