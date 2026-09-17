@@ -1,0 +1,8 @@
+name: uv
+inputs:
+  project:
+    required: false
+    description: Directory with pyproject.toml (default .)
+  run:
+    required: true
+    description: One command per line; each is uv run --project <dir> -- <line>

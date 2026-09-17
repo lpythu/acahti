@@ -168,23 +168,37 @@ builder_uses_host_network() {
 create_acahti_builder() {
 	local name="${1:-$ACAHTI_BUILDER}"
 	local -a args=(--name "$name" --driver docker-container --driver-opt network=host)
+	local err
 	if [[ -s "$ACAHTI_BUILDKITD_CONFIG" ]]; then
 		args+=(--config "$ACAHTI_BUILDKITD_CONFIG")
 	fi
 	echo "==> buildx create ${name} docker-container network=host"
-	docker buildx create "${args[@]}" >/dev/null
+	if err="$(docker buildx create "${args[@]}" 2>&1 >/dev/null)"; then
+		return 0
+	fi
+	# Parallel jobs share one builder; create is not idempotent.
+	if docker buildx inspect "$name" >/dev/null 2>&1; then
+		echo "==> buildx ${name} already exists"
+		return 0
+	fi
+	printf '%s\n' "$err" >&2
+	return 1
 }
 
 ensure_acahti_builder() {
 	persist_buildx_config
 	local name="${1:-$ACAHTI_BUILDER}"
-	local info
-	if info="$(docker buildx inspect "$name" 2>/dev/null)"; then
-		if builder_uses_host_network "$info"; then
-			return 0
+	local lock="${ACAHTI_BUILDKITD_CONFIG}.lock"
+	(
+		flock 9
+		local info
+		if info="$(docker buildx inspect "$name" 2>/dev/null)"; then
+			if builder_uses_host_network "$info"; then
+				exit 0
+			fi
+			echo "==> rebuild ${name} docker-container network=host"
+			docker buildx rm -f "$name" >/dev/null 2>&1 || true
 		fi
-		echo "==> rebuild ${name} docker-container network=host"
-		docker buildx rm -f "$name" >/dev/null 2>&1 || true
-	fi
-	create_acahti_builder "$name"
+		create_acahti_builder "$name"
+	) 9>"$lock"
 }

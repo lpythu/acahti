@@ -4,9 +4,7 @@ A **pipeline** is one run. Each YAML file in `.acahti/pipelines/` is a **job** i
 
 Acahti expands `pipe:` before the Runner executes. The Runner runs `acahti-pipe <name>`. Do not vendor `.acahti/scripts`. Do not write `uses:`.
 
-A step is either `pipe:` + `with:` or raw `commands:` (one-offs stay in the repo). `when`, `depends_on`, and `labels` pass through. Expand injects Woodpecker `concurrency` when the job file omits it: `cd.office` → group `deploy-office-<owner>-<repo>` (limit 1), `cd.hk` → `deploy-hk-…`, `pkg` → `pkg-…`. Same repo still serializes; different repos run in parallel. YAML `concurrency:` wins.
-
-Jobs in one pipeline keep Woodpecker `depends_on` (CI then CD). Remaining jobs share `WOODPECKER_MAX_WORKFLOWS` (host nproc/memory unless pinned). Excess workflows stay in the Woodpecker queue (`pending` / `waiting_on_deps`).
+A step is either `pipe:` + `with:` or raw `commands:` (one-offs stay in the repo). `when`, `depends_on`, and `labels` pass through. If YAML declares `concurrency:`, expand repo-scopes `group` (`deploy` + repo `saidc/tm-web` → `deploy-saidc-tm-web`) so Woodpecker’s cluster-wide lock does not serialize unrelated repos. Omit `concurrency` to run freely. Job graph (`depends_on`, filenames) belongs in the repo YAML, not in Acahti.
 
 In `commands:`, write `$IMAGE` (shell). `${IMAGE}` is emptied by the runner before the step starts; `${CI_COMMIT_SHA}` is job context and is expanded.
 
@@ -30,7 +28,7 @@ steps:
       KUBECONFIG: kubeconfig_office
 ```
 
-This train only first-party pipes: `pipe: <name>@v1`. Registry URLs, image names, wait URLs, and argos selectors belong in the repo YAML.
+This train only first-party pipes: `pipe: <name>@v1`. Registry URLs, image names, wait URLs, and tool argv belong in the repo YAML.
 
 ## Secrets
 
@@ -66,7 +64,7 @@ Only org/repo admins can list or put secrets. Repo Secrets shows the effective s
 
 ### docker-login
 
-`with:` `registry` (required hostname), optional `http: true` (HTTP/insecure BuildKit; also accepted as `registry: http://host`). `username` (or env `DOCKER_USERNAME`). Password is env `DOCKER_PASSWORD`. Acahti does not hardcode Harbor or ACR — YAML names the host. `http: true` merges that host into the runner’s `buildkitd.toml` and recreates the shared `acahti` builder. HTTPS registries omit `http`. Jobs that pull FROM one registry and push to another login twice.
+`with:` `registry` (required hostname), optional `http: true` (HTTP/insecure BuildKit; also accepted as `registry: http://host`). `username` (or env `DOCKER_USERNAME`). Password is env `DOCKER_PASSWORD`. Acahti does not hardcode Harbor or ACR — YAML names the host. `http: true` merges that host into the runner’s `buildkitd.toml` and recreates the shared `acahti` builder. HTTPS registries omit `http`. One registry per `docker-login` step.
 
 ### docker-build
 
@@ -90,9 +88,9 @@ No `with:` required. Caps the Runner’s local BuildKit cache (`acahti` builder 
 
 `with:` `urls` (newline or semicolon). Polls until the status is not 502/503/504/000. Optional `timeout` seconds (default 180).
 
-### argos
+### uv
 
-`with:` `env`, `selectors` (semicolon-separated `argos run` invocations). Env `ARGOS_DASH_URL` and `ARGOS_TOKEN` are required (org/repo secrets). The pipe writes them to a temp dash.env and runs `argos run --dash <file>`. Acahti does not hardcode a dash origin.
+`with:` `run` (required, one command per line). Optional `project` (directory with `pyproject.toml`, default `.`). Installs `uv` if missing, then `uv run --project <dir> -- <line>` in a job-local venv (`UV_PROJECT_ENVIRONMENT`). Product YAML supplies the argv (for example `argos run '*' --env office --dash`). Secrets become step env; `--dash` with no file reads `ARGOS_DASH_URL` / `ARGOS_TOKEN`.
 
 ### npm-publish
 
@@ -108,46 +106,41 @@ No `with:` required. Caps the Runner’s local BuildKit cache (`acahti` builder 
 
 ## Examples
 
-CI verifies the image (`push: false`, cache-only). It does not publish. Login is only for `--pull` of private bases. HTTP registries set `http: true`.
+CI verifies the image (`push: false`, cache-only). It does not login or publish.
 
 ```yaml
 steps:
-  login:
-    pipe: docker-login@v1
-    with:
-      registry: harbor.example
-      http: true
-      username: 'robot$$user'
-    secrets:
-      DOCKER_USERNAME: harbor_username
-      DOCKER_PASSWORD: harbor_password
   build:
     pipe: docker-build@v1
     with:
       push: false
       images: |
-        app:${CI_COMMIT_SHA} APP=web
+        app:${CI_COMMIT_SHA} APP=web BASE_IMAGE=harbor.example/base/saidc-node:22
 ```
 
-Office CD (push `dev`) publishes `dev-${CI_COMMIT_SHA}` + `latest`, helm pin is that tag, then GC keeps 3 tags including `latest`. HK CD (tag on `test`) is the same shape: login the HTTP base registry if `FROM` still points there, login ACR to push, image tag `${CI_COMMIT_TAG#v}`, `kubeconfig_hk`, and `jump: thk` (ACK API is VPC-only).
+CD jobs declare a deploy lock. Office YAML names Harbor for bases and products. HK YAML names ACR for both — do not pull Harbor from an HK job.
 
 ```yaml
+concurrency:
+  limit: 1
+  group: deploy
 steps:
   login:
     pipe: docker-login@v1
     with:
       registry: harbor.example
       http: true
-      username: 'robot$$user'
     secrets:
       DOCKER_USERNAME: harbor_username
       DOCKER_PASSWORD: harbor_password
   build:
+    depends_on: [login]
     pipe: docker-build@v1
     with:
       images: |
-        harbor.example/app:dev-${CI_COMMIT_SHA} also=harbor.example/app:latest APP=web
+        harbor.example/app:dev-${CI_COMMIT_SHA} also=harbor.example/app:latest APP=web BASE_IMAGE=harbor.example/base/saidc-node:22
   deploy:
+    depends_on: [build]
     pipe: helm@v1
     with:
       release: app
@@ -161,18 +154,27 @@ steps:
     secrets:
       KUBECONFIG: kubeconfig_office
   gc:
+    depends_on: [deploy]
     pipe: oci-gc@v1
     with:
       repos: |
         harbor.example/app
+```
+
+A later job can `depends_on` CD and run tools via `uv`:
+
+```yaml
+depends_on: [cd.office]
+steps:
   e2e:
-    pipe: argos@v1
-    with:
-      env: office
-      selectors: pack:platform tag:app
+    pipe: uv@v1
     secrets:
       ARGOS_DASH_URL: argos_dash_url
       ARGOS_TOKEN: argos_token
+    with:
+      project: .acahti/argos
+      run: |
+        argos run '*' --env office --dash
 ```
 
 Omit `wait` when there is no public URL. Repository stays in chart values — do not `--set` it.

@@ -264,16 +264,17 @@ func TestExpandMergesExistingFromSecret(t *testing.T) {
 	}
 }
 
-func TestExpandArgosDashSecrets(t *testing.T) {
+func TestExpandUvRunSecrets(t *testing.T) {
 	got, err := Expand([]byte(`steps:
   e2e:
-    pipe: argos@v1
+    pipe: uv@v1
     secrets:
       ARGOS_DASH_URL: argos_dash_url
       ARGOS_TOKEN: argos_token
     with:
-      env: office
-      selectors: pack:platform tag:cluster
+      project: .acahti/argos
+      run: |
+        argos run '*' --env office --dash
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -282,11 +283,11 @@ func TestExpandArgosDashSecrets(t *testing.T) {
 	if !strings.Contains(text, "from_secret: argos_dash_url") || !strings.Contains(text, "from_secret: argos_token") {
 		t.Fatalf("missing from_secret:\n%s", text)
 	}
-	if !strings.Contains(text, "acahti-pipe argos") {
-		t.Fatalf("missing argos dispatch:\n%s", text)
+	if !strings.Contains(text, "acahti-pipe uv") {
+		t.Fatalf("missing uv dispatch:\n%s", text)
 	}
-	if !strings.Contains(text, "INPUT_ENV: office") {
-		t.Fatalf("missing env:\n%s", text)
+	if !strings.Contains(text, "INPUT_PROJECT: .acahti/argos") {
+		t.Fatalf("missing project:\n%s", text)
 	}
 }
 
@@ -403,7 +404,7 @@ func TestHandleConfigIssuesJob(t *testing.T) {
 	office := configRequest{}
 	office.Configuration = []fileMeta{{
 		Name: ".acahti/pipelines/cd.office.yaml",
-		Data: "steps:\n  deploy:\n    pipe: helm@v1\n    with:\n      release: a\n      namespace: b\n",
+		Data: "concurrency:\n  limit: 1\n  group: deploy\nsteps:\n  deploy:\n    pipe: helm@v1\n    with:\n      release: a\n      namespace: b\n",
 	}}
 	office.Pipeline.Author = "acahti"
 	office.Pipeline.Commit = "abc"
@@ -417,13 +418,16 @@ func TestHandleConfigIssuesJob(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("office %d %s", rr.Code, rr.Body.String())
 	}
-	if !strings.Contains(rr.Body.String(), "deploy-office-saidc-tm-web") {
+	if !strings.Contains(rr.Body.String(), "deploy-saidc-tm-web") {
 		t.Fatalf("missing concurrency: %s", rr.Body.String())
 	}
 }
 
-func TestExpandFileInjectsOfficeConcurrency(t *testing.T) {
-	got, err := ExpandFile(".acahti/pipelines/cd.office.yaml", []byte(`steps:
+func TestExpandIdentScopesConcurrencyGroup(t *testing.T) {
+	got, err := ExpandIdent([]byte(`concurrency:
+  limit: 1
+  group: deploy
+steps:
   deploy:
     pipe: helm@v1
     with:
@@ -434,30 +438,40 @@ func TestExpandFileInjectsOfficeConcurrency(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(got)
-	if !strings.Contains(text, "group: deploy-office-saidc-tm-web") || !strings.Contains(text, "limit: 1") {
-		t.Fatalf("missing concurrency:\n%s", text)
+	if !strings.Contains(text, "group: deploy-saidc-tm-web") || !strings.Contains(text, "limit: 1") {
+		t.Fatalf("missing scoped concurrency:\n%s", text)
 	}
 }
 
-func TestExpandFileInjectsHkAndPkg(t *testing.T) {
-	hk, err := ExpandFile("cd.hk.yaml", []byte("steps:\n  x:\n    image: bash\n    commands: [true]\n"), Ident{Repo: "saidc/exhub"})
+func TestExpandIdentScopesAlreadySuffixedGroup(t *testing.T) {
+	got, err := ExpandIdent([]byte(`concurrency:
+  limit: 1
+  group: deploy-saidc-tm-web
+steps:
+  x:
+    image: bash
+    commands: [true]
+`), Ident{Repo: "saidc/tm-web"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(hk), "group: deploy-hk-saidc-exhub") {
-		t.Fatalf("hk:\n%s", hk)
-	}
-	pkg, err := ExpandFile("pkg.yaml", []byte("steps:\n  x:\n    image: bash\n    commands: [true]\n"), Ident{Repo: "saidc/saidc-ui"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(pkg), "group: pkg-saidc-saidc-ui") {
-		t.Fatalf("pkg:\n%s", pkg)
+	if strings.Count(string(got), "saidc-tm-web") != 1 {
+		t.Fatalf("double-scoped:\n%s", got)
 	}
 }
 
-func TestExpandFileKeepsYAMLConcurrency(t *testing.T) {
-	got, err := ExpandFile("cd.office.yaml", []byte(`concurrency:
+func TestExpandIdentOmitsConcurrencyWhenMissing(t *testing.T) {
+	got, err := ExpandIdent([]byte("steps:\n  x:\n    image: bash\n    commands: [true]\n"), Ident{Repo: "saidc/exhub"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(got), "concurrency:") {
+		t.Fatalf("must not infer concurrency:\n%s", got)
+	}
+}
+
+func TestExpandIdentKeepsYAMLConcurrencyWithoutRepo(t *testing.T) {
+	got, err := ExpandIdent([]byte(`concurrency:
   limit: 2
   group: custom
 steps:
@@ -469,17 +483,34 @@ steps:
 		t.Fatal(err)
 	}
 	text := string(got)
-	if !strings.Contains(text, "group: custom") || strings.Contains(text, "deploy-office") {
+	if !strings.Contains(text, "group: custom") || strings.Contains(text, "saidc") {
 		t.Fatalf("%s", text)
 	}
 }
 
-func TestExpandFileSkipsCI(t *testing.T) {
-	got, err := ExpandFile("ci.yaml", []byte("steps:\n  x:\n    image: bash\n    commands: [true]\n"), Ident{})
+func TestExpandIdentSkipsCI(t *testing.T) {
+	got, err := ExpandIdent([]byte("steps:\n  x:\n    image: bash\n    commands: [true]\n"), Ident{Repo: "saidc/tm-web"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(got), "concurrency:") {
 		t.Fatalf("ci should not get concurrency:\n%s", got)
+	}
+}
+
+func TestExpandIdentE2eHasNoInferredLock(t *testing.T) {
+	got, err := ExpandIdent([]byte(`depends_on: [cd.office]
+steps:
+  e2e:
+    pipe: uv@v1
+    with:
+      project: .acahti/argos
+      run: argos run '*' --env office --dash
+`), Ident{Repo: "saidc/tm-web"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(got), "concurrency:") {
+		t.Fatalf("e2e must not get a lock:\n%s", got)
 	}
 }

@@ -80,7 +80,7 @@ type PipeError struct {
 	Data      any    `json:"data,omitempty"`
 }
 
-// Job is one `.acahti/pipelines/*.yaml` file in a run (ci, cd.office, …).
+// Job is one `.acahti/pipelines/*.yaml` file in a run.
 type Job struct {
 	ID            int64  `json:"id,omitempty"`
 	PID           int64  `json:"pid,omitempty"`

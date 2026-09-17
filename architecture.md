@@ -32,7 +32,7 @@ flowchart LR
 | Host | Runs |
 |---|---|
 | **Acahti** | control plane. No Runner on this host. |
-| **Runner** | `ACAHTI_BUILD` — executes `.acahti/pipelines/` after Acahti expands `pipe:`. One `woodpecker-agent`. `WOODPECKER_MAX_WORKFLOWS` is host-derived (`nproc` / memory) unless pinned in the agent env. Jobs in one pipeline follow YAML `depends_on`. Excess workflows stay in the Woodpecker queue (`pending` / `waiting_on_deps`). |
+| **Runner** | `ACAHTI_BUILD` — executes `.acahti/pipelines/` after Acahti expands `pipe:`. One `woodpecker-agent`. `WOODPECKER_MAX_WORKFLOWS` is host-derived (`nproc` / memory) unless pinned in the agent env. Jobs in one pipeline follow YAML `depends_on` (CI then CD then e2e). Excess workflows stay in the Woodpecker queue (`pending` / `waiting_on_deps`). |
 
 Public identity is Acahti: SPA, MCP, `/acahti/v1`, git HTTPS, `/api/packages`. Closed to the internet: `/ci`, git-kernel HTML, `/api/v1`.
 
@@ -161,7 +161,7 @@ Same secret name: **repo overrides org**. YAML `secrets:` only names which secre
 
 Packages live at `$ROOT_URL/api/packages/$ORG/{npm\|pypi}` and use the same identity proxy as git HTTPS. Org members who can see repos can install. Publish uses the triggering user (`npm-publish` / `pypi-publish` / `pkg_publish`). `docker-build` writes job identity as BuildKit secrets `id=npmrc` (HTTP Basic `username` + base64 `_password`) and `id=netrc`, then `docker buildx --network=host`. Repo `.npmrc` / `[[tool.uv.index]]` name the registry only. App Dockerfiles mount `id=npmrc` at `/root/.npmrc` and `id=netrc` at `/root/.netrc` on install `RUN`s; they do not set `--network=host` and they do not mount raw username/password.
 
-Harbor (office) and ACR (hk) are a pair of **user** registries. YAML names the host, username, and password. Do not auto-inject either. Image names (`BASE_IMAGE=…`) live in product YAML. HTTP vs HTTPS is `docker-login` `http: true` (or `registry: http://host`) — Acahti has no registry hostname. `buildx --config` is create-time on the shared `acahti` builder; the login pipe merges YAML-declared HTTP hosts into `buildkitd.toml`. A job that pulls FROM one registry and pushes to another logs into both.
+Harbor (office) and ACR (hk) are a pair of **user** registries. YAML names the host, username, and password. Do not auto-inject either. Image names (`BASE_IMAGE=…`) live in product YAML. HTTP vs HTTPS is `docker-login` `http: true` (or `registry: http://host`) — Acahti has no registry hostname. `buildx --config` is create-time on the shared `acahti` builder; the login pipe merges YAML-declared HTTP hosts into `buildkitd.toml`. Office jobs name Harbor for bases and products; HK jobs name ACR for both.
 
 | Secret | Pipe | YAML |
 |--------|------|------|
@@ -169,7 +169,7 @@ Harbor (office) and ACR (hk) are a pair of **user** registries. YAML names the h
 | `harbor_username` / `harbor_password` | office `docker-login` | name as `DOCKER_USERNAME` / `DOCKER_PASSWORD` |
 | `acr_username` / `acr_password` | hk `docker-login` | same mapping |
 | `kubeconfig_office` / `kubeconfig_hk` | `helm` | name as `KUBECONFIG` |
-| `argos_dash_url` / `argos_token` | `argos` | name as `ARGOS_DASH_URL` / `ARGOS_TOKEN` |
+| `argos_dash_url` / `argos_token` | product `argos run --dash` via `uv` | name as `ARGOS_DASH_URL` / `ARGOS_TOKEN` |
 | `oss_*` | `oss-put` | name them |
 | `codeup_netrc` | still cloning Codeup | name it |
 | `npm_token` / `acahti_publish_token` | none | delete |

@@ -2,7 +2,6 @@ package pipeline
 
 import (
 	"fmt"
-	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,7 +16,7 @@ var official = map[string]struct{}{
 	"docker-build": {},
 	"helm":         {},
 	"wait-http":    {},
-	"argos":        {},
+	"uv":           {},
 	"npm-publish":  {},
 	"pypi-publish": {},
 	"oss-put":      {},
@@ -25,7 +24,7 @@ var official = map[string]struct{}{
 	"docker-gc":    {},
 }
 
-// Ident is the Acahti user this run is (the person who triggered it), plus the repo for CD/pkg concurrency.
+// Ident is the Acahti user this run is (the person who triggered it), plus the repo to scope YAML concurrency groups.
 type Ident struct {
 	User    string
 	Token   string
@@ -36,15 +35,11 @@ type Ident struct {
 
 // Expand rewrites pipe: name@v1 steps into image: bash + acahti-pipe <name>.
 func Expand(src []byte) ([]byte, error) {
-	return ExpandFile("", src, Ident{})
+	return ExpandIdent(src, Ident{})
 }
 
+// ExpandIdent rewrites pipe: steps and repo-scopes a YAML-declared concurrency group.
 func ExpandIdent(src []byte, id Ident) ([]byte, error) {
-	return ExpandFile("", src, id)
-}
-
-// ExpandFile is ExpandIdent plus filename-based Woodpecker concurrency for CD/pkg jobs.
-func ExpandFile(name string, src []byte, id Ident) ([]byte, error) {
 	if len(strings.TrimSpace(string(src))) == 0 {
 		return src, nil
 	}
@@ -58,7 +53,7 @@ func ExpandFile(name string, src []byte, id Ident) ([]byte, error) {
 	if _, ok := doc["uses"]; ok {
 		return nil, fmt.Errorf("uses: is not supported; use pipe:")
 	}
-	injectConcurrency(doc, name, id.Repo)
+	scopeConcurrency(doc, id.Repo)
 	if steps, ok := doc["steps"]; ok {
 		if err := expandSteps(steps, id); err != nil {
 			return nil, err
@@ -255,40 +250,35 @@ func expandStep(name string, step map[string]any, id Ident) error {
 	return nil
 }
 
-func injectConcurrency(doc map[string]any, file, repo string) {
-	if _, ok := doc["concurrency"]; ok {
+func scopeConcurrency(doc map[string]any, repo string) {
+	raw, ok := doc["concurrency"]
+	if !ok || raw == nil {
 		return
 	}
-	kind := concurrencyKind(file)
-	if kind == "" {
+	m, ok := raw.(map[string]any)
+	if !ok {
 		return
 	}
-	doc["concurrency"] = map[string]any{"limit": 1, "group": scopedGroup(kind, repo)}
-}
-
-func concurrencyKind(file string) string {
-	base := strings.ToLower(path.Base(strings.TrimSpace(file)))
-	base = strings.TrimSuffix(base, ".yaml")
-	base = strings.TrimSuffix(base, ".yml")
-	switch {
-	case strings.Contains(base, "office"):
-		return "deploy-office"
-	case strings.Contains(base, "hk"):
-		return "deploy-hk"
-	case base == "pkg" || strings.HasPrefix(base, "pkg.") || strings.HasPrefix(base, "pkg-"):
-		return "pkg"
-	default:
-		return ""
+	group, _ := m["group"].(string)
+	group = strings.TrimSpace(group)
+	if group == "" {
+		return
 	}
+	m["group"] = scopedGroup(group, repo)
 }
 
-func scopedGroup(kind, repo string) string {
+func scopedGroup(group, repo string) string {
 	repo = strings.ToLower(strings.TrimSpace(repo))
 	repo = strings.ReplaceAll(repo, "/", "-")
+	group = strings.TrimSpace(group)
 	if repo == "" {
-		return kind
+		return group
 	}
-	return kind + "-" + repo
+	suffix := "-" + repo
+	if strings.HasSuffix(strings.ToLower(group), suffix) {
+		return group
+	}
+	return group + suffix
 }
 
 func stringify(v any) string {
