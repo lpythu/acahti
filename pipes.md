@@ -92,7 +92,7 @@ No `with:` required. Caps the Runner’s local BuildKit cache (`acahti` builder 
 
 ### argos
 
-`with:` `env`, `selectors` (semicolon-separated `argos run` invocations). Optional `dash_url` (default `https://argos.saidc.ai`). Env `ARGOS_DASH` is required (`argos_dash` = the `ARGOS_TOKEN` value from `/cli`, a single token, not a dash.env file) → `argos run --dash`.
+`with:` `env`, `selectors` (semicolon-separated `argos run` invocations). Optional `dash_url` (default `https://argos.saidc.ai`). Env `ARGOS_DASH` is required (`argos_dash` = the `ARGOS_TOKEN` value from `/cli`, a single token, not a dash.env file). The pipe writes a temp dash.env and runs `argos run --dash <file>`.
 
 ### npm-publish
 

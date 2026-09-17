@@ -25,10 +25,14 @@ envn="$(input ENV)"
 dash_url="$(input DASH_URL)"
 export ARGOS_DASH_URL="${dash_url:-https://argos.saidc.ai}"
 export ARGOS_TOKEN="$ARGOS_DASH"
+dashf="$(mktemp)"
+trap 'rm -f "$dashf"' EXIT
+printf 'ARGOS_DASH_URL=%s\nARGOS_TOKEN=%s\n' "$ARGOS_DASH_URL" "$ARGOS_TOKEN" >"$dashf"
+chmod 600 "$dashf"
 echo "==> argos $(argos --version 2>/dev/null || command -v argos) dash=${ARGOS_DASH_URL}"
 while IFS= read -r sel; do
 	[[ -z "$sel" ]] && continue
 	# shellcheck disable=SC2086
-	argos run ${sel} --env "$envn" --dash
+	argos run ${sel} --env "$envn" --dash "$dashf"
 done < <(each_item "$(input SELECTORS)")
 echo "OK argos"
