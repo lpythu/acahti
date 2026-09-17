@@ -109,6 +109,43 @@ func TestReapOneCancelsSilentStep(t *testing.T) {
 	}
 }
 
+func TestReapQueueIngestsUnindexedHead(t *testing.T) {
+	var gotGet bool
+	var notified woodpecker.Pipeline
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/queue/info"):
+			_, _ = w.Write([]byte(`{"pending":[],"waiting_on_deps":[],"running":[{"name":"ci","repo_id":9,"pipeline_number":47}],"stats":{}}`))
+		case r.URL.Path == "/api/repos/9":
+			_, _ = w.Write([]byte(`{"id":9,"full_name":"saidc/voidgate"}`))
+		case strings.Contains(r.URL.Path, "/lookup/"):
+			_, _ = w.Write([]byte(`{"id":9,"full_name":"saidc/voidgate"}`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/pipelines/47"):
+			gotGet = true
+			_, _ = w.Write([]byte(`{"number":47,"status":"running","created":200}`))
+		case strings.HasSuffix(r.URL.Path, "/web-config.js"):
+			_, _ = w.Write([]byte(`WOODPECKER_CSRF = "tok";`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(s.Close)
+	c := New(config.Config{}, nil, woodpecker.New(s.URL, "t"), nil)
+	c.Notify = func(kind string, data any) {
+		if kind == "pipeline.updated" {
+			notified, _ = data.(woodpecker.Pipeline)
+		}
+	}
+	c.reapQueue(map[string]string{})
+	if !gotGet {
+		t.Fatal("queue watch must GetPipeline for a live head that is not indexed")
+	}
+	if notified.Repo != "saidc/voidgate" || notified.Number != 47 || notified.Status != "running" {
+		t.Fatalf("notify %+v", notified)
+	}
+}
+
 func TestReapOneKeepsFreshLog(t *testing.T) {
 	var canceled bool
 	body := `{"number":9,"status":"running","workflows":[{"name":"cd.hk","state":"running","children":[{"id":466,"pid":4,"name":"cd","state":"running","type":"commands"}]}]}`

@@ -286,11 +286,11 @@ flowchart LR
 2. Gateway `Remember`s the pipeline: hydrate kernel jobs, upsert `acahti.pipelines`, publish `pipeline.updated`.
 3. Woodpecker progress also arrives as Forgejo `status` webhooks or `POST /hooks/woodpecker`. Same `Remember`.
 4. Startup backfill lists Woodpecker runs per active repo and `Remember`s them.
-5. `WatchPipelines` refreshes indexed `running` and `pending` rows from Woodpecker (queue paint every 3s; 15m silent-log cancel every 1m). Queue `wait` / `queue_position` is painted live from `GET /api/queue/info` (not stored). Job skip, `when`, and `depends_on` are Woodpecker’s. A running step whose log has not grown for 15m is `Cancel`ed (Woodpecker does not close a step when the process dies without a Done RPC). List paint uses the same queue snapshot as `GET /ui/queue` (no Woodpecker GET on the list path).
+5. `WatchPipelines` refreshes indexed `running` / `pending` **and** Woodpecker queue heads that are not in the index yet (queue paint every 3s; 15m silent-log cancel every 1m). New runs often hit `/api/queue/info` before the hook is ingested, so the watcher `Refresh`es those numbers into `acahti.pipelines`. Queue `wait` / `queue_position` is painted live from `GET /api/queue/info` (not stored). Job skip, `when`, and `depends_on` are Woodpecker’s. A running step whose log has not grown for 15m is `Cancel`ed (Woodpecker does not close a step when the process dies without a Done RPC). List paint merges those queue heads over `LatestByRepo` (so a stale indexed success cannot hide a live run), then annotates wait from the same queue snapshot. `paintPipes` still must not `GetPipeline`.
 
 **Read (query)**
 
-1. `GET /ui/pipelines` — newest run per repo (`created DESC`), optional `status=` (`all` / `failed` / `blocked` / `running` / `success`). Later numbers replace earlier branches and tags. Visibility from the org catalog. Rows use stored `jobs`, then live queue paint (no YAML fetch, no Woodpecker list sync).
+1. `GET /ui/pipelines` — newest run per repo (`created DESC`), optional `status=` (`all` / `failed` / `blocked` / `running` / `success`). Later numbers replace earlier branches and tags. Visibility from the org catalog. In-flight Woodpecker queue heads replace a stale indexed success for that repo. Rows then get live queue paint (no YAML fetch).
 2. `GET /ui/repos/{owner}/{name}/pipelines` — that repo’s full run history from the index.
 3. Board — open PRs whose head SHA latest indexed pipeline is `success` (ready to merge). Failed and blocked runs live on `/pipelines?status=`.
 4. Detail — index row. Miss or in-flight (`running` / `pending` / `blocked`) → Woodpecker `GetPipeline` and write-back. In-flight rows also get `wait` (`queue` / `deps` / `concurrency`) and `queue_position` from the Woodpecker queue. `files[]` loads YAML on `(repo, commit)` cache miss.
@@ -302,7 +302,7 @@ One screen, one JSON. The SPA renders fields; it does not walk kernels.
 
 | Request | Returns |
 |---|---|
-| `GET /ui/pipelines` | latest run per repo; optional `status=`; live queue paint from index + queue snapshot |
+| `GET /ui/pipelines` | latest run per repo (queue heads win over a stale indexed success); optional `status=`; live queue paint |
 | `GET /ui/pipelines?status=` | `failed` / `blocked` / `running` / `success` filters that latest-per-repo set |
 | `GET /ui/board` | open PRs whose head SHA latest indexed pipeline is success |
 | `GET /ui/repos/{owner}/{name}/pipelines` | that repo’s run history |

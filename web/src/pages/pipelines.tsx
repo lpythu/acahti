@@ -10,12 +10,21 @@ import { useEvents } from "@/hooks/use-events"
 import { useLoad } from "@/hooks/use-load"
 import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
+import type { MessageKey } from "@/i18n/messages"
 import { api, repoName, splitRepo, type Pipeline } from "@/lib/api"
 import { pipelineHref } from "@/lib/nav"
 import { asPipeline, failedStatus, pipeFilterMatch, upsertHead } from "@/lib/pipeline"
 import { useSession } from "@/lib/session"
 
 const STATUS_FILTERS = ["failed", "blocked", "running", "success"] as const
+
+const STATUS_FILTER_LABEL: Record<string, MessageKey> = {
+  all: "filterAll",
+  failed: "failed",
+  blocked: "blocked",
+  running: "statusRunning",
+  success: "statusSuccess",
+}
 
 function pipeStatus(raw: string | null) {
   return STATUS_FILTERS.includes(raw as (typeof STATUS_FILTERS)[number]) ? raw! : "all"
@@ -127,7 +136,7 @@ export function PipelinesPage() {
             </div>
             <Select value={status} onValueChange={(v) => setStatus(String(v ?? "all"))}>
               <SelectTrigger size="sm" className="shrink-0" aria-label={t("status")}>
-                <SelectValue />
+                <SelectValue>{t(STATUS_FILTER_LABEL[status] ?? "filterAll")}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("filterAll")}</SelectItem>

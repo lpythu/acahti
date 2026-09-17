@@ -128,28 +128,36 @@ func (c *Catalog) emit(p woodpecker.Pipeline) {
 }
 
 func (c *Catalog) reapQueue(fp map[string]string) {
-	if c.Idx == nil || c.WP == nil || !c.WP.Ready() {
+	if c.WP == nil || !c.WP.Ready() {
 		return
 	}
-	listed, err := page.Walk(func(q page.Query) (page.Result[woodpecker.Pipeline], error) {
-		return c.Idx.List(store.Filter{Status: []string{"running", "pending"}}, q)
-	})
-	if err != nil {
-		log.Printf("pipeline queue: list: %v", err)
-		return
+	seen := map[string]woodpecker.Pipeline{}
+	if c.Idx != nil {
+		listed, err := page.Walk(func(q page.Query) (page.Result[woodpecker.Pipeline], error) {
+			return c.Idx.List(store.Filter{Status: []string{"running", "pending"}}, q)
+		})
+		if err != nil {
+			log.Printf("pipeline queue: list: %v", err)
+			return
+		}
+		for _, p := range listed {
+			seen[fmt.Sprintf("%s#%d", p.Repo, p.Number)] = p
+		}
+	}
+	for repo, n := range c.queueHeadNumbers(nil) {
+		key := fmt.Sprintf("%s#%d", repo, n)
+		if _, ok := seen[key]; !ok {
+			seen[key] = woodpecker.Pipeline{Repo: repo, Number: n, Status: "pending"}
+		}
 	}
 	keep := map[string]string{}
-	for _, p := range listed {
+	for _, p := range seen {
 		painted := p
-		if woodpecker.InFlight(p.Status) {
-			fresh, err := c.Refresh(p.Repo, p.Number)
-			if err != nil {
-				painted = c.Present(p)
-			} else {
-				painted = fresh
-			}
-		} else {
+		fresh, err := c.Refresh(p.Repo, p.Number)
+		if err != nil {
 			painted = c.Present(p)
+		} else {
+			painted = fresh
 		}
 		key := fmt.Sprintf("%s#%d", painted.Repo, painted.Number)
 		next := woodpecker.WaitFingerprint(painted)

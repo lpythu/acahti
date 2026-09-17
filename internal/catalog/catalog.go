@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/url"
 	"path"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -605,10 +606,12 @@ func (c *Catalog) ListPipelines(user, repo, team, status string, q page.Query) (
 	if c.Idx == nil {
 		return page.Of([]woodpecker.Pipeline{}, q, false), nil
 	}
-	res, err := c.Idx.LatestByRepo(names, expandPipeStatus(status), q)
+	want := expandPipeStatus(status)
+	res, err := c.Idx.LatestByRepo(names, want, q)
 	if err != nil {
 		return page.Result[woodpecker.Pipeline]{}, err
 	}
+	res.Items = c.mergeQueueHeads(res.Items, names, want, q.Norm().Page)
 	res.Items = c.paintPipes(res.Items)
 	return res, nil
 }
@@ -742,6 +745,96 @@ func (c *Catalog) CommitDetail(user, owner, name, sha string, q page.Query) (Com
 	cm.Files = nil
 	cm.Stats = &stats
 	return CommitDetail{Commit: cm, Stats: stats, Result: page.Take(files, q)}, nil
+}
+
+func statusAllowed(status string, want []string) bool {
+	if len(want) == 0 {
+		return true
+	}
+	status = strings.ToLower(strings.TrimSpace(status))
+	for _, w := range want {
+		if status == w {
+			return true
+		}
+	}
+	return false
+}
+
+func repoAllowed(repo string, repos []string) bool {
+	if repos == nil {
+		return true
+	}
+	for _, r := range repos {
+		if r == repo {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Catalog) queueHeadNumbers(repos []string) map[string]int64 {
+	best := map[string]int64{}
+	q := c.queueInfo()
+	add := func(tasks []woodpecker.QueueTask) {
+		for _, t := range tasks {
+			if t.Repo == "" || t.Number == 0 || !repoAllowed(t.Repo, repos) {
+				continue
+			}
+			if t.Number > best[t.Repo] {
+				best[t.Repo] = t.Number
+			}
+		}
+	}
+	add(q.Running)
+	add(q.Pending)
+	add(q.WaitingOnDeps)
+	return best
+}
+
+// mergeQueueHeads replaces stale indexed heads with in-flight Woodpecker
+// runs. The queue is live; the pipeline index often only sees a hook after
+// a run finishes, so LatestByRepo can keep showing yesterday's success.
+func (c *Catalog) mergeQueueHeads(items []woodpecker.Pipeline, repos, want []string, pageNo int) []woodpecker.Pipeline {
+	heads := c.queueHeadNumbers(repos)
+	if len(heads) == 0 {
+		return items
+	}
+	out := append([]woodpecker.Pipeline(nil), items...)
+	seen := map[string]int{}
+	for i, p := range out {
+		seen[p.Repo] = i
+	}
+	for repo, n := range heads {
+		if i, ok := seen[repo]; ok && out[i].Number > n {
+			continue
+		}
+		p, err := c.Refresh(repo, n)
+		if err != nil || !statusAllowed(p.Status, want) {
+			continue
+		}
+		if i, ok := seen[repo]; ok {
+			if out[i].Number == p.Number && out[i].Status == p.Status {
+				continue
+			}
+			out[i] = p
+			continue
+		}
+		if pageNo <= 1 {
+			seen[repo] = len(out)
+			out = append(out, p)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := woodpecker.InFlight(out[i].Status), woodpecker.InFlight(out[j].Status)
+		if a != b {
+			return a
+		}
+		if out[i].Created != out[j].Created {
+			return out[i].Created > out[j].Created
+		}
+		return out[i].Number > out[j].Number
+	})
+	return out
 }
 
 func (c *Catalog) paintPipes(pipes []woodpecker.Pipeline) []woodpecker.Pipeline {

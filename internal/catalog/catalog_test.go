@@ -161,6 +161,37 @@ func TestMergeReadyPRsNilIndex(t *testing.T) {
 	}
 }
 
+func TestMergeQueueHeadsReplacesStaleSuccess(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/queue/info"):
+			_, _ = w.Write([]byte(`{"pending":[],"waiting_on_deps":[],"running":[{"name":"ci","repo_id":9,"pipeline_number":47}],"stats":{}}`))
+		case r.URL.Path == "/api/repos/9":
+			_, _ = w.Write([]byte(`{"id":9,"full_name":"saidc/voidgate"}`))
+		case strings.Contains(r.URL.Path, "/lookup/"):
+			_, _ = w.Write([]byte(`{"id":9,"full_name":"saidc/voidgate"}`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/pipelines/47"):
+			_, _ = w.Write([]byte(`{"number":47,"status":"running","created":200,"workflows":[{"name":"ci","state":"running"}]}`))
+		case strings.HasSuffix(r.URL.Path, "/web-config.js"):
+			_, _ = w.Write([]byte(`WOODPECKER_CSRF = "tok";`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(s.Close)
+	c := New(config.Config{}, nil, woodpecker.New(s.URL, "t"), nil)
+	got := c.mergeQueueHeads([]woodpecker.Pipeline{{
+		Repo:    "saidc/voidgate",
+		Number:  46,
+		Status:  "success",
+		Created: 100,
+	}}, nil, nil, 1)
+	if len(got) != 1 || got[0].Number != 47 || got[0].Status != "running" {
+		t.Fatalf("%+v", got)
+	}
+}
+
 func TestPaintPipesSkipsKernelRefresh(t *testing.T) {
 	var gotGet bool
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
