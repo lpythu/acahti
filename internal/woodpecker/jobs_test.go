@@ -16,6 +16,27 @@ func TestInFlight(t *testing.T) {
 	}
 }
 
+func TestPendingAfterFailure(t *testing.T) {
+	if !PendingAfterFailure(Pipeline{Jobs: []Job{
+		{Name: "ci", State: "failure"},
+		{Name: "cd.office", State: "pending"},
+	}}) {
+		t.Fatal("failed parent with queued child")
+	}
+	if PendingAfterFailure(Pipeline{Jobs: []Job{
+		{Name: "ci", State: "failure"},
+		{Name: "notify", State: "running"},
+	}}) {
+		t.Fatal("a running job must keep the pipeline live")
+	}
+	if PendingAfterFailure(Pipeline{Jobs: []Job{
+		{Name: "ci", State: "failure"},
+		{Name: "cd.office", State: "skipped"},
+	}}) {
+		t.Fatal("already skipped")
+	}
+}
+
 func TestJobNameFromFileEmptyIsNotDot(t *testing.T) {
 	if got := jobNameFromFile(""); got != "" {
 		t.Fatalf("%q", got)

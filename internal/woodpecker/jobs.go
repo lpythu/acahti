@@ -40,6 +40,32 @@ func InFlight(state string) bool {
 	return false
 }
 
+func jobFailed(state string) bool {
+	switch strings.ToLower(state) {
+	case "failure", "error", "killed", "declined":
+		return true
+	}
+	return false
+}
+
+// PendingAfterFailure is Woodpecker leaving a depends_on child in the
+// concurrency queue after its parent already failed. The pipeline stays
+// running (or already failed) until a worker later skips that child.
+func PendingAfterFailure(p Pipeline) bool {
+	failed, pending, running := false, false, false
+	for _, j := range p.Jobs {
+		switch {
+		case jobFailed(j.State):
+			failed = true
+		case strings.EqualFold(j.State, "running"), strings.EqualFold(j.State, "started"):
+			running = true
+		case strings.EqualFold(j.State, "pending"), strings.EqualFold(j.State, "created"):
+			pending = true
+		}
+	}
+	return failed && pending && !running
+}
+
 // DeleteAllowed mirrors Woodpecker: finished pipelines only.
 func DeleteAllowed(state string) bool {
 	return !InFlight(state)

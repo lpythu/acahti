@@ -192,6 +192,46 @@ func TestMergeQueueHeadsReplacesStaleSuccess(t *testing.T) {
 	}
 }
 
+func TestRefreshCancelsPendingAfterFailure(t *testing.T) {
+	var canceled bool
+	gets := 0
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/queue/info"):
+			_, _ = w.Write([]byte(`{"pending":[],"waiting_on_deps":[],"running":[],"stats":{}}`))
+		case strings.Contains(r.URL.Path, "/lookup/"):
+			_, _ = w.Write([]byte(`{"id":9,"full_name":"saidc/voidgate"}`))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/cancel"):
+			canceled = true
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/pipelines/47"):
+			gets++
+			if canceled {
+				_, _ = w.Write([]byte(`{"number":47,"status":"failure","workflows":[{"name":"ci","state":"failure"},{"name":"cd.office","state":"skipped"}]}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"number":47,"status":"running","workflows":[{"name":"ci","state":"failure"},{"name":"cd.office","state":"pending"}]}`))
+		case strings.HasSuffix(r.URL.Path, "/web-config.js"):
+			_, _ = w.Write([]byte(`WOODPECKER_CSRF = "tok";`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(s.Close)
+	c := New(config.Config{}, nil, woodpecker.New(s.URL, "t"), nil)
+	got, err := c.Refresh("saidc/voidgate", 47)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !canceled || gets < 2 {
+		t.Fatalf("canceled=%v gets=%d", canceled, gets)
+	}
+	if got.Status != "failure" || len(got.Jobs) != 2 || got.Jobs[1].State != "skipped" {
+		t.Fatalf("%+v", got)
+	}
+}
+
 func TestPaintPipesSkipsKernelRefresh(t *testing.T) {
 	var gotGet bool
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

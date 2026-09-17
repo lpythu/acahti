@@ -1033,7 +1033,8 @@ func (c *Catalog) CancelPipeline(user, repo string, number int64) (woodpecker.Pi
 		return woodpecker.Pipeline{}, err
 	}
 	raw.Repo = repo
-	if !woodpecker.InFlight(raw.Status) {
+	raw.HydrateJobs()
+	if !woodpecker.InFlight(raw.Status) && !woodpecker.PendingAfterFailure(raw) {
 		return c.Remember(raw), nil
 	}
 	if err := c.WP.Cancel(repo, number); err != nil {
@@ -1081,6 +1082,15 @@ func (c *Catalog) Refresh(repo string, number int64) (woodpecker.Pipeline, error
 		return woodpecker.Pipeline{}, err
 	}
 	p.Repo = repo
+	p.HydrateJobs()
+	if woodpecker.PendingAfterFailure(p) {
+		if err := c.WP.Cancel(repo, number); err == nil {
+			if again, err := c.WP.GetPipeline(repo, number); err == nil {
+				again.Repo = repo
+				p = again
+			}
+		}
+	}
 	return c.Remember(p), nil
 }
 
@@ -1090,9 +1100,9 @@ func (c *Catalog) IngestWoodpecker(raw []byte) (woodpecker.Pipeline, bool) {
 		return woodpecker.Pipeline{}, false
 	}
 	p := h.Pipeline
-	if len(p.Jobs) == 0 && c.WP != nil && c.WP.Ready() {
-		if d, err := c.WP.GetPipeline(h.Repo, h.Number); err == nil {
-			p = d
+	if (len(p.Jobs) == 0 || woodpecker.PendingAfterFailure(p)) && c.WP != nil && c.WP.Ready() {
+		if d, err := c.Refresh(h.Repo, h.Number); err == nil {
+			return d, true
 		}
 	}
 	return c.Remember(p), true
