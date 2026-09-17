@@ -10,17 +10,21 @@ command -v argos >/dev/null || {
 	exit 1
 }
 envn="$(input ENV)"
-dash=()
-if [[ -n "${ARGOS_DASH:-}" ]]; then
-	dashf="$(mktemp)"
-	trap 'rm -f "$dashf"' EXIT
-	printf '%s\n' "$ARGOS_DASH" >"$dashf"
-	chmod 600 "$dashf"
-	dash=(--dash "$dashf")
+if [[ -z "${ARGOS_DASH:-}" ]]; then
+	echo "error: ARGOS_DASH is required (org secret argos_dash = dash.env from /cli)" >&2
+	exit 1
+fi
+dashf="$(mktemp)"
+trap 'rm -f "$dashf"' EXIT
+printf '%s\n' "$ARGOS_DASH" >"$dashf"
+chmod 600 "$dashf"
+if ! grep -q '^ARGOS_DASH_URL=.' "$dashf" || ! grep -q '^ARGOS_TOKEN=.' "$dashf"; then
+	echo "error: ARGOS_DASH must be dash.env (ARGOS_DASH_URL and ARGOS_TOKEN)" >&2
+	exit 1
 fi
 while IFS= read -r sel; do
 	[[ -z "$sel" ]] && continue
 	# shellcheck disable=SC2086
-	argos run ${sel} --env "$envn" "${dash[@]}"
+	argos run ${sel} --env "$envn" --dash "$dashf"
 done < <(each_item "$(input SELECTORS)")
 echo "OK argos"

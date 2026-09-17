@@ -92,7 +92,7 @@ No `with:` required. Caps the Runner’s local BuildKit cache (`acahti` builder 
 
 ### argos
 
-`with:` `env`, `selectors` (semicolon-separated `argos run` invocations). Optional env `ARGOS_DASH` (dash file content) → `--dash`.
+`with:` `env`, `selectors` (semicolon-separated `argos run` invocations). Env `ARGOS_DASH` is required (`argos_dash` = `dash.env` from `/cli`) → `--dash`.
 
 ### npm-publish
 
