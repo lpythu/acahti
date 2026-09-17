@@ -169,7 +169,7 @@ Harbor (office) and ACR (hk) are a pair of **user** registries. YAML names the h
 | `harbor_username` / `harbor_password` | office `docker-login` | name as `DOCKER_USERNAME` / `DOCKER_PASSWORD` |
 | `acr_username` / `acr_password` | hk `docker-login` | same mapping |
 | `kubeconfig_office` / `kubeconfig_hk` | `helm` | name as `KUBECONFIG` |
-| `argos_dash` | `argos` | name as `ARGOS_DASH` (token only) |
+| `argos_dash_url` / `argos_token` | `argos` | name as `ARGOS_DASH_URL` / `ARGOS_TOKEN` |
 | `oss_*` | `oss-put` | name them |
 | `codeup_netrc` | still cloning Codeup | name it |
 | `npm_token` / `acahti_publish_token` | none | delete |

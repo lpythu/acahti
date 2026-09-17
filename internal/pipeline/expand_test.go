@@ -264,12 +264,13 @@ func TestExpandMergesExistingFromSecret(t *testing.T) {
 	}
 }
 
-func TestExpandArgosDashSecret(t *testing.T) {
+func TestExpandArgosDashSecrets(t *testing.T) {
 	got, err := Expand([]byte(`steps:
   e2e:
     pipe: argos@v1
     secrets:
-      ARGOS_DASH: argos_dash
+      ARGOS_DASH_URL: argos_dash_url
+      ARGOS_TOKEN: argos_token
     with:
       env: office
       selectors: pack:platform tag:cluster
@@ -278,7 +279,7 @@ func TestExpandArgosDashSecret(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(got)
-	if !strings.Contains(text, "from_secret: argos_dash") {
+	if !strings.Contains(text, "from_secret: argos_dash_url") || !strings.Contains(text, "from_secret: argos_token") {
 		t.Fatalf("missing from_secret:\n%s", text)
 	}
 	if !strings.Contains(text, "acahti-pipe argos") {

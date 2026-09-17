@@ -58,7 +58,7 @@ Org catalog (Owners put once under Admin → Org secrets). Harbor (office) and A
 | `kubeconfig_office` / `kubeconfig_hk` | `KUBECONFIG` |
 | `codeup_netrc` | `CODEUP_NETRC` (Go modules still fetched from Codeup git) |
 | `oss_access_key_id` / `oss_access_key_secret` | `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` |
-| `argos_dash` | `ARGOS_DASH` (the `ARGOS_TOKEN` value from `/cli`, not a dash.env file) |
+| `argos_dash_url` / `argos_token` | `ARGOS_DASH_URL` / `ARGOS_TOKEN` |
 
 Only org/repo admins can list or put secrets. Repo Secrets shows the effective set. Members cannot see names. Values are never returned.
 
@@ -92,7 +92,7 @@ No `with:` required. Caps the Runner’s local BuildKit cache (`acahti` builder 
 
 ### argos
 
-`with:` `env`, `selectors` (semicolon-separated `argos run` invocations). Optional `dash_url` (default `https://argos.saidc.ai`). Env `ARGOS_DASH` is required (`argos_dash` = the `ARGOS_TOKEN` value from `/cli`, a single token, not a dash.env file). The pipe writes a temp dash.env and runs `argos run --dash <file>`.
+`with:` `env`, `selectors` (semicolon-separated `argos run` invocations). Env `ARGOS_DASH_URL` and `ARGOS_TOKEN` are required (org/repo secrets). The pipe writes them to a temp dash.env and runs `argos run --dash <file>`. Acahti does not hardcode a dash origin.
 
 ### npm-publish
 
@@ -171,7 +171,8 @@ steps:
       env: office
       selectors: pack:platform tag:app
     secrets:
-      ARGOS_DASH: argos_dash
+      ARGOS_DASH_URL: argos_dash_url
+      ARGOS_TOKEN: argos_token
 ```
 
 Omit `wait` when there is no public URL. Repository stays in chart values — do not `--set` it.

@@ -13,23 +13,16 @@ if ! argos run --help 2>/dev/null | grep -q -- '--dash'; then
 	echo "error: argos CLI on the Runner is too old (need --dash); upgrade argospy" >&2
 	exit 1
 fi
-if [[ -z "${ARGOS_DASH:-}" ]]; then
-	echo "error: ARGOS_DASH is required (org secret argos_dash = ARGOS_TOKEN from /cli)" >&2
-	exit 1
-fi
-if [[ "$ARGOS_DASH" == *$'\n'* || "$ARGOS_DASH" == *'='* ]]; then
-	echo "error: argos_dash must be the ARGOS_TOKEN value only, not a dash.env file" >&2
+if [[ -z "${ARGOS_DASH_URL:-}" || -z "${ARGOS_TOKEN:-}" ]]; then
+	echo "error: ARGOS_DASH_URL and ARGOS_TOKEN secrets are required" >&2
 	exit 1
 fi
 envn="$(input ENV)"
-dash_url="$(input DASH_URL)"
-export ARGOS_DASH_URL="${dash_url:-https://argos.saidc.ai}"
-export ARGOS_TOKEN="$ARGOS_DASH"
 dashf="$(mktemp)"
 trap 'rm -f "$dashf"' EXIT
 printf 'ARGOS_DASH_URL=%s\nARGOS_TOKEN=%s\n' "$ARGOS_DASH_URL" "$ARGOS_TOKEN" >"$dashf"
 chmod 600 "$dashf"
-echo "==> argos $(argos --version 2>/dev/null || command -v argos) dash=${ARGOS_DASH_URL}"
+echo "==> argos $(argos --version 2>/dev/null || command -v argos)"
 while IFS= read -r sel; do
 	[[ -z "$sel" ]] && continue
 	# shellcheck disable=SC2086
