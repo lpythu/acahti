@@ -38,21 +38,39 @@ pkg_overlay="$(mktemp)"
 trap 'rm -rf "$dest"; rm -f "$npmrc" "$overlay" "$pkg_overlay"' EXIT
 chmod 600 "$npmrc"
 {
-	printf '//%s%s:username=%s\n' "$lan_host" "$auth_path" "$user"
-	printf '//%s%s:_password=%s\n' "$lan_host" "$auth_path" "$(printf '%s' "$token" | base64 | tr -d '\n')"
+	# Frozen lockfiles keep tarball URLs on the public host; PUT uses the LAN
+	# gateway. Auth both so pnpm never fetches Acahti packages anonymously.
+	for host in "$lan_host" "$public_host"; do
+		[[ -n "$host" ]] || continue
+		printf '//%s%s:username=%s\n' "$host" "$auth_path" "$user"
+		printf '//%s%s:_password=%s\n' "$host" "$auth_path" "$(printf '%s' "$token" | base64 | tr -d '\n')"
+	done
 	printf 'always-auth=true\n'
 } >"$npmrc"
+
+rewrite_packages_origin() {
+	local src="$1" out="${2:-}"
+	[[ -f "$src" ]] || return 0
+	if [[ -n "$out" ]]; then
+		sed -E "s#https?://[^/]+/api/packages/#${origin}/api/packages/#g" "$src" >"$out"
+	else
+		sed -i -E "s#https?://[^/]+/api/packages/#${origin}/api/packages/#g" "$src"
+	fi
+}
 
 rewrite_npmrc() {
 	local src="$1" out="$2"
 	if [[ -f "$src" ]]; then
-		sed -E "s#https?://[^/]+/api/packages/#${origin}/api/packages/#g" "$src" >"$out"
+		rewrite_packages_origin "$src" "$out"
 	else
 		printf '@%s:registry=%s/api/packages/%s/npm/\n' "$org" "$origin" "$org" >"$out"
 	fi
 }
 rewrite_npmrc "${ROOT}/.npmrc" "$overlay"
 rewrite_npmrc "${ROOT}/${pkg_path}/.npmrc" "$pkg_overlay"
+for lock in pnpm-lock.yaml package-lock.json npm-shrinkwrap.json yarn.lock; do
+	rewrite_packages_origin "${ROOT}/${lock}"
+done
 
 docker_npmrc_mounts=(
 	-v "${npmrc}:/root/.npmrc:ro"

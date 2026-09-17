@@ -95,6 +95,9 @@ def main() -> None:
                 print(name, version, resp.status)
         except urllib.error.HTTPError as e:
             err = e.read().decode("utf-8", "replace")[:500]
+            if e.code == 409:
+                print(name, version, 409, "already exists")
+                continue
             print(name, version, e.code, err, file=sys.stderr)
             raise SystemExit(1)
 
