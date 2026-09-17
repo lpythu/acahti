@@ -12,6 +12,15 @@ import (
 	"acahti/internal/woodpecker"
 )
 
+func TestSilentCancelReason(t *testing.T) {
+	if got := silentCancelReason(nil); got != "canceled: no new log for 15m" {
+		t.Fatalf("%q", got)
+	}
+	if got := silentCancelReason([]woodpecker.Step{{Name: "build"}, {Name: "build"}, {Name: "e2e"}}); got != "canceled: no new log for 15m on step build, e2e" {
+		t.Fatalf("%q", got)
+	}
+}
+
 func TestLogFPChangesWhenLogGrows(t *testing.T) {
 	a := logFP("Error: UPGRADE FAILED")
 	b := logFP("Error: UPGRADE FAILED\nmore")
@@ -77,6 +86,7 @@ func TestWatchKey(t *testing.T) {
 func TestReapOneCancelsSilentStep(t *testing.T) {
 	var canceled bool
 	body := `{"number":9,"status":"running","workflows":[{"name":"cd.hk","state":"running","children":[{"id":466,"pid":4,"name":"cd","state":"running","type":"commands"}]}]}`
+	killed := `{"number":9,"status":"killed","workflows":[{"name":"cd.hk","state":"killed","children":[{"id":466,"pid":4,"name":"cd","state":"killed","error":"Canceled","type":"commands"}]}]}`
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.Contains(r.URL.Path, "/queue/info"):
@@ -84,6 +94,10 @@ func TestReapOneCancelsSilentStep(t *testing.T) {
 		case strings.Contains(r.URL.Path, "/lookup/"):
 			_, _ = w.Write([]byte(`{"id":1,"full_name":"saidc/exweb"}`))
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/pipelines/9"):
+			if canceled {
+				_, _ = w.Write([]byte(killed))
+				return
+			}
 			_, _ = w.Write([]byte(body))
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/logs/"):
 			_ = json.NewEncoder(w).Encode([]map[string]string{{"out": "Error: UPGRADE FAILED"}})
@@ -99,6 +113,12 @@ func TestReapOneCancelsSilentStep(t *testing.T) {
 	}))
 	t.Cleanup(s.Close)
 	c := New(config.Config{}, nil, woodpecker.New(s.URL, "t"), nil)
+	var got woodpecker.Pipeline
+	c.Notify = func(kind string, data any) {
+		if kind == "pipeline.updated" {
+			got, _ = data.(woodpecker.Pipeline)
+		}
+	}
 	p := woodpecker.Pipeline{Repo: "saidc/exweb", Number: 9, Status: "running"}
 	now := time.Date(2026, 9, 14, 23, 0, 0, 0, time.UTC)
 	prev := map[string]logWatch{"saidc/exweb#9/466": {fp: logFP(woodpecker.FormatLog(`[{"out":"Error: UPGRADE FAILED"}]`)), since: now.Add(-staleAfter)}}
@@ -106,6 +126,12 @@ func TestReapOneCancelsSilentStep(t *testing.T) {
 	c.reapOne(p, now, prev, keep)
 	if !canceled {
 		t.Fatal("expected cancel")
+	}
+	if got.Error != "canceled: no new log for 15m on step cd" {
+		t.Fatalf("error=%q", got.Error)
+	}
+	if len(got.Jobs) == 0 || len(got.Jobs[0].Steps) == 0 || got.Jobs[0].Steps[0].Error != got.Error {
+		t.Fatalf("steps=%+v", got.Jobs)
 	}
 }
 

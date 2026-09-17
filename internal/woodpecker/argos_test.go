@@ -31,4 +31,7 @@ func TestParseArgosLog(t *testing.T) {
 	if !E2EJob("e2e.office") || E2EJob("ci") || !E2EJob("e2e") {
 		t.Fatal("E2EJob")
 	}
+	if ArgosJob(Job{Name: "ci"}) || !ArgosJob(Job{Name: "cd.office", Steps: []Step{{Name: "e2e"}}}) {
+		t.Fatal("ArgosJob")
+	}
 }

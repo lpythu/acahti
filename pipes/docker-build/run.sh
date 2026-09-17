@@ -132,8 +132,3 @@ while IFS= read -r line; do
 	[[ $# -eq 0 || -z "${1:-}" ]] && continue
 	build_one "$@"
 done < <(each_line "$(expand_ci "$(input IMAGES)")")
-
-gc="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/docker-gc/run.sh"
-if [[ -f "$gc" ]]; then
-	bash "$gc" || true
-fi

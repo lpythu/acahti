@@ -4,20 +4,46 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/_lib.sh"
 
 # Local analog of oci-gc: bound BuildKit cache on the Runner. Never fail a job.
+# Hourly timer only (agent.sh). docker-build must not call this.
 # Auth stays in isolated HOME; builder instances use persist_buildx_config.
 
 root_used_pct() {
-	df -P / | awk 'NR==2 { gsub(/%/, "", $5); print $5 }'
+	df -Pk / | awk 'NR==2 { gsub(/%/, "", $5); print $5 }'
 }
 
+# keep = min(avail - headroom, 25% of disk), headroom = max(20GB, 15% of disk),
+# clamp 8GB..64GB. avail < 20GB → 8GB (warn). ACAHTI_BUILDKIT_KEEP overrides.
 keep_storage() {
-	local pct
-	pct="$(root_used_pct || echo 0)"
-	if [[ "$pct" =~ ^[0-9]+$ ]] && ((pct >= 85)); then
-		printf '4GB'
+	local raw="${ACAHTI_BUILDKIT_KEEP:-}"
+	if [[ -n "$raw" ]]; then
+		if [[ "$raw" =~ ^[0-9]+$ ]]; then
+			printf '%sGB' "$raw"
+		else
+			printf '%s' "$raw"
+		fi
 		return
 	fi
-	printf '16GB'
+	local total_k avail_k total_gb avail_gb headroom cap keep
+	read -r total_k avail_k < <(df -Pk / | awk 'NR==2 {print $2, $4}')
+	if [[ ! "$total_k" =~ ^[0-9]+$ || ! "$avail_k" =~ ^[0-9]+$ ]]; then
+		printf '16GB'
+		return
+	fi
+	total_gb=$((total_k / 1024 / 1024))
+	avail_gb=$((avail_k / 1024 / 1024))
+	if ((avail_gb < 20)); then
+		echo "==> docker-gc warn: avail=${avail_gb}GB < 20GB, keep=8GB" >&2
+		printf '8GB'
+		return
+	fi
+	headroom=$((total_gb * 15 / 100))
+	((headroom < 20)) && headroom=20
+	cap=$((total_gb * 25 / 100))
+	keep=$((avail_gb - headroom))
+	((keep > cap)) && keep=$cap
+	((keep < 8)) && keep=8
+	((keep > 64)) && keep=64
+	printf '%sGB' "$keep"
 }
 
 list_builders() {
@@ -63,10 +89,6 @@ rm_leftovers() {
 		echo "==> docker-gc rm leftover ${name}"
 		docker rm -f "$name" >/dev/null 2>&1 || true
 	done < <(docker ps -a --filter name=turbomesh-storage-dev- --format '{{.Names}}' 2>/dev/null || true)
-	if [[ -d /root/yunxiao ]]; then
-		echo "==> docker-gc rm /root/yunxiao"
-		sudo -n rm -rf /root/yunxiao 2>/dev/null || rm -rf /root/yunxiao 2>/dev/null || true
-	fi
 }
 
 vacuum_journal() {
@@ -77,9 +99,8 @@ prune_builder() {
 	local keep
 	keep="$(keep_storage)"
 	echo "==> docker-gc ${ACAHTI_BUILDER} keep-storage=${keep} root=$(root_used_pct || echo '?')%"
-	docker buildx prune --builder "$ACAHTI_BUILDER" --all --keep-storage "$keep" -f >/dev/null || true
-	# Previous CI used the docker driver; that cache sits in containerd, not the acahti volume.
-	docker buildx prune --builder default --all -f >/dev/null || true
+	# Unused layers only. --all would sweep cache mounts that --pull still needs.
+	docker buildx prune --builder "$ACAHTI_BUILDER" --keep-storage "$keep" -f >/dev/null || true
 }
 
 if ! command -v docker >/dev/null; then

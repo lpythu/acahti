@@ -16,6 +16,18 @@ func E2EJob(name string) bool {
 	return name == "e2e" || strings.HasPrefix(name, "e2e.")
 }
 
+func ArgosJob(job Job) bool {
+	if E2EJob(job.Name) {
+		return true
+	}
+	for _, step := range job.Steps {
+		if strings.TrimSpace(step.Name) == "e2e" {
+			return true
+		}
+	}
+	return false
+}
+
 func DashRunURL(base, sid string) string {
 	base = strings.TrimRight(strings.TrimSpace(base), "/")
 	sid = strings.TrimSpace(sid)

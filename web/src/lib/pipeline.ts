@@ -76,8 +76,8 @@ function topoJobs(jobs: Job[]): Job[] {
   return [...out, ...jobs.filter((j) => !seen.has(j.name))]
 }
 
-export function jobDotsOf(p: Pipeline): { name: string; state: string }[] {
-  return jobsOf(p).map((j) => ({ name: j.name, state: j.state }))
+export function jobDotsOf(p: Pipeline): Job[] {
+  return jobsOf(p)
 }
 
 export function argosLinksOf(p: Pipeline): { name: string; url: string }[] {

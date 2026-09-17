@@ -68,7 +68,7 @@ Only org/repo admins can list or put secrets. Repo Secrets shows the effective s
 
 ### docker-build
 
-`with:` `images` (required). One image per line. First field is the primary tag. Optional `also=` extra tags (comma-separated), `context=` (default `.`), `file=` Dockerfile, other `KEY=VAL` as `--build-arg` (CI names `BASE_IMAGE=<registry>/base/…`; Dockerfiles stay registry-host-free). Optional `push` (default `true`); `push: false` is `--output=type=cacheonly` (CI, no `--load`). Job identity is written as BuildKit secrets `id=npmrc` and `id=netrc` (HTTP Basic from `ACAHTI_USER` / `ACAHTI_TOKEN`). Dockerfiles mount `id=npmrc` at `/root/.npmrc` and `id=netrc` at `/root/.netrc`. YAML does not name npm tokens. `CODEUP_NETRC` → BuildKit `id=codeup_netrc`. Default builder `acahti` (`docker-container`, host network). HTTP/insecure registries are declared on `docker-login` (`http: true`), not inferred by Acahti. Builds always `--pull --provenance=false`. Harbor `base` and `library` are anonymous-pull so CI can `--pull` without `docker-login`. `push: true` is `buildx --push` for primary and `also=` tags. `push: false` is cache-only (CI, no `--load`). Empty `images:` lines are skipped. After a successful build the pipe runs `docker-gc`.
+`with:` `images` (required). One image per line. First field is the primary tag. Optional `also=` extra tags (comma-separated), `context=` (default `.`), `file=` Dockerfile, other `KEY=VAL` as `--build-arg`. Product Dockerfiles default `BASE_IMAGE` to HK ACR `saidc-registry.cn-hongkong.cr.aliyuncs.com/base/…`; office CD overrides the host to `harbor.saidc`. Optional `push` (default `true`); `push: false` is `--output=type=cacheonly` (CI, no `--load`). Job identity is written as BuildKit secrets `id=npmrc` and `id=netrc` (HTTP Basic from `ACAHTI_USER` / `ACAHTI_TOKEN`). Dockerfiles mount `id=npmrc` at `/root/.npmrc` and `id=netrc` at `/root/.netrc`. YAML does not name npm tokens. `CODEUP_NETRC` → BuildKit `id=codeup_netrc`. Default builder `acahti` (`docker-container`, host network). HTTP/insecure registries are declared on `docker-login` (`http: true`), not inferred by Acahti. Builds always `--pull --provenance=false`. Harbor `base` and `library` are anonymous-pull so CI can `--pull` without `docker-login`. `push: true` is `buildx --push` for primary and `also=` tags. `push: false` is cache-only (CI, no `--load`). Empty `images:` lines are skipped. Does not run `docker-gc` (hourly timer on the Runner does).
 
 OCI tags: office CD `dev-${CI_COMMIT_SHA}`; HK CD `${CI_COMMIT_TAG#v}` (git tag `vX.Y.Z` → `X.Y.Z`). `latest` is a pointer at the same digest. `${CI_COMMIT_TAG#v}` is expanded in the pipe (`${CI_COMMIT_TAG}` is interpolated by the runner).
 
@@ -78,7 +78,7 @@ OCI tags: office CD `dev-${CI_COMMIT_SHA}`; HK CD `${CI_COMMIT_TAG#v}` (git tag 
 
 ### docker-gc
 
-No `with:` required. Caps the Runner’s local BuildKit cache (`acahti` builder `--keep-storage=16GB`, `4GB` when `/` is ≥85% full), deletes other buildx builders, dangling images, stale `/tmp/woodpecker-local-*` (>6h), and leftover compose/云效 trees. Does not `docker system prune -a`. `docker-build` runs it after a successful build; `agent.sh` also installs an hourly systemd timer. Does not touch Harbor/ACR — that is `oci-gc`.
+No `with:` required. Hourly timer only (`agent.sh`). Caps the `acahti` builder with unused-layer `--keep-storage` (min of avail−headroom and 25% of disk; headroom max(20GB, 15% of disk); clamp 8GB..64GB; `ACAHTI_BUILDKIT_KEEP` overrides). Does not `--all` (cache mounts stay). Deletes other buildx builders, dangling images, and stale `/tmp/woodpecker-local-*` (>6h). Does not `docker system prune -a`. Does not touch Harbor/ACR — that is `oci-gc`.
 
 ### helm
 
@@ -90,7 +90,7 @@ No `with:` required. Caps the Runner’s local BuildKit cache (`acahti` builder 
 
 ### uv
 
-`with:` `run` (required, one command per line). Optional `project` (directory with `pyproject.toml`, default `.`). Installs `uv` if missing, then `uv run --project <dir> -- bash -c <line>` in a job-local venv (`UV_PROJECT_ENVIRONMENT`). Product YAML supplies the command (for example `argos run all --env office --dash`). Secrets become step env; `--dash` with no file reads `ARGOS_DASH_URL` / `ARGOS_TOKEN`. Argos CLI in CI reads Woodpecker `CI_*` and `ACAHTI_ROOT_URL` so the dash run links back to this pipeline; it prints `argos <sid>` and `dash {url}` (`{ARGOS_DASH_URL}/runs/{sid}`). Acahti shows that URL on the pipeline list and detail when the job name is `e2e.*`.
+`with:` `run` (required, one command per line). Optional `project` (directory with `pyproject.toml`, default `.`). Installs `uv` if missing, then `uv run --project <dir> -- bash -c <line>` in a job-local venv (`UV_PROJECT_ENVIRONMENT`). Product YAML supplies the command (for example `argos run all --env office --dash`). Secrets become step env; `--dash` with no file reads `ARGOS_DASH_URL` / `ARGOS_TOKEN`. Argos CLI in CI reads Woodpecker `CI_*` and `ACAHTI_ROOT_URL` so the dash run links back to this pipeline; it prints `argos <sid>` and `dash {url}` (`{ARGOS_DASH_URL}/runs/{sid}`). Acahti shows that URL on the pipeline list and detail when the job name is `e2e.*` or a step is named `e2e`.
 
 ### npm-publish-acahti
 
@@ -98,7 +98,7 @@ Acahti org npm only. `with:` `path` (package dir). Optional `image` (default `no
 
 ### pypi-publish-acahti
 
-Acahti org PyPI only. Optional `path` (default `.`), `image` (default `python:3.12-slim-bookworm`). The pipe runs `uv build` in that image (installs uv if missing) then PUT to the LAN gateway the same way. YAML does not name a registry, `docker run`, or a token.
+Acahti org PyPI only. Optional `path` (default `.`), `image` (default `python:3.12-slim-bookworm`). The pipe runs `uv build` in that image (installs uv if missing) then POST twine multipart to the LAN gateway (`/api/packages/<org>/pypi`). YAML does not name a registry, `docker run`, or a token.
 
 ### oss-put
 

@@ -13,20 +13,13 @@ deadline=$((SECONDS + timeout))
 while IFS= read -r url; do
 	[[ -z "$url" ]] && continue
 	echo "==> wait ${url}"
-	streak=0
 	code="000"
 	while ((SECONDS < deadline)); do
 		code="$(curl -sS -o /dev/null -w '%{http_code}' -A "$ua" --max-time 10 "$url" || true)"
 		if [[ "$code" != "502" && "$code" != "503" && "$code" != "504" && "$code" != "000" ]]; then
-			streak=$((streak + 1))
-			if ((streak >= 3)); then
-				echo "OK ${url} ${code}"
-				continue 2
-			fi
-			sleep 2
-			continue
+			echo "OK ${url} ${code}"
+			continue 2
 		fi
-		streak=0
 		sleep 3
 	done
 	echo "error: ${url} still ${code:-000} after ${timeout}s" >&2

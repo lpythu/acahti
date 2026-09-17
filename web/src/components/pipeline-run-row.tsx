@@ -87,7 +87,7 @@ export function PipelineRunRow({
   const blocked = pipe.status === "blocked"
 
   return (
-    <li className="flex items-center gap-3 px-3 py-3 hover:bg-muted/50">
+    <li className="flex items-start gap-3 px-3 py-3 hover:bg-muted/50">
       <Link to={href} className="flex min-w-0 flex-1 items-start gap-3">
         <RunStatusIcon status={pipe.status} className="mt-0.5 size-5" />
         <span className="min-w-0 flex-1">
@@ -105,9 +105,14 @@ export function PipelineRunRow({
             ) : null}
           </span>
           <span className="mt-0.5 block truncate text-xs text-muted-foreground">{meta}</span>
+          {pipe.error ? (
+            <span className="mt-0.5 block truncate text-xs text-muted-foreground" title={pipe.error}>
+              {pipe.error}
+            </span>
+          ) : null}
         </span>
       </Link>
-      <div className="flex w-56 shrink-0 flex-col items-start gap-1">
+      <div className="flex min-w-0 flex-[2] flex-col items-start gap-1">
         <PipelineJobDots jobs={jobs} />
         {argos.length ? (
           <div className="flex flex-wrap gap-1">

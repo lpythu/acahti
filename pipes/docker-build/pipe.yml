@@ -5,11 +5,13 @@ inputs:
     description: |
       One image per line. First field is the primary tag. Optional KEY=VAL:
       also extra tags (comma-separated), context (default .), file (Dockerfile),
-      anything else is --build-arg (CI passes BASE_IMAGE=<registry>/base/…).
+      anything else is --build-arg. Dockerfile defaults are HK ACR
+      saidc-registry.cn-hongkong.cr.aliyuncs.com/base/…; office CD
+      overrides the host to harbor.saidc.
       Job identity is written as BuildKit secrets id=npmrc and id=netrc
       (HTTP Basic from ACAHTI_USER / ACAHTI_TOKEN). Dockerfiles mount
       id=npmrc at /root/.npmrc and id=netrc at /root/.netrc.
-      Dockerfiles stay Harbor-free. Default --network=host on buildx.
+      Default --network=host on buildx.
       CODEUP_NETRC → id=codeup_netrc.
   push:
     required: false

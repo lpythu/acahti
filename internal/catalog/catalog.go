@@ -968,6 +968,7 @@ func (c *Catalog) Remember(p woodpecker.Pipeline) woodpecker.Pipeline {
 	p = c.decoratePipe(p)
 	p = c.mergeLogTails(p)
 	p = c.mergeArgos(p)
+	p = c.mergeCancelReason(p)
 	p = c.captureTerminalLogs(p)
 	p = c.captureArgos(p)
 	p = woodpecker.StripWait(p)
@@ -1035,7 +1036,7 @@ func (c *Catalog) captureArgos(p woodpecker.Pipeline) woodpecker.Pipeline {
 	}
 	for i := range p.Jobs {
 		job := &p.Jobs[i]
-		if !woodpecker.E2EJob(job.Name) {
+		if !woodpecker.ArgosJob(*job) {
 			continue
 		}
 		if job.ArgosSID != "" && job.ArgosURL != "" {
@@ -1051,8 +1052,20 @@ func (c *Catalog) captureArgos(p woodpecker.Pipeline) woodpecker.Pipeline {
 				text += step.LogTail + "\n"
 			}
 		}
-		if text == "" {
+		sid, url := woodpecker.ParseArgosLog(text)
+		if sid == "" {
+			steps := make([]woodpecker.Step, 0, len(job.Steps))
 			for _, step := range job.Steps {
+				if strings.TrimSpace(step.Name) == "e2e" {
+					steps = append(steps, step)
+				}
+			}
+			for _, step := range job.Steps {
+				if strings.TrimSpace(step.Name) != "e2e" {
+					steps = append(steps, step)
+				}
+			}
+			for _, step := range steps {
 				id := stepID(step)
 				if id == 0 {
 					continue
@@ -1062,12 +1075,12 @@ func (c *Catalog) captureArgos(p woodpecker.Pipeline) woodpecker.Pipeline {
 					continue
 				}
 				text = woodpecker.FormatLog(raw)
-				if text != "" {
+				sid, url = woodpecker.ParseArgosLog(text)
+				if sid != "" {
 					break
 				}
 			}
 		}
-		sid, url := woodpecker.ParseArgosLog(text)
 		if job.ArgosSID == "" {
 			job.ArgosSID = sid
 		}
@@ -1114,6 +1127,14 @@ func (c *Catalog) captureTerminalLogs(p woodpecker.Pipeline) woodpecker.Pipeline
 }
 
 func (c *Catalog) CancelPipeline(user, repo string, number int64) (woodpecker.Pipeline, error) {
+	reason := "canceled"
+	if login := strings.TrimSpace(user); login != "" {
+		reason = "canceled by " + login
+	}
+	return c.cancelPipeline(user, repo, number, reason)
+}
+
+func (c *Catalog) cancelPipeline(user, repo string, number int64, reason string) (woodpecker.Pipeline, error) {
 	if user != "" {
 		owner, name, _ := strings.Cut(repo, "/")
 		if _, err := c.seeRepo(user, owner, name); err != nil {
@@ -1142,7 +1163,74 @@ func (c *Catalog) CancelPipeline(user, repo string, number int64) (woodpecker.Pi
 		}
 		return woodpecker.Pipeline{}, err
 	}
-	return c.Refresh(repo, number)
+	done, err := c.Refresh(repo, number)
+	if err != nil {
+		return woodpecker.Pipeline{}, err
+	}
+	return c.Remember(applyCancelReason(done, reason)), nil
+}
+
+func genericCancelError(err string) bool {
+	s := strings.TrimSpace(err)
+	return s == "" || strings.EqualFold(s, "canceled")
+}
+
+func isAcahtiCancelReason(err string) bool {
+	s := strings.ToLower(strings.TrimSpace(err))
+	return strings.HasPrefix(s, "canceled by ") || strings.HasPrefix(s, "canceled:")
+}
+
+func canceledStep(state string) bool {
+	switch strings.ToLower(state) {
+	case "killed", "canceled":
+		return true
+	}
+	return false
+}
+
+func applyCancelReason(p woodpecker.Pipeline, reason string) woodpecker.Pipeline {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return p
+	}
+	if genericCancelError(p.Error) {
+		p.Error = reason
+	}
+	for i := range p.Jobs {
+		for j := range p.Jobs[i].Steps {
+			s := &p.Jobs[i].Steps[j]
+			if !canceledStep(s.State) {
+				continue
+			}
+			if genericCancelError(s.Error) {
+				s.Error = reason
+			}
+		}
+	}
+	return p
+}
+
+func keepCancelReason(p, old woodpecker.Pipeline) woodpecker.Pipeline {
+	if !isAcahtiCancelReason(old.Error) || !genericCancelError(p.Error) {
+		return p
+	}
+	switch strings.ToLower(strings.TrimSpace(p.Status)) {
+	case "success", "failure", "error", "declined":
+		return p
+	}
+	p.Error = old.Error
+	return applyCancelReason(p, old.Error)
+}
+
+func (c *Catalog) mergeCancelReason(p woodpecker.Pipeline) woodpecker.Pipeline {
+	if c.Idx == nil {
+		return p
+	}
+	old, ok, err := c.Idx.Get(p.Repo, p.Number)
+	if err != nil || !ok {
+		return p
+	}
+	return keepCancelReason(p, old)
 }
 
 func (c *Catalog) DeletePipeline(user, repo string, number int64) error {

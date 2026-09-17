@@ -73,6 +73,92 @@ func TestWriteID(t *testing.T) {
 	}
 }
 
+func TestKeepCancelReason(t *testing.T) {
+	old := woodpecker.Pipeline{Error: "canceled: no new log for 15m on step build"}
+	got := keepCancelReason(woodpecker.Pipeline{Status: "killed", Error: ""}, old)
+	if got.Error != old.Error {
+		t.Fatalf("error=%q", got.Error)
+	}
+	got = keepCancelReason(woodpecker.Pipeline{
+		Status: "killed",
+		Jobs:   []woodpecker.Job{{Steps: []woodpecker.Step{{State: "killed", Error: "Canceled"}}}},
+	}, old)
+	if got.Jobs[0].Steps[0].Error != old.Error {
+		t.Fatalf("step=%q", got.Jobs[0].Steps[0].Error)
+	}
+	got = keepCancelReason(woodpecker.Pipeline{Status: "success", Error: ""}, old)
+	if got.Error != "" {
+		t.Fatalf("success kept %q", got.Error)
+	}
+	got = keepCancelReason(woodpecker.Pipeline{Status: "killed", Error: "boom"}, old)
+	if got.Error != "boom" {
+		t.Fatalf("real error=%q", got.Error)
+	}
+}
+
+func TestApplyCancelReason(t *testing.T) {
+	p := applyCancelReason(woodpecker.Pipeline{
+		Error: "Canceled",
+		Jobs: []woodpecker.Job{{Steps: []woodpecker.Step{
+			{Name: "build", State: "killed", Error: "Canceled"},
+			{Name: "deploy", State: "canceled"},
+			{Name: "clone", State: "success"},
+		}}},
+	}, "canceled by lipeiyang")
+	if p.Error != "canceled by lipeiyang" {
+		t.Fatalf("error=%q", p.Error)
+	}
+	if p.Jobs[0].Steps[0].Error != p.Error || p.Jobs[0].Steps[1].Error != p.Error {
+		t.Fatalf("steps=%+v", p.Jobs[0].Steps)
+	}
+	if p.Jobs[0].Steps[2].Error != "" {
+		t.Fatalf("success step=%q", p.Jobs[0].Steps[2].Error)
+	}
+}
+
+func TestCancelPipelineSetsReason(t *testing.T) {
+	var canceled bool
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/queue/info"):
+			_, _ = w.Write([]byte(`{"pending":[],"waiting_on_deps":[],"running":[],"stats":{}}`))
+		case strings.Contains(r.URL.Path, "/lookup/"):
+			_, _ = w.Write([]byte(`{"id":1,"full_name":"saidc/tm-maas"}`))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/cancel"):
+			canceled = true
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/pipelines/44"):
+			if canceled {
+				_, _ = w.Write([]byte(`{"number":44,"status":"killed","workflows":[{"name":"cd.office","state":"killed","children":[{"id":1,"pid":2,"name":"build","state":"killed","error":"Canceled"}]}]}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"number":44,"status":"running","workflows":[{"name":"cd.office","state":"running","children":[{"id":1,"pid":2,"name":"build","state":"running"}]}]}`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/logs/"):
+			_ = json.NewEncoder(w).Encode([]map[string]string{{"out": "uv sync"}})
+		case strings.HasSuffix(r.URL.Path, "/web-config.js"):
+			_, _ = w.Write([]byte(`WOODPECKER_CSRF = "tok";`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(s.Close)
+	c := New(config.Config{}, nil, woodpecker.New(s.URL, "t"), nil)
+	got, err := c.cancelPipeline("", "saidc/tm-maas", 44, "canceled by lipeiyang")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !canceled {
+		t.Fatal("expected cancel")
+	}
+	if got.Error != "canceled by lipeiyang" {
+		t.Fatalf("error=%q", got.Error)
+	}
+	if len(got.Jobs) == 0 || got.Jobs[0].Steps[0].Error != got.Error {
+		t.Fatalf("steps=%+v", got.Jobs)
+	}
+}
+
 func TestDecoratePipeKeepsKernelJobs(t *testing.T) {
 	c := New(config.Config{}, nil, nil, nil)
 	p := c.decoratePipe(woodpecker.Pipeline{Status: "error", Error: "bad yaml", Repo: "saidc/demo"})

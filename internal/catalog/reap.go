@@ -91,7 +91,7 @@ func (c *Catalog) reapOne(p woodpecker.Pipeline, now time.Time, prev, keep map[s
 	if len(steps) == 0 {
 		steps = []woodpecker.Step{{}}
 	}
-	cancel := false
+	var staleSteps []woodpecker.Step
 	for _, s := range steps {
 		id := stepID(s)
 		key := watchKey(fresh.Repo, fresh.Number, id)
@@ -105,19 +105,38 @@ func (c *Catalog) reapOne(p woodpecker.Pipeline, now time.Time, prev, keep map[s
 		next, stale := bumpWatch(prev[key], logFP(woodpecker.FormatLog(text)), now, staleAfter)
 		keep[key] = next
 		if stale {
-			cancel = true
+			staleSteps = append(staleSteps, s)
 		}
 	}
-	if !cancel {
+	if len(staleSteps) == 0 {
 		return
 	}
-	done, err := c.CancelPipeline("", fresh.Repo, fresh.Number)
+	reason := silentCancelReason(staleSteps)
+	done, err := c.cancelPipeline("", fresh.Repo, fresh.Number, reason)
 	if err != nil {
 		log.Printf("pipeline reap: cancel %s #%d: %v", fresh.Repo, fresh.Number, err)
 		return
 	}
-	log.Printf("pipeline reap: cancel %s #%d (silent %s)", fresh.Repo, fresh.Number, staleAfter)
+	log.Printf("pipeline reap: cancel %s #%d (%s)", fresh.Repo, fresh.Number, reason)
 	c.emit(done)
+}
+
+func silentCancelReason(steps []woodpecker.Step) string {
+	var names []string
+	seen := map[string]bool{}
+	for _, s := range steps {
+		n := strings.TrimSpace(s.Name)
+		if n == "" || seen[n] {
+			continue
+		}
+		seen[n] = true
+		names = append(names, n)
+	}
+	msg := fmt.Sprintf("canceled: no new log for %dm", int(staleAfter.Minutes()))
+	if len(names) > 0 {
+		msg += " on step " + strings.Join(names, ", ")
+	}
+	return msg
 }
 
 func (c *Catalog) emit(p woodpecker.Pipeline) {

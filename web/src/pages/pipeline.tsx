@@ -143,6 +143,8 @@ export function PipelinePage() {
     queue_position: activeJob?.queue_position || p.queue_position,
     agent: activeJob?.agent || p.agent,
   })
+  const reason = p.error || activeStep?.error || ""
+  const logText = [reason && reason !== log ? reason : "", log].filter(Boolean).join("\n\n")
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -174,6 +176,7 @@ export function PipelinePage() {
           ) : p.agent ? (
             <p className="mt-1 text-sm text-muted-foreground">{t("waitAgent", { agent: p.agent })}</p>
           ) : null}
+          {p.error ? <p className="mt-1 text-sm">{p.error}</p> : null}
           <p className="mt-1 text-sm text-muted-foreground">
             {yamlSecretNames.length
               ? t("yamlSecrets", { names: yamlSecretNames.join(", ") })
@@ -237,10 +240,10 @@ export function PipelinePage() {
               <Skeleton className="h-4 w-5/6" />
               <Skeleton className="h-4 w-4/6" />
             </div>
-          ) : log || activeStep?.error || p.error ? (
+          ) : logText ? (
             <AutoHideScroll className="min-h-0 flex-1">
               <pre className="p-4 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
-                {log || activeStep?.error || p.error}
+                {logText}
               </pre>
             </AutoHideScroll>
           ) : (
