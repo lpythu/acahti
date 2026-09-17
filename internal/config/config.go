@@ -26,6 +26,7 @@ type Config struct {
 	DataDir           string
 	DatabaseURL       string
 	ConfigToken       string
+	ArgosDashURL      string
 }
 
 func getenv(key, fallback string) string {
@@ -54,5 +55,6 @@ func Load() Config {
 		DataDir:           getenv("ACAHTI_DATA", "/var/lib/acahti"),
 		DatabaseURL:       getenv("ACAHTI_DATABASE_URL", ""),
 		ConfigToken:       getenv("ACAHTI_CONFIG_TOKEN", ""),
+		ArgosDashURL:      strings.TrimRight(getenv("ARGOS_DASH_URL", ""), "/"),
 	}
 }

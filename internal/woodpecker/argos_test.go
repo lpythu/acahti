@@ -18,6 +18,16 @@ func TestParseArgosLog(t *testing.T) {
 	if sid != "xyzxyzxyzxyz" || url != "" {
 		t.Fatalf("sid only: %q %q", sid, url)
 	}
+	sid, url = ParseArgosLog("argos 51p4z87i88ae\ndash ********/runs/51p4z87i88ae\n")
+	if sid != "51p4z87i88ae" || url != "" {
+		t.Fatalf("redacted dash: %q %q", sid, url)
+	}
+	if got := DashRunURL("https://argos.saidc.ai/", "51p4z87i88ae"); got != "https://argos.saidc.ai/runs/51p4z87i88ae" {
+		t.Fatalf("DashRunURL %q", got)
+	}
+	if DashRunURL("", "51p4z87i88ae") != "" {
+		t.Fatal("empty base")
+	}
 	if !E2EJob("e2e.office") || E2EJob("ci") || !E2EJob("e2e") {
 		t.Fatal("E2EJob")
 	}

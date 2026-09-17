@@ -35,6 +35,7 @@ services:
       POSTGRES_VERSION: ${POSTGRES_VERSION:-16-alpine}
       ACAHTI_DATA: /var/lib/acahti
       ACAHTI_CONFIG_TOKEN: ${ACAHTI_CONFIG_TOKEN:?set ACAHTI_CONFIG_TOKEN in .env}
+      ARGOS_DASH_URL: ${ARGOS_DASH_URL:-}
     volumes:
       - ${ACAHTI_DATA:-/var/lib/acahti}/gateway:/var/lib/acahti
     mem_limit: 256m

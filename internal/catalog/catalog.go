@@ -1074,6 +1074,9 @@ func (c *Catalog) captureArgos(p woodpecker.Pipeline) woodpecker.Pipeline {
 		if job.ArgosURL == "" {
 			job.ArgosURL = url
 		}
+		if job.ArgosURL == "" {
+			job.ArgosURL = woodpecker.DashRunURL(c.Cfg.ArgosDashURL, job.ArgosSID)
+		}
 	}
 	return p
 }
