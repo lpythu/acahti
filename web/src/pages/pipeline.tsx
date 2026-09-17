@@ -232,7 +232,9 @@ export function PipelinePage() {
             </div>
           ) : log || activeStep?.error || p.error ? (
             <AutoHideScroll className="min-h-0 flex-1">
-              <pre className="p-4 font-mono text-xs whitespace-pre-wrap">{log || activeStep?.error || p.error}</pre>
+              <pre className="p-4 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
+                {log || activeStep?.error || p.error}
+              </pre>
             </AutoHideScroll>
           ) : (
             <EmptyState>{jobWait ? t(jobWait.key, jobWait.vars) : t("noLog")}</EmptyState>

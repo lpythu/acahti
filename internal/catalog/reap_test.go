@@ -101,7 +101,7 @@ func TestReapOneCancelsSilentStep(t *testing.T) {
 	c := New(config.Config{}, nil, woodpecker.New(s.URL, "t"), nil)
 	p := woodpecker.Pipeline{Repo: "saidc/exweb", Number: 9, Status: "running"}
 	now := time.Date(2026, 9, 14, 23, 0, 0, 0, time.UTC)
-	prev := map[string]logWatch{"saidc/exweb#9/466": {fp: logFP("Error: UPGRADE FAILED"), since: now.Add(-staleAfter)}}
+	prev := map[string]logWatch{"saidc/exweb#9/466": {fp: logFP(woodpecker.FormatLog(`[{"out":"Error: UPGRADE FAILED"}]`)), since: now.Add(-staleAfter)}}
 	keep := map[string]logWatch{}
 	c.reapOne(p, now, prev, keep)
 	if !canceled {

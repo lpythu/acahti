@@ -161,11 +161,20 @@ func TestFormatLog(t *testing.T) {
 		t.Fatalf("empty: %q", got)
 	}
 	in := `[{"out":"hello\n"},{"data":"d29ybGQ="}]`
-	if got := FormatLog(in); got != "hello\nworld" {
+	if got := FormatLog(in); got != "hello\nworld\n" {
 		t.Fatalf("lines: %q", got)
 	}
-	if got := FormatLog("plain text"); got != "plain text" {
+	if got := FormatLog(`[{"out":"+ git init"},{"out":"Initialized empty"}]`); got != "+ git init\nInitialized empty\n" {
+		t.Fatalf("no nl: %q", got)
+	}
+	if got := FormatLog(`[{"out":"25%\r100%"}]`); got != "25%\n100%\n" {
+		t.Fatalf("cr: %q", got)
+	}
+	if got := FormatLog("plain text"); got != "plain text\n" {
 		t.Fatalf("plain: %q", got)
+	}
+	if got := FormatLog(`[{"data":[43,32,103,105,116]}]`); got != "+ git\n" {
+		t.Fatalf("byte array: %q", got)
 	}
 }
 

@@ -106,7 +106,9 @@ export function PipelineRunRow({
           <span className="mt-0.5 block truncate text-xs text-muted-foreground">{meta}</span>
         </span>
       </Link>
-      <PipelineJobDots jobs={jobs} />
+      <div className="w-56 shrink-0">
+        <PipelineJobDots jobs={jobs} />
+      </div>
       <div className="flex w-40 shrink-0 flex-col items-end gap-0.5 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1.5" title={exact}>
           <CalendarIcon className="size-3.5" />

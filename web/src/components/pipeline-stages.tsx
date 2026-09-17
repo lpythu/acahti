@@ -16,7 +16,7 @@ export function PipelineJobDots({ jobs }: { jobs: { name: string; state: string;
   const extra = named.slice(VISIBLE)
 
   return (
-    <ol className="flex max-w-64 shrink-0 flex-wrap items-center justify-end gap-1" aria-label={t("jobs")}>
+    <ol className="flex flex-wrap items-center justify-start gap-1" aria-label={t("jobs")}>
       {shown.map((s, i) => {
         const label = statusText(s.state, t, s.wait)
         return (

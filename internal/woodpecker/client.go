@@ -3,7 +3,6 @@ package woodpecker
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -112,6 +111,18 @@ func (p Pipeline) Steps() []Step {
 	return out
 }
 
+func logText(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	if s == "" {
+		return ""
+	}
+	if !strings.HasSuffix(s, "\n") {
+		s += "\n"
+	}
+	return s
+}
+
 func FormatLog(raw string) string {
 	s := strings.TrimSpace(raw)
 	if s == "" || s == "null" {
@@ -119,29 +130,21 @@ func FormatLog(raw string) string {
 	}
 	var lines []struct {
 		Out  string `json:"out"`
-		Data string `json:"data"`
+		Data []byte `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(s), &lines); err != nil {
-		return raw
+		return logText(raw)
 	}
 	if len(lines) == 0 {
 		return ""
 	}
 	var b strings.Builder
 	for _, l := range lines {
-		if l.Out != "" {
-			b.WriteString(l.Out)
-			continue
+		chunk := l.Out
+		if chunk == "" {
+			chunk = string(l.Data)
 		}
-		if l.Data == "" {
-			continue
-		}
-		dec, err := base64.StdEncoding.DecodeString(l.Data)
-		if err != nil {
-			b.WriteString(l.Data)
-			continue
-		}
-		b.Write(dec)
+		b.WriteString(logText(chunk))
 	}
 	return b.String()
 }
