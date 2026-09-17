@@ -264,6 +264,31 @@ func TestExpandMergesExistingFromSecret(t *testing.T) {
 	}
 }
 
+func TestExpandArgosDashSecret(t *testing.T) {
+	got, err := Expand([]byte(`steps:
+  e2e:
+    pipe: argos@v1
+    secrets:
+      ARGOS_DASH: argos_dash
+    with:
+      env: office
+      selectors: pack:platform tag:cluster
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(got)
+	if !strings.Contains(text, "from_secret: argos_dash") {
+		t.Fatalf("missing from_secret:\n%s", text)
+	}
+	if !strings.Contains(text, "acahti-pipe argos") {
+		t.Fatalf("missing argos dispatch:\n%s", text)
+	}
+	if !strings.Contains(text, "INPUT_ENV: office") {
+		t.Fatalf("missing env:\n%s", text)
+	}
+}
+
 func TestExpandDockerGc(t *testing.T) {
 	got, err := Expand([]byte(`steps:
   gc:

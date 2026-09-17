@@ -115,7 +115,10 @@ ensure_env() {
 # Control plane and Runner must share the same train; tag upgrades call this from up.sh.
 sync_runner() {
   local spec="${ACAHTI_BUILD:-${ACAHTI_DEPLOY:-}}"
-  [[ -n "$spec" ]] || return 0
+  if [[ -z "$spec" ]]; then
+    echo "warn: ACAHTI_BUILD unset; Runner pipes not synced" >&2
+    return 0
+  fi
   local root secret host
   root="$(acahti_root)"
   secret="${WOODPECKER_AGENT_SECRET:-}"
