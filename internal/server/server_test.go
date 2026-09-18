@@ -331,8 +331,8 @@ func TestGitPushActUser(t *testing.T) {
 	req.SetBasicAuth("acahti", robotTok)
 	rr = httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
-	if hit != "" || rr.Code != http.StatusForbidden {
-		t.Fatalf("robot clone hit=%q code=%d", hit, rr.Code)
+	if hit != "/acme/demo.git/info/refs" || rr.Code != http.StatusTeapot || webauth != "acahti" || authz != "" {
+		t.Fatalf("robot clone hit=%q code=%d webauth=%q authz=%q", hit, rr.Code, webauth, authz)
 	}
 }
 

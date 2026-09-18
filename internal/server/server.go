@@ -193,13 +193,26 @@ func gitAs(a *auth.Service, cat *catalog.Catalog, adminUser string, p *httputil.
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	if adminUser != "" && login == adminUser {
+	// Admin may clone/fetch (CI runners authenticate as the forge admin oauth user).
+	// Push/receive stays forbidden so the bootstrap admin is not a shared write credential.
+	if adminUser != "" && login == adminUser && gitWrite(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 	r.Header.Del("Authorization")
 	r.Header.Set("X-WebAuth-User", login)
 	p.ServeHTTP(w, r)
+}
+
+func gitWrite(r *http.Request) bool {
+	p := r.URL.Path
+	if strings.HasSuffix(p, "/git-receive-pack") {
+		return true
+	}
+	if strings.HasSuffix(p, "/info/refs") && r.URL.Query().Get("service") == "git-receive-pack" {
+		return true
+	}
+	return false
 }
 
 // gitLogin: Acahti login + password, or login + access_token (MCP / job identity).
