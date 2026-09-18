@@ -112,6 +112,11 @@ func (c *Catalog) CreateRepo(name, team string) (forgejo.Repo, error) {
 		if err := c.AttachRepo(team, repo.Name); err != nil {
 			return forgejo.Repo{}, err
 		}
+		// Team attach alone only updates the catalog index. Grant syncs Forgejo
+		// team↔repo ACL so members (e.g. service accounts) can actually git push.
+		if err := c.SetRepoTeamGrant(c.Cfg.AdminUser, c.Cfg.Org, repo.Name, true); err != nil {
+			return forgejo.Repo{}, err
+		}
 		repo.Team = team
 	}
 	if c.wp != nil && c.wp.Ready() {
