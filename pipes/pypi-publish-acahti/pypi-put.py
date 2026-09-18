@@ -61,7 +61,7 @@ def main() -> None:
     token = os.environ.get("ACAHTI_ADMIN_TOKEN", "").strip()
     if not token:
         token = (data_root / "admin.token").read_text().strip()
-    user = os.environ.get("ACAHTI_ADMIN_USER", "acahti")
+    user = os.environ.get("ACAHTI_ADMIN_USER", "acahti_bot")
     org = os.environ.get("ACAHTI_ORG", "acme")
     origin = os.environ.get("ORIGIN", "http://127.0.0.1:8080").rstrip("/")
     host = os.environ.get("HOST_HEADER", os.environ.get("DOMAIN", "localhost"))

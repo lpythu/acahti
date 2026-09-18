@@ -13,7 +13,7 @@ import (
 )
 
 func TestPKCERoundTrip(t *testing.T) {
-	a := auth.New([]byte("secret"), "acahti")
+	a := auth.New([]byte("secret"), "acahti_bot")
 	s, err := Open(t.TempDir(), "http://acahti.example", a)
 	if err != nil {
 		t.Fatal(err)

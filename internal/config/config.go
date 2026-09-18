@@ -47,7 +47,7 @@ func Load() Config {
 		AdminToken:        getenv("ACAHTI_ADMIN_TOKEN", ""),
 		WoodpeckerTok:     getenv("WOODPECKER_TOKEN", ""),
 		SessionSecret:     getenv("ACAHTI_SESSION_SECRET", "dev-only-change-me"),
-		AdminUser:         getenv("ACAHTI_ADMIN_USER", "acahti"),
+		AdminUser:         getenv("ACAHTI_ADMIN_USER", "acahti_bot"),
 		Version:           getenv("ACAHTI_VERSION", Version),
 		ForgejoVersion:    getenv("FORGEJO_VERSION", "15.0.8"),
 		WoodpeckerVersion: getenv("WOODPECKER_VERSION", "3.18.1"),

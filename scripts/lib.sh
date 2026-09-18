@@ -66,7 +66,7 @@ ensure_env() {
   : "${ROOT_URL:=https://${DOMAIN}}"
   : "${ACAHTI_ORG:=acme}"
   : "${ACAHTI_DATA:=/var/lib/acahti}"
-  : "${ACAHTI_ADMIN_USER:=acahti}"
+  : "${ACAHTI_ADMIN_USER:=acahti_bot}"
   : "${ACAHTI_ADMIN_EMAIL:=${ACAHTI_ADMIN_USER}@noreply.${DOMAIN}}"
   : "${GATEWAY_BIND:=127.0.0.1:8080}"
   # Remote Runner publishes packages over LAN HTTP (gRPC host :8080).

@@ -131,7 +131,7 @@ func TestPublicAllowlist(t *testing.T) {
 		t.Fatalf("git without token hit=%q code=%d", hit, rr.Code)
 	}
 
-	tok := auth.New([]byte("test"), "acahti").Issue("alice")
+	tok := auth.New([]byte("test"), "acahti_bot").Issue("alice")
 	gitReq := httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs", nil)
 	gitReq.SetBasicAuth("alice", tok)
 	rr = httptest.NewRecorder()
@@ -271,15 +271,15 @@ func TestGitPushActUser(t *testing.T) {
 		SessionSecret: "test",
 		RootURL:       "http://127.0.0.1",
 		Org:           "acme",
-		AdminUser:     "acahti",
+		AdminUser:     "acahti_bot",
 		AdminToken:    "admin-tok",
 		ForgejoURL:    forge.URL,
 		DataDir:       t.TempDir(),
 	}
 	h := New(cfg, testCatalog(t, cfg, forge.URL, ""), events.New())
-	a := auth.New([]byte("test"), "acahti")
+	a := auth.New([]byte("test"), "acahti_bot")
 	aliceTok := a.Issue("alice")
-	robotTok := a.Issue("acahti")
+	robotTok := a.Issue("acahti_bot")
 
 	hit, authz, webauth = "", "", ""
 	req := httptest.NewRequest(http.MethodPost, "/acme/demo.git/git-receive-pack", nil)
@@ -319,7 +319,7 @@ func TestGitPushActUser(t *testing.T) {
 
 	hit, authz, webauth = "", "", ""
 	req = httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs?service=git-receive-pack", nil)
-	req.SetBasicAuth("acahti", robotTok)
+	req.SetBasicAuth("acahti_bot", robotTok)
 	rr = httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	if hit != "" || rr.Code != http.StatusForbidden {
@@ -328,10 +328,10 @@ func TestGitPushActUser(t *testing.T) {
 
 	hit, authz, webauth = "", "", ""
 	req = httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs?service=git-upload-pack", nil)
-	req.SetBasicAuth("acahti", robotTok)
+	req.SetBasicAuth("acahti_bot", robotTok)
 	rr = httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
-	if hit != "/acme/demo.git/info/refs" || rr.Code != http.StatusTeapot || webauth != "acahti" || authz != "" {
+	if hit != "/acme/demo.git/info/refs" || rr.Code != http.StatusTeapot || webauth != "acahti_bot" || authz != "" {
 		t.Fatalf("robot clone hit=%q code=%d webauth=%q authz=%q", hit, rr.Code, webauth, authz)
 	}
 }

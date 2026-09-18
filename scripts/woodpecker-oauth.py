@@ -21,7 +21,7 @@ def env(name: str, default: str = "") -> str:
 
 ROOT = env("ROOT_URL", "https://acahti.example.com").rstrip("/")
 DOMAIN = env("DOMAIN", "localhost")
-USER = env("ACAHTI_ADMIN_USER", "acahti")
+USER = env("ACAHTI_ADMIN_USER", "acahti_bot")
 PASSWORD = env("ACAHTI_ADMIN_PASSWORD", "")
 FJ = env("FORGEJO_LOOPBACK", "http://127.0.0.1:3000").rstrip("/")
 WP = env("WOODPECKER_LOOPBACK", "http://localhost:8000").rstrip("/")
