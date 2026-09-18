@@ -14,7 +14,7 @@ import { PipelineJobDots } from "@/components/pipeline-stages"
 import { RunStatusIcon } from "@/components/run-status-icon"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { useLocale, useT } from "@/i18n/i18n"
+import { useLocale, useT, useTr } from "@/i18n/i18n"
 import { splitRepo, type Pipeline } from "@/lib/api"
 import { formatDuration, formatUnix, formatUnixWhen } from "@/lib/format"
 import { shortSha } from "@/lib/git"
@@ -63,6 +63,7 @@ export function PipelineRunRow({
   onApprove?: () => void
 }) {
   const t = useT()
+  const tr = useTr()
   const locale = useLocale()
   const { owner, name } = splitRepo(pipe.repo)
   const href = pipelineHref(owner, name, pipe.number)
@@ -72,11 +73,31 @@ export function PipelineRunRow({
   const kindLabel = triggerRefLabel(kind)
   const vars = triggerVars(pipe)
   const sha = shortSha(pipe.commit || "")
-  const detail = t(runEventKey(pipe.event, pipe.ref), { ...vars, sha: sha === "—" ? vars.ref : sha })
-  const meta = t(hideRepo ? "runHeadlineRepo" : "runHeadline", {
+  const shaText = sha === "—" ? vars.ref : sha
+  const author = (
+    <span className="font-medium text-foreground">{vars.author}</span>
+  )
+  const shaNode = pipe.commit && sha !== "—" ? (
+    <Link
+      to={`/repos/${owner}/${name}/commits/${pipe.commit}`}
+      className="font-mono text-sky-700 hover:underline dark:text-sky-400"
+    >
+      {shaText}
+    </Link>
+  ) : (
+    <span className="font-mono text-sky-700 dark:text-sky-400">{shaText}</span>
+  )
+  const refMark = <span className="font-medium text-sky-700 dark:text-sky-400">{vars.ref}</span>
+  const detail = tr(runEventKey(pipe.event, pipe.ref), { ...vars, sha: shaNode, author, ref: refMark })
+  const meta = tr(hideRepo ? "runHeadlineRepo" : "runHeadline", {
+    repo: <span className="font-medium text-foreground">{name}</span>,
+    number: <span className="tabular-nums text-foreground">{pipe.number}</span>,
+    detail,
+  })
+  const metaTitle = t(hideRepo ? "runHeadlineRepo" : "runHeadline", {
     repo: name,
     number: pipe.number,
-    detail,
+    detail: t(runEventKey(pipe.event, pipe.ref), { ...vars, sha: shaText }),
   })
   const when = formatUnixWhen(pipe.started || pipe.created, locale)
   const exact = formatUnix(pipe.started || pipe.created)
@@ -87,52 +108,50 @@ export function PipelineRunRow({
   const blocked = pipe.status === "blocked"
 
   return (
-    <li className="flex items-start gap-3 px-3 py-3 hover:bg-muted/50">
-      <Link to={href} className="flex min-w-0 flex-1 items-start gap-3">
-        <RunStatusIcon status={pipe.status} className="mt-0.5 size-5" />
-        <span className="min-w-0 flex-1">
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 truncate text-sm font-medium hover:underline">{title}</span>
-            {ref ? (
-              <Badge
-                variant="outline"
-                className="max-w-28 shrink-0 font-normal text-sky-700 dark:text-sky-400"
-                title={kindLabel ? t(kindLabel) : undefined}
-              >
-                <TriggerRefIcon kind={kind} />
-                <span className="truncate">{ref}</span>
-              </Badge>
-            ) : null}
-          </span>
-          <span className="mt-0.5 block truncate text-xs text-muted-foreground">{meta}</span>
-          {pipe.error ? (
-            <span className="mt-0.5 block truncate text-xs text-muted-foreground" title={pipe.error}>
-              {pipe.error}
+    <li className="flex items-center gap-3 px-3 py-3 hover:bg-muted/50">
+      <div className="min-w-0 flex-1 basis-32 @2xl/main:basis-40 @4xl/main:basis-48">
+        <div className="flex min-w-0 items-center gap-2">
+          <Link to={href} className="flex min-w-0 items-center gap-3">
+            <RunStatusIcon status={pipe.status} className="size-5 shrink-0" />
+            <span className="min-w-0 truncate text-sm font-medium hover:underline" title={title}>
+              {title}
             </span>
+          </Link>
+          {ref ? (
+            <Badge
+              variant="outline"
+              className="hidden max-w-28 shrink-0 font-normal text-sky-700 @xs/main:inline-flex dark:text-sky-400"
+              title={kindLabel ? t(kindLabel) : undefined}
+            >
+              <TriggerRefIcon kind={kind} />
+              <span className="truncate">{ref}</span>
+            </Badge>
           ) : null}
-        </span>
-      </Link>
-      <div className="flex min-w-0 flex-[2] flex-col items-start gap-1">
-        <PipelineJobDots jobs={jobs} />
-        {argos.length ? (
-          <div className="flex flex-wrap gap-1">
-            {argos.map((item) => (
-              <a
-                key={item.url}
-                className="text-xs text-sky-700 hover:underline dark:text-sky-400"
-                href={item.url}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(event) => event.stopPropagation()}
-              >
-                {t("argosDash")}
-                {argos.length > 1 ? ` ${item.name.replace(/^e2e\./, "")}` : ""}
-              </a>
-            ))}
-          </div>
+          {argos.map((item) => (
+            <Badge
+              key={item.url}
+              variant="outline"
+              render={<a href={item.url} target="_blank" rel="noreferrer" />}
+              className="max-w-28 shrink-0 font-normal text-sky-700 dark:text-sky-400"
+            >
+              {t("argosDash")}
+              {argos.length > 1 ? ` ${item.name.replace(/^e2e\./, "")}` : ""}
+            </Badge>
+          ))}
+        </div>
+        <p className="mt-0.5 truncate pl-8 text-xs text-muted-foreground" title={metaTitle}>
+          {meta}
+        </p>
+        {pipe.error ? (
+          <p className="mt-0.5 truncate pl-8 text-xs text-muted-foreground" title={pipe.error}>
+            {pipe.error}
+          </p>
         ) : null}
       </div>
-      <div className="flex w-40 shrink-0 flex-col items-end gap-0.5 text-xs text-muted-foreground">
+      <div className="flex min-w-0 max-w-48 flex-1 items-center @xl/main:max-w-56 @4xl/main:max-w-xs @5xl/main:max-w-sm">
+        <PipelineJobDots jobs={jobs} />
+      </div>
+      <div className="flex w-28 shrink-0 flex-col items-end justify-center gap-0.5 text-xs text-muted-foreground @xl/main:w-36 @3xl/main:w-40">
         <span className="inline-flex items-center gap-1.5" title={exact}>
           <CalendarIcon className="size-3.5" />
           {when}

@@ -36,20 +36,20 @@ func (p *Pages) Teams(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, "invalid json")
 			return
 		}
-		out, err := p.Cat.CreateTeam(user, body.Name)
+		out, err := p.cat(r).CreateTeam(user, body.Name)
 		if err != nil {
 			writeCatErr(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, out)
 	case http.MethodDelete:
-		if err := p.Cat.DeleteTeam(user, name); err != nil {
+		if err := p.cat(r).DeleteTeam(user, name); err != nil {
 			writeCatErr(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	default:
-		out, err := p.Cat.TeamAccess(user, name)
+		out, err := p.cat(r).TeamAccess(user, name)
 		if err != nil {
 			writeCatErr(w, err)
 			return
@@ -66,7 +66,7 @@ func (p *Pages) TeamMember(w http.ResponseWriter, r *http.Request) {
 	team, login := r.PathValue("team"), r.PathValue("login")
 	switch r.Method {
 	case http.MethodDelete:
-		if err := p.Cat.RemoveTeamMember(user, team, login); err != nil {
+		if err := p.cat(r).RemoveTeamMember(user, team, login); err != nil {
 			writeCatErr(w, err)
 			return
 		}
@@ -75,7 +75,7 @@ func (p *Pages) TeamMember(w http.ResponseWriter, r *http.Request) {
 			Permission string `json:"permission"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		if err := p.Cat.SetTeamMember(user, team, login, body.Permission); err != nil {
+		if err := p.cat(r).SetTeamMember(user, team, login, body.Permission); err != nil {
 			writeCatErr(w, err)
 			return
 		}
@@ -91,12 +91,12 @@ func (p *Pages) TeamRepo(w http.ResponseWriter, r *http.Request) {
 	team, repo := r.PathValue("team"), r.PathValue("repo")
 	switch r.Method {
 	case http.MethodDelete:
-		if err := p.Cat.RemoveTeamRepo(user, team, repo); err != nil {
+		if err := p.cat(r).RemoveTeamRepo(user, team, repo); err != nil {
 			writeCatErr(w, err)
 			return
 		}
 	default:
-		if err := p.Cat.AddTeamRepo(user, team, repo); err != nil {
+		if err := p.cat(r).AddTeamRepo(user, team, repo); err != nil {
 			writeCatErr(w, err)
 			return
 		}

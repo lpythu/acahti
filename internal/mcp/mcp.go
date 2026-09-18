@@ -99,7 +99,7 @@ func tools() []toolSpec {
 		{Name: "agent_status", Description: "Host runners plus queue stats counted per pipeline (running / queued)", InputSchema: obj(pg)},
 		{Name: "deploy_approve", Description: "Approve a gated deploy pipeline", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 		{Name: "secret_list", Description: "List pipeline secret names (never values). scope org is org admins. scope repo is the effective set (org inherited plus repo) for repo admins. repo or owner+name for repo scope", InputSchema: obj(map[string]any{"scope": str, "repo": str, "owner": str, "name": str, "page": num, "page_size": num})},
-		{Name: "secret_put", Description: "Create or replace a pipeline secret. Does not echo value. org scope needs org admin. repo scope needs repo admin. name is the secret", InputSchema: obj(map[string]any{"scope": str, "name": str, "secret": str, "value": str, "events": map[string]any{"type": "array", "items": str}, "repo": str, "owner": str}, "value")},
+		{Name: "secret_put", Description: "Create or replace a pipeline secret. Does not echo value. org scope needs org admin. repo scope needs repo admin. name is the secret", InputSchema: obj(map[string]any{"scope": str, "name": str, "secret": str, "value": str, "repo": str, "owner": str}, "value")},
 		{Name: "secret_delete", Description: "Delete a pipeline secret. org scope needs org admin. repo scope needs repo admin and only deletes the repo override", InputSchema: obj(map[string]any{"scope": str, "name": str, "secret": str, "repo": str, "owner": str})},
 	}
 }
@@ -302,7 +302,7 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 	case "secret_list":
 		return s.listSecrets(token, str, pq)
 	case "secret_put":
-		return s.putSecret(token, str, a)
+		return s.putSecret(token, str)
 	case "secret_delete":
 		return s.deleteSecret(token, str)
 	default:
@@ -341,30 +341,6 @@ func repoArg(str func(string) string) string {
 	return ""
 }
 
-func asStrings(v any) []string {
-	switch x := v.(type) {
-	case []string:
-		return x
-	case []any:
-		out := make([]string, 0, len(x))
-		for _, e := range x {
-			s, _ := e.(string)
-			if s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-	case string:
-		if strings.TrimSpace(x) == "" {
-			return nil
-		}
-		parts := strings.FieldsFunc(x, func(r rune) bool { return r == ',' || r == ' ' })
-		return parts
-	default:
-		return nil
-	}
-}
-
 func (s *Server) secretScope(str func(string) string) (scope, repo, secret string) {
 	scope = strings.ToLower(str("scope"))
 	repo = repoArg(str)
@@ -397,12 +373,11 @@ func (s *Server) listSecrets(token string, str func(string) string, q page.Query
 	return s.Cat.ListOrgSecrets(token, q)
 }
 
-func (s *Server) putSecret(token string, str func(string) string, a map[string]any) (any, error) {
+func (s *Server) putSecret(token string, str func(string) string) (any, error) {
 	scope, repo, secret := s.secretScope(str)
 	if s.Cat == nil {
 		return nil, catalog.ErrNotFound
 	}
-	events := asStrings(a["events"])
 	if scope == "repo" {
 		owner, name, _ := strings.Cut(repo, "/")
 		if owner == "" || name == "" {
@@ -411,9 +386,9 @@ func (s *Server) putSecret(token string, str func(string) string, a map[string]a
 		if secret == "" {
 			secret = str("name")
 		}
-		return s.Cat.PutRepoSecret(token, owner, name, secret, str("value"), events)
+		return s.Cat.PutRepoSecret(token, owner, name, secret, str("value"))
 	}
-	return s.Cat.PutOrgSecret(token, secret, str("value"), events)
+	return s.Cat.PutOrgSecret(token, secret, str("value"))
 }
 
 func (s *Server) deletePackage(token string, str func(string) string) (any, error) {

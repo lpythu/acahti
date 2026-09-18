@@ -1,10 +1,10 @@
 import { type FormEvent, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 
+import { MenuButton } from "@/components/menu-button"
 import { MenuPanel } from "@/components/menu-panel"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useLoad } from "@/hooks/use-load"
 import { useT } from "@/i18n/i18n"
@@ -119,7 +119,8 @@ export function AddPersonMenu({
   }
 
   return (
-    <Popover
+    <MenuButton
+      label={title}
       open={open}
       onOpenChange={(next) => {
         setOpen(next)
@@ -129,11 +130,10 @@ export function AddPersonMenu({
           void users.reload()
         }
       }}
+      className="w-72"
     >
-      <PopoverTrigger render={<Button type="button" size="sm" />}>{title}</PopoverTrigger>
-      <PopoverContent className="w-72">
-        <MenuPanel loading={users.loading} error={users.error} empty={!users.loading && !options.length ? t("noUsers") : undefined}>
-          <form onSubmit={(e) => void submit(e)}>
+      <MenuPanel loading={users.loading} error={users.error} empty={!users.loading && !options.length ? t("noUsers") : undefined}>
+        <form onSubmit={(e) => void submit(e)}>
           <FieldGroup>
             <Field>
               <FieldLabel>{t("selectUser")}</FieldLabel>
@@ -165,8 +165,7 @@ export function AddPersonMenu({
             </Button>
           </FieldGroup>
         </form>
-        </MenuPanel>
-      </PopoverContent>
-    </Popover>
+      </MenuPanel>
+    </MenuButton>
   )
 }

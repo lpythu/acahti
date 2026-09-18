@@ -67,6 +67,7 @@ func (p *Pages) SetSession(w http.ResponseWriter, user string) {
 
 func (p *Pages) ClearSession(w http.ResponseWriter) {
 	p.Auth.ClearCookie(w)
+	p.clearOrgCookie(w)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -107,7 +108,7 @@ func (p *Pages) Me(w http.ResponseWriter, r *http.Request) {
 			author = u.FullName
 		}
 	}
-	writeJSON(w, http.StatusOK, identity.Session(user, author, admin, p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
+	p.writeSession(w, r, user, author, admin)
 }
 
 func (p *Pages) Login(w http.ResponseWriter, r *http.Request) {
@@ -125,7 +126,7 @@ func (p *Pages) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.SetSession(w, u.Login)
-	writeJSON(w, http.StatusOK, identity.Session(u.Login, u.FullName, p.isAdmin(u.Login), p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
+	p.writeSession(w, r, u.Login, u.FullName, p.isAdmin(u.Login))
 }
 
 func (p *Pages) Logout(w http.ResponseWriter, r *http.Request) {
@@ -142,7 +143,20 @@ func (p *Pages) Board(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	out, err := p.Cat.BoardPRs(user, page.Parse(r))
+	out, err := p.cat(r).BoardPRs(user, page.Parse(r))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (p *Pages) BoardHeatmap(w http.ResponseWriter, r *http.Request) {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
+		return
+	}
+	out, err := p.cat(r).BoardHeatmap(user)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
@@ -343,7 +357,7 @@ func (p *Pages) Join(w http.ResponseWriter, r *http.Request) {
 	_ = p.FJ.AddOrgMember(p.Cfg.Org, u.Login)
 	_ = p.rememberPassword(u.Login, body.Password)
 	p.SetSession(w, u.Login)
-	writeJSON(w, http.StatusOK, identity.Session(u.Login, u.FullName, false, p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
+	p.writeSession(w, r, u.Login, u.FullName, false)
 }
 
 func (p *Pages) Invites(w http.ResponseWriter, r *http.Request) {

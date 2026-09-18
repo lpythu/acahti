@@ -103,7 +103,7 @@ func TestSecretsACL(t *testing.T) {
 		t.Fatalf("effective set %+v", got)
 	}
 
-	if _, err := c.PutOrgSecret("bob", "harbor_password", "x", nil); !errors.Is(err, ErrNotFound) {
+	if _, err := c.PutOrgSecret("bob", "harbor_password", "x"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("member put: %v", err)
 	}
 	if wpHits == 0 {

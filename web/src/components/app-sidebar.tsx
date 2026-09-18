@@ -8,6 +8,7 @@ import {
   GitPullRequestIcon,
   PanelLeftCloseIcon,
   PanelLeftIcon,
+  Building2Icon,
   ShieldIcon,
   TagIcon,
   UsersIcon,
@@ -75,6 +76,7 @@ function secondaryItems(
       | "tabSecrets"
       | "adminHome"
       | "adminSecrets"
+      | "orgs"
       | "users"
       | "teams",
   ) => string,
@@ -100,6 +102,7 @@ function secondaryItems(
   if (path.startsWith("/admin")) {
     return [
       { title: t("adminHome"), url: "/admin", icon: <ShieldIcon />, end: true },
+      { title: t("orgs"), url: "/admin/orgs", icon: <Building2Icon /> },
       { title: t("adminSecrets"), url: "/admin/secrets", icon: <KeyRoundIcon /> },
       { title: t("teams"), url: "/admin/teams", icon: <FolderIcon /> },
       { title: t("users"), url: "/admin/users", icon: <UsersIcon /> },

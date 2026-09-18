@@ -5,7 +5,7 @@ export function AdminSecretsPage() {
   return (
     <SecretsPanel
       load={(q) => api.orgSecrets(q)}
-      onPut={(name, value, events) => api.putOrgSecret(name, value, events)}
+      onPut={(name, value) => api.putOrgSecret(name, value)}
       onDelete={(name) => api.deleteOrgSecret(name)}
     />
   )

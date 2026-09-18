@@ -1,9 +1,9 @@
 import { Code2Icon } from "lucide-react"
 import { toast } from "sonner"
 
+import { MenuButton } from "@/components/menu-button"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useT } from "@/i18n/i18n"
 
 export function CloneMenu({ url }: { url: string }) {
@@ -19,19 +19,21 @@ export function CloneMenu({ url }: { url: string }) {
   }
 
   return (
-    <Popover>
-      <PopoverTrigger render={<Button type="button" variant="default" size="sm" />}>
-        <Code2Icon />
-        {t("clone")}
-      </PopoverTrigger>
-      <PopoverContent className="flex w-96 flex-col gap-3">
-        <div className="flex gap-2">
-          <Input readOnly value={url} className="h-8 font-mono text-xs" />
-          <Button type="button" size="sm" variant="outline" onClick={() => void copy()}>
-            {t("copy")}
-          </Button>
-        </div>
-      </PopoverContent>
-    </Popover>
+    <MenuButton
+      label={
+        <>
+          <Code2Icon />
+          {t("clone")}
+        </>
+      }
+      className="flex w-96 flex-col gap-3"
+    >
+      <div className="flex gap-2">
+        <Input readOnly value={url} className="h-8 font-mono text-xs" />
+        <Button type="button" size="sm" variant="outline" onClick={() => void copy()}>
+          {t("copy")}
+        </Button>
+      </div>
+    </MenuButton>
   )
 }

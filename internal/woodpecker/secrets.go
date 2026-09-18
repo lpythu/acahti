@@ -11,12 +11,11 @@ import (
 	"acahti/internal/page"
 )
 
-var DefaultSecretEvents = []string{"push", "tag", "manual"}
+var DefaultSecretEvents = []string{"push", "tag", "manual", "cron", "pull_request"}
 
 type Secret struct {
-	Name   string   `json:"name"`
-	Events []string `json:"events,omitempty"`
-	Scope  string   `json:"scope,omitempty"`
+	Name  string `json:"name"`
+	Scope string `json:"scope,omitempty"`
 }
 
 type kernelSecret struct {
@@ -34,16 +33,13 @@ type Org struct {
 }
 
 func publicSecret(s kernelSecret) Secret {
-	return Secret{Name: s.Name, Events: s.Events}
+	return Secret{Name: s.Name}
 }
 
-func secretBody(name, value string, events []string) map[string]any {
-	if len(events) == 0 {
-		events = DefaultSecretEvents
-	}
+func secretBody(name, value string) map[string]any {
 	body := map[string]any{
 		"name":         name,
-		"events":       events,
+		"events":       DefaultSecretEvents,
 		"images":       []string{},
 		"plugins_only": false,
 	}
@@ -149,7 +145,7 @@ func (c *Client) hasSecret(list []Secret, name string) bool {
 	return false
 }
 
-func (c *Client) PutOrgSecret(org, name, value string, events []string) (Secret, error) {
+func (c *Client) PutOrgSecret(org, name, value string) (Secret, error) {
 	key, err := c.orgKey(org)
 	if err != nil {
 		return Secret{}, err
@@ -158,10 +154,10 @@ func (c *Client) PutOrgSecret(org, name, value string, events []string) (Secret,
 	if err != nil {
 		return Secret{}, err
 	}
-	return c.putSecret("/api/orgs/"+key+"/secrets", name, value, events, c.hasSecret(listed.Items, name))
+	return c.putSecret("/api/orgs/"+key+"/secrets", name, value, c.hasSecret(listed.Items, name))
 }
 
-func (c *Client) PutRepoSecret(fullName, name, value string, events []string) (Secret, error) {
+func (c *Client) PutRepoSecret(fullName, name, value string) (Secret, error) {
 	key, err := c.repoKey(fullName)
 	if err != nil {
 		return Secret{}, err
@@ -170,11 +166,11 @@ func (c *Client) PutRepoSecret(fullName, name, value string, events []string) (S
 	if err != nil {
 		return Secret{}, err
 	}
-	return c.putSecret("/api/repos/"+key+"/secrets", name, value, events, c.hasSecret(listed.Items, name))
+	return c.putSecret("/api/repos/"+key+"/secrets", name, value, c.hasSecret(listed.Items, name))
 }
 
-func (c *Client) putSecret(base, name, value string, events []string, exists bool) (Secret, error) {
-	body := secretBody(name, value, events)
+func (c *Client) putSecret(base, name, value string, exists bool) (Secret, error) {
+	body := secretBody(name, value)
 	var (
 		b   []byte
 		err error
@@ -189,14 +185,11 @@ func (c *Client) putSecret(base, name, value string, events []string, exists boo
 	}
 	var raw kernelSecret
 	if err := json.Unmarshal(b, &raw); err != nil {
-		return Secret{Name: name, Events: events}, nil
+		return Secret{Name: name}, nil
 	}
 	out := publicSecret(raw)
 	if out.Name == "" {
 		out.Name = name
-	}
-	if len(out.Events) == 0 {
-		out.Events = body["events"].([]string)
 	}
 	return out, nil
 }

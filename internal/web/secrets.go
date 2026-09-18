@@ -15,26 +15,26 @@ func (p *Pages) OrgSecrets(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	switch r.Method {
 	case http.MethodGet:
-		out, err := p.Cat.ListOrgSecrets(user, page.Parse(r))
+		out, err := p.cat(r).ListOrgSecrets(user, page.Parse(r))
 		if err != nil {
 			writeCatErr(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, out)
 	case http.MethodPut:
-		value, events, err := readSecretBody(r)
+		value, err := readSecretBody(r)
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "invalid json")
 			return
 		}
-		out, err := p.Cat.PutOrgSecret(user, name, value, events)
+		out, err := p.cat(r).PutOrgSecret(user, name, value)
 		if err != nil {
 			writeCatErr(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, out)
 	case http.MethodDelete:
-		if err := p.Cat.DeleteOrgSecret(user, name); err != nil {
+		if err := p.cat(r).DeleteOrgSecret(user, name); err != nil {
 			writeCatErr(w, err)
 			return
 		}
@@ -59,12 +59,12 @@ func (p *Pages) RepoSecrets(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, out)
 	case http.MethodPut:
-		value, events, err := readSecretBody(r)
+		value, err := readSecretBody(r)
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "invalid json")
 			return
 		}
-		out, err := p.Cat.PutRepoSecret(user, owner, name, secret, value, events)
+		out, err := p.Cat.PutRepoSecret(user, owner, name, secret, value)
 		if err != nil {
 			writeCatErr(w, err)
 			return
@@ -81,13 +81,12 @@ func (p *Pages) RepoSecrets(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func readSecretBody(r *http.Request) (string, []string, error) {
+func readSecretBody(r *http.Request) (string, error) {
 	var body struct {
-		Value  string   `json:"value"`
-		Events []string `json:"events"`
+		Value string `json:"value"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		return "", nil, err
+		return "", err
 	}
-	return body.Value, body.Events, nil
+	return body.Value, nil
 }

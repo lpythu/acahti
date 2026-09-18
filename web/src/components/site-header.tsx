@@ -47,7 +47,9 @@ export function SiteHeader({
     <header className="z-40 shrink-0 border-b bg-background">
       <div className="flex h-10 items-center gap-1 overflow-hidden pr-3 pl-[max(0.5rem,env(safe-area-inset-left,0px))] md:h-12 md:gap-0 md:pr-6 md:pl-0">
         {hasSidebarNav ? <SidebarTrigger className="md:hidden" /> : null}
-        <OrgSwitcher org={me.org} />
+        <div className="flex shrink-0 items-center pl-1 md:w-(--sidebar-width) md:flex-none md:pr-5 md:pl-6">
+          <OrgSwitcher org={me.org} orgs={me.orgs ?? []} />
+        </div>
         <nav
           className="scrollbar-auto-hide-overlay flex h-full min-w-0 flex-1 items-stretch gap-0.5 overflow-x-auto"
           aria-label={t("primaryNav")}

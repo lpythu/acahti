@@ -20,24 +20,6 @@ func NormalizeSecretName(name string) (string, error) {
 	return name, nil
 }
 
-func secretEvents(events []string) []string {
-	if len(events) == 0 {
-		return append([]string{}, woodpecker.DefaultSecretEvents...)
-	}
-	out := make([]string, 0, len(events))
-	for _, e := range events {
-		e = strings.ToLower(strings.TrimSpace(e))
-		if e == "" {
-			continue
-		}
-		out = append(out, e)
-	}
-	if len(out) == 0 {
-		return append([]string{}, woodpecker.DefaultSecretEvents...)
-	}
-	return out
-}
-
 func (c *Catalog) requireOrgSecrets(user string) error {
 	if c.IsOrgAdmin(user) {
 		return nil
@@ -115,7 +97,7 @@ func mergeEffectiveSecrets(org, repo []woodpecker.Secret) []woodpecker.Secret {
 	return out
 }
 
-func (c *Catalog) PutOrgSecret(user, name, value string, events []string) (woodpecker.Secret, error) {
+func (c *Catalog) PutOrgSecret(user, name, value string) (woodpecker.Secret, error) {
 	if err := c.requireOrgSecrets(user); err != nil {
 		return woodpecker.Secret{}, err
 	}
@@ -130,10 +112,10 @@ func (c *Catalog) PutOrgSecret(user, name, value string, events []string) (woodp
 	if err != nil {
 		return woodpecker.Secret{}, err
 	}
-	return wp.PutOrgSecret(c.Cfg.Org, name, value, secretEvents(events))
+	return wp.PutOrgSecret(c.Cfg.Org, name, value)
 }
 
-func (c *Catalog) PutRepoSecret(user, owner, name, secret, value string, events []string) (woodpecker.Secret, error) {
+func (c *Catalog) PutRepoSecret(user, owner, name, secret, value string) (woodpecker.Secret, error) {
 	if err := c.requireRepoSecrets(user, owner, name); err != nil {
 		return woodpecker.Secret{}, err
 	}
@@ -148,7 +130,7 @@ func (c *Catalog) PutRepoSecret(user, owner, name, secret, value string, events 
 	if err != nil {
 		return woodpecker.Secret{}, err
 	}
-	return wp.PutRepoSecret(owner+"/"+name, secret, value, secretEvents(events))
+	return wp.PutRepoSecret(owner+"/"+name, secret, value)
 }
 
 func (c *Catalog) DeleteOrgSecret(user, name string) error {

@@ -114,8 +114,9 @@ func (c *Catalog) IsOrgAdmin(user string) bool {
 	if user == "" || !c.FJ.Ready() {
 		return false
 	}
+	key := c.Cfg.Org + "\x00" + user
 	if c.mem != nil {
-		if ok, hit := c.mem.adminOf(user); hit {
+		if ok, hit := c.mem.adminOf(key); hit {
 			return ok
 		}
 	}
@@ -128,7 +129,7 @@ func (c *Catalog) IsOrgAdmin(user string) bool {
 		ok, _ = c.FJ.TeamHasMember(t.ID, user)
 	}
 	if c.mem != nil {
-		c.mem.setAdmin(user, ok)
+		c.mem.setAdmin(key, ok)
 	}
 	return ok
 }
@@ -148,7 +149,7 @@ func (c *Catalog) userRepos(user string) ([]forgejo.Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	items := c.asRepos(repos, "")
+	items := c.asRepos(c.orgRepos(repos), "")
 	c.paintPerms(user, items)
 	return items, nil
 }

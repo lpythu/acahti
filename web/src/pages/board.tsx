@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
+import { BoardHeatmap } from "@/components/board-heatmap"
 import { PagedList } from "@/components/paged-list"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
@@ -35,7 +36,7 @@ export function BoardPage() {
   }
 
   return (
-    <PagedList list={prs} emptyText={t("boardEmpty")} skeleton="lines">
+    <PagedList list={prs} emptyText={t("boardEmpty")} skeleton="lines" header={<BoardHeatmap />}>
       {(items) => (
         <ul className="divide-y rounded-md border">
           {items.map((pr) => {

@@ -58,7 +58,7 @@ func TestSecretsStripValue(t *testing.T) {
 		t.Fatalf("value leaked: %s", raw)
 	}
 
-	created, err := c.PutOrgSecret("saidc", "kubeconfig_office", "new", nil)
+	created, err := c.PutOrgSecret("saidc", "kubeconfig_office", "new")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestSecretsStripValue(t *testing.T) {
 		t.Fatalf("put leaked value: %s", cr)
 	}
 
-	updated, err := c.PutOrgSecret("saidc", "harbor_password", "x", []string{"push"})
+	updated, err := c.PutOrgSecret("saidc", "harbor_password", "x")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestRepoSecrets(t *testing.T) {
 	t.Cleanup(s.Close)
 	c := New(s.URL, "t")
 	c.ids["saidc/tm-web"] = 9
-	got, err := c.PutRepoSecret("saidc/tm-web", "svc_token", "abc", nil)
+	got, err := c.PutRepoSecret("saidc/tm-web", "svc_token", "abc")
 	if err != nil {
 		t.Fatal(err)
 	}

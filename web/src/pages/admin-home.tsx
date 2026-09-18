@@ -119,6 +119,9 @@ export function AdminHomePage() {
       </section>
 
       <div className="flex flex-wrap gap-4">
+        <Link className="text-sm underline-offset-4 hover:underline" to="/admin/orgs">
+          {t("orgs")}
+        </Link>
         <Link className="text-sm underline-offset-4 hover:underline" to="/admin/secrets">
           {t("adminSecrets")}
         </Link>

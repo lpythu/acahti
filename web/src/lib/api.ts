@@ -1,13 +1,23 @@
 import { pageQS, type Page, type PageQuery } from "@/lib/page"
 
+export type Org = {
+  name: string
+  full_name: string
+}
+
 export type Me = {
   user: string
   admin: boolean
   root_url: string
   org: string
+  orgs?: Org[]
   git_name?: string
   git_email?: string
 }
+
+export type HeatDay = { date: string; value: number }
+
+export type Heatmap = { total: number; days: HeatDay[] }
 
 export type PR = {
   number: number
@@ -271,7 +281,6 @@ export type PipelineDetail = {
 
 export type PipelineSecret = {
   name: string
-  events?: string[]
   scope?: "org" | "repo"
 }
 
@@ -313,6 +322,10 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   public: () => req<{ root_url: string; org: string; skill: string; join: string; mcp: string }>("/ui/public"),
   me: () => req<Me>("/ui/me"),
+  orgs: () => req<{ items: Org[] }>("/ui/orgs"),
+  createOrg: (name: string, full_name?: string) =>
+    req<Org>("/ui/orgs", { method: "POST", body: JSON.stringify({ name, full_name }) }),
+  switchOrg: (org: string) => req<Me>("/ui/orgs", { method: "PUT", body: JSON.stringify({ org }) }),
   login: (username: string, password: string) =>
     req<Me>("/ui/login", { method: "POST", body: JSON.stringify({ username, password }) }),
   join: (username: string, password: string, code: string) =>
@@ -324,6 +337,7 @@ export const api = {
   deleteInvite: (code: string) => req<{ ok: boolean }>(`/ui/invites/${code}`, { method: "DELETE" }),
   logout: () => req<{ ok: boolean }>("/ui/logout", { method: "POST" }),
   boardPRs: (q?: PageQuery) => req<Page<PR>>(`/ui/board${pageQS(q)}`),
+  boardHeatmap: () => req<Heatmap>("/ui/board/heatmap"),
   users: (q?: PageQuery) => req<Page<User>>(`/ui/users${pageQS(q)}`),
   createUser: (username: string, password: string, admin: boolean) =>
     req<{ user: User }>("/ui/users", {
@@ -461,19 +475,19 @@ export const api = {
       body: JSON.stringify({ ref: ref || "dev" }),
     }),
   orgSecrets: (q?: PageQuery) => req<Page<PipelineSecret>>(`/ui/secrets${pageQS(q)}`),
-  putOrgSecret: (name: string, value: string, events?: string[]) =>
+  putOrgSecret: (name: string, value: string) =>
     req<PipelineSecret>(`/ui/secrets/${encodeURIComponent(name)}`, {
       method: "PUT",
-      body: JSON.stringify({ value, events }),
+      body: JSON.stringify({ value }),
     }),
   deleteOrgSecret: (name: string) =>
     req<{ ok: boolean }>(`/ui/secrets/${encodeURIComponent(name)}`, { method: "DELETE" }),
   repoSecrets: (owner: string, name: string, q?: PageQuery) =>
     req<Page<PipelineSecret>>(`/ui/repos/${owner}/${name}/secrets${pageQS(q)}`),
-  putRepoSecret: (owner: string, name: string, secret: string, value: string, events?: string[]) =>
+  putRepoSecret: (owner: string, name: string, secret: string, value: string) =>
     req<PipelineSecret>(`/ui/repos/${owner}/${name}/secrets/${encodeURIComponent(secret)}`, {
       method: "PUT",
-      body: JSON.stringify({ value, events }),
+      body: JSON.stringify({ value }),
     }),
   deleteRepoSecret: (owner: string, name: string, secret: string) =>
     req<{ ok: boolean }>(`/ui/repos/${owner}/${name}/secrets/${encodeURIComponent(secret)}`, {

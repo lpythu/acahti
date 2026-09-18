@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from "react"
 import { toast } from "sonner"
 
+import { MenuButton } from "@/components/menu-button"
 import { Pager } from "@/components/paged-list"
 import { PageFrame } from "@/components/page-frame"
 import { Button } from "@/components/ui/button"
@@ -13,8 +14,6 @@ import { useT } from "@/i18n/i18n"
 import type { PipelineSecret } from "@/lib/api"
 import type { Page, PageQuery } from "@/lib/page"
 
-const DEFAULT_EVENTS = ["push", "tag", "manual"]
-
 export function SecretsPanel({
   load,
   onPut,
@@ -23,87 +22,88 @@ export function SecretsPanel({
   canDelete,
 }: {
   load: (q: PageQuery) => Promise<Page<PipelineSecret>>
-  onPut: (name: string, value: string, events: string[]) => Promise<unknown>
+  onPut: (name: string, value: string) => Promise<unknown>
   onDelete: (name: string) => Promise<unknown>
   deps?: readonly unknown[]
   canDelete?: (s: PipelineSecret) => boolean
 }) {
   const t = useT()
   const page = usePage(load, deps)
+  const [open, setOpen] = useState(false)
   const [name, setName] = useState("")
   const [value, setValue] = useState("")
-  const [events, setEvents] = useState<string[]>(DEFAULT_EVENTS)
+  const [busy, setBusy] = useState(false)
+
+  function reset() {
+    setName("")
+    setValue("")
+  }
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const n = name.trim().toLowerCase()
-    if (!n || !value) return
+    if (!n || !value || busy) return
+    setBusy(true)
     try {
-      await onPut(n, value, events)
+      await onPut(n, value)
       toast.success(t("secretSaved"))
-      setName("")
-      setValue("")
-      setEvents(DEFAULT_EVENTS)
+      reset()
+      setOpen(false)
       await page.reload()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("loadError"))
+    } finally {
+      setBusy(false)
     }
   }
 
   return (
     <PageFrame loading={page.loading && page.empty} error={page.error} className="gap-8">
-      <form onSubmit={(e) => void submit(e)} className="flex max-w-xl flex-col gap-3">
-        <h2 className="text-sm font-medium">{t("addSecret")}</h2>
-        <p className="text-sm text-muted-foreground">{t("secretsHint")}</p>
-        <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="secret-name">{t("name")}</FieldLabel>
-            <Input
-              id="secret-name"
-              name="secret-name"
-              autoComplete="off"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="secret-value">{t("secretValue")}</FieldLabel>
-            <Textarea
-              id="secret-value"
-              name="secret-value"
-              autoComplete="off"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              required
-              className="min-h-24 font-mono text-sm"
-            />
-          </Field>
-          <Field>
-            <FieldLabel>{t("secretEvents")}</FieldLabel>
-            <div className="flex flex-wrap gap-3 text-sm">
-              {DEFAULT_EVENTS.map((ev) => (
-                <label key={ev} className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={events.includes(ev)}
-                    onChange={(e) => {
-                      setEvents((cur) =>
-                        e.target.checked ? [...cur, ev] : cur.filter((x) => x !== ev),
-                      )
-                    }}
-                  />
-                  {ev}
-                </label>
-              ))}
-            </div>
-          </Field>
-          <Button type="submit">{t("saveSecret")}</Button>
-        </FieldGroup>
-      </form>
-
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium">{t("tabSecrets")}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-medium">{t("tabSecrets")}</h2>
+          <MenuButton
+            label={t("addSecret")}
+            open={open}
+            onOpenChange={(next) => {
+              setOpen(next)
+              if (!next) reset()
+            }}
+            className="flex w-96 flex-col gap-3"
+          >
+            <p className="text-sm text-muted-foreground">{t("secretsHint")}</p>
+            <form onSubmit={(e) => void submit(e)}>
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor="secret-name">{t("name")}</FieldLabel>
+                  <Input
+                    id="secret-name"
+                    name="secret-name"
+                    autoComplete="off"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="secret-value">{t("secretValue")}</FieldLabel>
+                  <Textarea
+                    id="secret-value"
+                    name="secret-value"
+                    autoComplete="off"
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    required
+                    className="min-h-24 font-mono text-sm"
+                  />
+                </Field>
+                <Button type="submit" disabled={busy}>
+                  {t("saveSecret")}
+                </Button>
+              </FieldGroup>
+            </form>
+          </MenuButton>
+        </div>
         {page.empty ? (
           <p className="text-sm text-muted-foreground">{t("noSecrets")}</p>
         ) : (
@@ -113,7 +113,6 @@ export function SecretsPanel({
                 <TableRow>
                   <TableHead>{t("name")}</TableHead>
                   <TableHead>{t("secretScope")}</TableHead>
-                  <TableHead>{t("secretEvents")}</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
@@ -123,9 +122,6 @@ export function SecretsPanel({
                     <TableCell className="font-mono text-sm">{s.name}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {s.scope === "org" ? t("secretScopeOrg") : t("secretScopeRepo")}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {(s.events || []).join(", ") || "—"}
                     </TableCell>
                     <TableCell className="text-right">
                       {canDelete && !canDelete(s) ? null : (

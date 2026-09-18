@@ -95,6 +95,16 @@ type Team struct {
 	Permission string `json:"permission"`
 }
 
+type Org struct {
+	ID       int64  `json:"id"`
+	Name     string `json:"username"`
+	FullName string `json:"full_name"`
+}
+
+func (o Org) Slug() string {
+	return strings.TrimSpace(o.Name)
+}
+
 type Branch struct {
 	Name   string `json:"name"`
 	Commit struct {
@@ -404,6 +414,31 @@ func (c *Client) AddOrgMember(org, user string) error {
 		"role": "member",
 	})
 	return err
+}
+
+func (c *Client) ListUserOrgs(user string, q page.Query) (page.Result[Org], error) {
+	return listPage[Org](c, "/api/v1/user/orgs", q, nil, user)
+}
+
+func (c *Client) ListAdminOrgs(q page.Query) (page.Result[Org], error) {
+	return listPage[Org](c, "/api/v1/admin/orgs", q, nil, "")
+}
+
+func (c *Client) CreateOrg(user, name, fullName string) (Org, error) {
+	if fullName == "" {
+		fullName = name
+	}
+	b, _, err := c.do(http.MethodPost, "/api/v1/orgs", "", user, map[string]any{
+		"username":                      name,
+		"full_name":                     fullName,
+		"visibility":                    "private",
+		"repo_admin_change_team_access": false,
+	})
+	if err != nil {
+		return Org{}, err
+	}
+	var org Org
+	return org, json.Unmarshal(b, &org)
 }
 
 func teamBody(name, perm string) map[string]any {

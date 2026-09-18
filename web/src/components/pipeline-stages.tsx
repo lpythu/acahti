@@ -16,7 +16,7 @@ export function PipelineJobDots({ jobs }: { jobs: Job[] }) {
   if (!jobs.length) return null
 
   return (
-    <ol className="flex flex-wrap items-stretch justify-start gap-1.5" aria-label={t("jobs")}>
+    <ol className="flex flex-wrap items-center justify-start gap-1.5" aria-label={t("jobs")}>
       {jobs.map((job) => {
         const jobLabel = statusText(job.state, t)
         const steps = job.steps
@@ -28,12 +28,12 @@ export function PipelineJobDots({ jobs }: { jobs: Job[] }) {
             className="min-w-0 rounded-md border bg-muted/40 px-1.5 py-1"
             title={`${job.name}: ${jobLabel}`}
           >
-            <div className="flex items-center gap-1 text-[10px] font-medium leading-none text-muted-foreground">
-              <RunStatusIcon status={job.state} className="size-3" />
+            <div className="flex max-w-full items-center gap-1 text-[10px] font-medium leading-none text-muted-foreground">
+              <RunStatusIcon status={job.state} className="size-3 shrink-0" />
               <span className="truncate">{job.name}</span>
             </div>
             {steps.length ? (
-              <ol className="mt-1 flex flex-wrap items-center gap-1">
+              <ol className="mt-1 hidden flex-wrap items-center gap-1 @4xl/main:flex">
                 {steps.map((s, i) => {
                   const label = statusText(s.state, t)
                   return (

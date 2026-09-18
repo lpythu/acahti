@@ -5,10 +5,10 @@ import { toast } from "sonner"
 import { AddPersonMenu, PermSelect, permLabel } from "@/components/access-fields"
 import { PageFrame } from "@/components/page-frame"
 import { PagedList } from "@/components/paged-list"
+import { MenuButton } from "@/components/menu-button"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useEvents } from "@/hooks/use-events"
 import { useLoad } from "@/hooks/use-load"
@@ -34,20 +34,17 @@ function CreateTeamMenu({ onCreated }: { onCreated: (name: string) => void }) {
     }
   }
   return (
-    <Popover>
-      <PopoverTrigger render={<Button type="button" size="sm" />}>{t("createTeam")}</PopoverTrigger>
-      <PopoverContent className="w-72">
-        <form onSubmit={(e) => void submit(e)}>
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="name">{t("name")}</FieldLabel>
-              <Input id="name" name="name" required autoComplete="off" />
-            </Field>
-            <Button type="submit">{t("create")}</Button>
-          </FieldGroup>
-        </form>
-      </PopoverContent>
-    </Popover>
+    <MenuButton label={t("createTeam")} className="w-72">
+      <form onSubmit={(e) => void submit(e)}>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="name">{t("name")}</FieldLabel>
+            <Input id="name" name="name" required autoComplete="off" />
+          </Field>
+          <Button type="submit">{t("create")}</Button>
+        </FieldGroup>
+      </form>
+    </MenuButton>
   )
 }
 
@@ -68,20 +65,17 @@ function AddRepoMenu({ team, onAdd }: { team: string; onAdd: () => Promise<void>
     }
   }
   return (
-    <Popover>
-      <PopoverTrigger render={<Button type="button" size="sm" variant="outline" />}>{t("addRepo")}</PopoverTrigger>
-      <PopoverContent className="w-72">
-        <form onSubmit={(e) => void submit(e)}>
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="repo">{t("repo")}</FieldLabel>
-              <Input id="repo" name="repo" required autoComplete="off" />
-            </Field>
-            <Button type="submit">{t("create")}</Button>
-          </FieldGroup>
-        </form>
-      </PopoverContent>
-    </Popover>
+    <MenuButton label={t("addRepo")} variant="outline" className="w-72">
+      <form onSubmit={(e) => void submit(e)}>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="repo">{t("repo")}</FieldLabel>
+            <Input id="repo" name="repo" required autoComplete="off" />
+          </Field>
+          <Button type="submit">{t("create")}</Button>
+        </FieldGroup>
+      </form>
+    </MenuButton>
   )
 }
 

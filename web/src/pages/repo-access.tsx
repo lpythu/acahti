@@ -3,14 +3,14 @@ import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
 import { AddPersonMenu, PermSelect, permLabel } from "@/components/access-fields"
+import { MenuButton } from "@/components/menu-button"
+import { MenuPanel } from "@/components/menu-panel"
 import { PageFrame } from "@/components/page-frame"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { MenuPanel } from "@/components/menu-panel"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useLoad } from "@/hooks/use-load"
@@ -54,7 +54,9 @@ function MoveTeamMenu({
   }
 
   return (
-    <Popover
+    <MenuButton
+      label={t("moveTeam")}
+      variant="outline"
       open={open}
       onOpenChange={(next) => {
         setOpen(next)
@@ -64,10 +66,9 @@ function MoveTeamMenu({
           void teams.reload()
         }
       }}
+      className="w-72"
     >
-      <PopoverTrigger render={<Button type="button" size="sm" variant="outline" />}>{t("moveTeam")}</PopoverTrigger>
-      <PopoverContent className="w-72">
-        <MenuPanel loading={open && teams.loading} error={teams.error}>
+      <MenuPanel loading={open && teams.loading} error={teams.error}>
         <form onSubmit={(e) => void submit(e)}>
           <FieldGroup>
             <Field>
@@ -112,9 +113,8 @@ function MoveTeamMenu({
             </Button>
           </FieldGroup>
         </form>
-        </MenuPanel>
-      </PopoverContent>
-    </Popover>
+      </MenuPanel>
+    </MenuButton>
   )
 }
 

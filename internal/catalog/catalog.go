@@ -140,16 +140,16 @@ func decodeContent(e forgejo.ContentEntry) string {
 }
 
 func (c *Catalog) ListRepoTeams(user string, q page.Query) (page.Result[RepoTeam], error) {
-	if !c.indexed() {
-		return page.Of([]RepoTeam{}, q, false), nil
-	}
-	rows, err := c.Idx.TeamCounts(user, c.IsOrgAdmin(user))
+	tree, err := c.NavTree(user)
 	if err != nil {
 		return page.Result[RepoTeam]{}, err
 	}
-	out := make([]RepoTeam, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, RepoTeam{Team: r.Team, Count: r.Count})
+	out := make([]RepoTeam, 0, len(tree))
+	for _, row := range tree {
+		if row.Team == "" {
+			continue
+		}
+		out = append(out, RepoTeam{Team: row.Team, Count: len(row.Repos)})
 	}
 	return page.Take(out, q), nil
 }
@@ -159,11 +159,19 @@ func (c *Catalog) ListRepos(user, team string, q page.Query) (page.Result[forgej
 		return page.Of([]forgejo.Repo{}, q, false), nil
 	}
 	admin := c.IsOrgAdmin(user)
-	res, err := c.Idx.ListReposPage(user, team, admin, q)
+	var (
+		repos []store.OrgRepo
+		err   error
+	)
+	if team != "" {
+		repos, err = c.Idx.VisibleTeamRepos(user, team, admin)
+	} else {
+		repos, err = c.Idx.VisibleRepos(user, admin)
+	}
 	if err != nil {
 		return page.Result[forgejo.Repo]{}, err
 	}
-	items := c.asRepos(res.Items, team)
+	items := c.asRepos(c.orgRepos(repos), team)
 	if team == "" {
 		for i := range items {
 			if items[i].Team == "" {
@@ -172,7 +180,7 @@ func (c *Catalog) ListRepos(user, team string, q page.Query) (page.Result[forgej
 		}
 	}
 	c.paintPerms(user, items)
-	return page.Result[forgejo.Repo]{Items: items, Page: res.Page, Size: res.Size, HasMore: res.HasMore}, nil
+	return page.Take(items, q), nil
 }
 
 func (c *Catalog) RepoHeader(user, owner, name, ref string) (RepoHeader, error) {
@@ -631,9 +639,13 @@ func (c *Catalog) visiblePipeRepos(user, team string) ([]string, error) {
 		for _, r := range repos {
 			out = append(out, r.FullName)
 		}
-		return out, nil
+		return c.orgNames(out), nil
 	}
-	return c.Idx.VisibleRepoNames(user, admin)
+	names, err := c.Idx.VisibleRepoNames(user, admin)
+	if err != nil {
+		return nil, err
+	}
+	return c.orgNames(names), nil
 }
 
 func (c *Catalog) canSeeIndexedRepo(user, repo string) bool {
@@ -1354,7 +1366,10 @@ func (c *Catalog) NavTree(user string) ([]NavTeam, error) {
 	}
 	out := make([]NavTeam, 0, len(rows))
 	for _, row := range rows {
-		repos := c.asRepos(row.Repos, row.Team)
+		repos := c.asRepos(c.orgRepos(row.Repos), row.Team)
+		if len(repos) == 0 {
+			continue
+		}
 		c.paintPerms(user, repos)
 		out = append(out, NavTeam{Team: row.Team, Repos: repos})
 	}

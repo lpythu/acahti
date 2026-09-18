@@ -25,7 +25,7 @@ func (p *Pages) NavTree(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	out, err := p.Cat.NavTree(user)
+	out, err := p.cat(r).NavTree(user)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
@@ -52,7 +52,7 @@ func (p *Pages) Repos(w http.ResponseWriter, r *http.Request) {
 	}
 	q := page.Parse(r)
 	if r.URL.Query().Get("teams") == "1" {
-		out, err := p.Cat.ListRepoTeams(user, q)
+		out, err := p.cat(r).ListRepoTeams(user, q)
 		if err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())
 			return
@@ -60,7 +60,7 @@ func (p *Pages) Repos(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
-	out, err := p.Cat.ListRepos(user, r.URL.Query().Get("team"), q)
+	out, err := p.cat(r).ListRepos(user, r.URL.Query().Get("team"), q)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
@@ -250,7 +250,7 @@ func (p *Pages) Pipelines(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	out, err := p.Cat.ListPipelines(user, q.Get("repo"), q.Get("team"), q.Get("status"), page.Parse(r))
+	out, err := p.cat(r).ListPipelines(user, q.Get("repo"), q.Get("team"), q.Get("status"), page.Parse(r))
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
@@ -383,7 +383,7 @@ func (p *Pages) Packages(w http.ResponseWriter, r *http.Request) {
 	kind, name := r.PathValue("kind"), r.PathValue("name")
 	q := page.Parse(r)
 	if kind != "" && name != "" {
-		out, err := p.Cat.ListPackageVersions(user, kind, name, q)
+		out, err := p.cat(r).ListPackageVersions(user, kind, name, q)
 		if err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())
 			return
@@ -391,7 +391,7 @@ func (p *Pages) Packages(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
-	out, err := p.Cat.ListPackageRows(user, r.URL.Query().Get("kind"), q)
+	out, err := p.cat(r).ListPackageRows(user, r.URL.Query().Get("kind"), q)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
