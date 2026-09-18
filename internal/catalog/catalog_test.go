@@ -159,6 +159,83 @@ func TestCancelPipelineSetsReason(t *testing.T) {
 	}
 }
 
+func TestCancelPipelineStampsReasonWhenAlreadyDone(t *testing.T) {
+	var canceled bool
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/queue/info"):
+			_, _ = w.Write([]byte(`{"pending":[],"waiting_on_deps":[],"running":[],"stats":{}}`))
+		case strings.Contains(r.URL.Path, "/lookup/"):
+			_, _ = w.Write([]byte(`{"id":1,"full_name":"saidc/api-gateway"}`))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/cancel"):
+			canceled = true
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/pipelines/75"):
+			_, _ = w.Write([]byte(`{"number":75,"status":"killed","workflows":[{"name":"cd.office","state":"killed","children":[{"id":1,"pid":2,"name":"build","state":"killed","error":"Canceled"}]}]}`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/logs/"):
+			_ = json.NewEncoder(w).Encode([]map[string]string{{"out": "uv sync"}})
+		case strings.HasSuffix(r.URL.Path, "/web-config.js"):
+			_, _ = w.Write([]byte(`WOODPECKER_CSRF = "tok";`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(s.Close)
+	c := New(config.Config{}, nil, woodpecker.New(s.URL, "t"), nil)
+	got, err := c.cancelPipeline("", "saidc/api-gateway", 75, "canceled: no new log for 15m on step build")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if canceled {
+		t.Fatal("already finished; must not cancel again")
+	}
+	if got.Error != "canceled: no new log for 15m on step build" {
+		t.Fatalf("error=%q", got.Error)
+	}
+	if len(got.Jobs) == 0 || got.Jobs[0].Steps[0].Error != got.Error {
+		t.Fatalf("steps=%+v", got.Jobs)
+	}
+}
+
+func TestCancelPipelineStampsReasonWhenRefreshFails(t *testing.T) {
+	var canceled bool
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/queue/info"):
+			_, _ = w.Write([]byte(`{"pending":[],"waiting_on_deps":[],"running":[],"stats":{}}`))
+		case strings.Contains(r.URL.Path, "/lookup/"):
+			_, _ = w.Write([]byte(`{"id":1,"full_name":"saidc/api-gateway"}`))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/cancel"):
+			canceled = true
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/pipelines/76"):
+			if canceled {
+				w.WriteHeader(http.StatusBadGateway)
+				return
+			}
+			_, _ = w.Write([]byte(`{"number":76,"status":"running","workflows":[{"name":"cd.office","state":"running","children":[{"id":1,"pid":2,"name":"build","state":"running"}]}]}`))
+		case strings.HasSuffix(r.URL.Path, "/web-config.js"):
+			_, _ = w.Write([]byte(`WOODPECKER_CSRF = "tok";`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(s.Close)
+	c := New(config.Config{}, nil, woodpecker.New(s.URL, "t"), nil)
+	got, err := c.cancelPipeline("", "saidc/api-gateway", 76, "canceled by lipeiyang")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !canceled {
+		t.Fatal("expected cancel")
+	}
+	if got.Error != "canceled by lipeiyang" {
+		t.Fatalf("error=%q", got.Error)
+	}
+}
+
 func TestDecoratePipeKeepsKernelJobs(t *testing.T) {
 	c := New(config.Config{}, nil, nil, nil)
 	p := c.decoratePipe(woodpecker.Pipeline{Status: "error", Error: "bad yaml", Repo: "saidc/demo"})
@@ -201,6 +278,73 @@ func TestStepFailedAndTailLog(t *testing.T) {
 	}
 	if got := tailLog(text, 0); got != text {
 		t.Fatalf("all=%q", got)
+	}
+	if longerLog("uv\n", "uv\nPOST /api/runs -> 530\n") != "uv\nPOST /api/runs -> 530\n" {
+		t.Fatal("longerLog must keep the longer text")
+	}
+	if longerLog("full error\n", "uv\n") != "full error\n" {
+		t.Fatal("longerLog must not shrink")
+	}
+}
+
+func TestCaptureTerminalLogsRefreshesShortTail(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/lookup/"):
+			_, _ = w.Write([]byte(`{"id":1,"full_name":"saidc/tm-web"}`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/logs/"):
+			_ = json.NewEncoder(w).Encode([]map[string]string{{"out": "+ acahti-pipe uv\nInstalled 2 packages\nPOST https://argos.saidc.ai/api/runs -> 530: Origin DNS error (zone argos.saidc.ai)\n"}})
+		case strings.HasSuffix(r.URL.Path, "/web-config.js"):
+			_, _ = w.Write([]byte(`WOODPECKER_CSRF = "tok";`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(s.Close)
+	c := New(config.Config{}, nil, woodpecker.New(s.URL, "t"), nil)
+	p := c.captureTerminalLogs(woodpecker.Pipeline{
+		Repo:   "saidc/tm-web",
+		Number: 107,
+		Jobs: []woodpecker.Job{{
+			Name:  "cd.office",
+			State: "failure",
+			Steps: []woodpecker.Step{{
+				ID:      8011,
+				PID:     8,
+				Name:    "e2e",
+				State:   "failure",
+				LogTail: "+ acahti-pipe uv\n",
+			}},
+		}},
+	})
+	if !strings.Contains(p.Jobs[0].Steps[0].LogTail, "Origin DNS error") {
+		t.Fatalf("stale tail kept: %q", p.Jobs[0].Steps[0].LogTail)
+	}
+}
+
+func TestStepLogPrefersLiveWoodpecker(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/lookup/"):
+			_, _ = w.Write([]byte(`{"id":1,"full_name":"saidc/tm-web"}`))
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/logs/"):
+			_ = json.NewEncoder(w).Encode([]map[string]string{{"out": "uv install\nPOST https://argos.saidc.ai/api/runs -> 530: origin_dns_error\n"}})
+		case strings.HasSuffix(r.URL.Path, "/web-config.js"):
+			_, _ = w.Write([]byte(`WOODPECKER_CSRF = "tok";`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(s.Close)
+	c := New(config.Config{}, nil, woodpecker.New(s.URL, "t"), nil)
+	got, err := c.StepLog("", "saidc/tm-web", 107, 8011)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "origin_dns_error") {
+		t.Fatalf("log=%q", got)
 	}
 }
 

@@ -993,6 +993,13 @@ func (c *Catalog) Remember(p woodpecker.Pipeline) woodpecker.Pipeline {
 	return c.Present(p)
 }
 
+func longerLog(cur, next string) string {
+	if len(next) > len(cur) {
+		return next
+	}
+	return cur
+}
+
 func (c *Catalog) mergeLogTails(p woodpecker.Pipeline) woodpecker.Pipeline {
 	if c.Idx == nil {
 		return p
@@ -1010,9 +1017,7 @@ func (c *Catalog) mergeLogTails(p woodpecker.Pipeline) woodpecker.Pipeline {
 	for i := range p.Jobs {
 		for j := range p.Jobs[i].Steps {
 			id := stepID(p.Jobs[i].Steps[j])
-			if p.Jobs[i].Steps[j].LogTail == "" {
-				p.Jobs[i].Steps[j].LogTail = prev[id]
-			}
+			p.Jobs[i].Steps[j].LogTail = longerLog(p.Jobs[i].Steps[j].LogTail, prev[id])
 		}
 	}
 	return p
@@ -1116,7 +1121,7 @@ func (c *Catalog) captureTerminalLogs(p woodpecker.Pipeline) woodpecker.Pipeline
 	for i := range p.Jobs {
 		for j := range p.Jobs[i].Steps {
 			s := &p.Jobs[i].Steps[j]
-			if s.LogTail != "" || !stepFailed(s.State) {
+			if !stepFailed(s.State) {
 				continue
 			}
 			id := stepID(*s)
@@ -1125,17 +1130,20 @@ func (c *Catalog) captureTerminalLogs(p woodpecker.Pipeline) woodpecker.Pipeline
 			}
 			raw, err := c.wp.PipelineLog(p.Repo, p.Number, id)
 			if err != nil {
-				if s.Error != "" {
-					s.LogTail = s.Error
-				} else if p.Error != "" {
-					s.LogTail = p.Error
+				if s.LogTail == "" {
+					if s.Error != "" {
+						s.LogTail = s.Error
+					} else if p.Error != "" {
+						s.LogTail = p.Error
+					}
 				}
 				continue
 			}
-			s.LogTail = woodpecker.FormatLog(raw)
-			if s.LogTail == "" && s.Error != "" {
-				s.LogTail = s.Error
+			text := woodpecker.FormatLog(raw)
+			if text == "" && s.Error != "" {
+				text = s.Error
 			}
+			s.LogTail = longerLog(s.LogTail, text)
 		}
 	}
 	return p
@@ -1166,21 +1174,22 @@ func (c *Catalog) cancelPipeline(user, repo string, number int64, reason string)
 	raw.Repo = repo
 	raw.HydrateJobs()
 	if !woodpecker.InFlight(raw.Status) && !woodpecker.PendingAfterFailure(raw) {
-		return c.Remember(raw), nil
+		return c.Remember(applyCancelReason(raw, reason)), nil
 	}
 	if err := c.wp.Cancel(repo, number); err != nil {
 		again, rerr := c.wp.GetPipeline(repo, number)
 		if rerr == nil {
 			again.Repo = repo
+			again.HydrateJobs()
 			if !woodpecker.InFlight(again.Status) {
-				return c.Remember(again), nil
+				return c.Remember(applyCancelReason(again, reason)), nil
 			}
 		}
 		return woodpecker.Pipeline{}, err
 	}
 	done, err := c.Refresh(repo, number)
 	if err != nil {
-		return woodpecker.Pipeline{}, err
+		return c.Remember(applyCancelReason(raw, reason)), nil
 	}
 	return c.Remember(applyCancelReason(done, reason)), nil
 }
@@ -1411,26 +1420,40 @@ func (c *Catalog) PipelineDetail(user, repo string, number int64) (PipelineDetai
 
 func (c *Catalog) StepLog(user, repo string, number, step int64) (string, error) {
 	owner, name, _ := strings.Cut(repo, "/")
-	if _, err := c.seeRepo(user, owner, name); err != nil {
-		return "", err
+	if user != "" {
+		if _, err := c.seeRepo(user, owner, name); err != nil {
+			return "", err
+		}
 	}
 	if step <= 0 {
 		step = 1
 	}
+	cached := ""
 	if c.Idx != nil {
 		if p, ok, err := c.Idx.Get(repo, number); err == nil && ok {
 			for _, s := range p.Steps() {
 				if stepID(s) == step && s.LogTail != "" {
-					return s.LogTail, nil
+					cached = s.LogTail
+					break
 				}
 			}
 		}
 	}
-	raw, err := c.wp.PipelineLog(repo, number, step)
-	if err != nil {
-		return "", err
+	if c.wp != nil && c.wp.Ready() {
+		raw, err := c.wp.PipelineLog(repo, number, step)
+		if err == nil {
+			text := woodpecker.FormatLog(raw)
+			if text != "" {
+				return longerLog(cached, text), nil
+			}
+		} else if cached == "" {
+			return "", err
+		}
 	}
-	return woodpecker.FormatLog(raw), nil
+	if cached != "" {
+		return cached, nil
+	}
+	return "", fmt.Errorf("no log for %s #%d step %d", repo, number, step)
 }
 
 func stepFailed(state string) bool {
