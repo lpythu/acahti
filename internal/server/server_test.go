@@ -260,8 +260,9 @@ func TestPublicAllowlist(t *testing.T) {
 
 func TestGitPushActUser(t *testing.T) {
 	var (
-		hit  string
-		sudo string
+		hit     string
+		authz   string
+		webauth string
 	)
 	forge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/user" {
@@ -274,7 +275,8 @@ func TestGitPushActUser(t *testing.T) {
 			return
 		}
 		hit = r.URL.Path
-		sudo = r.Header.Get("Sudo")
+		authz = r.Header.Get("Authorization")
+		webauth = r.Header.Get("X-WebAuth-User")
 		w.WriteHeader(http.StatusTeapot)
 	}))
 	t.Cleanup(forge.Close)
@@ -293,34 +295,34 @@ func TestGitPushActUser(t *testing.T) {
 	aliceTok := a.Issue("alice")
 	robotTok := a.Issue("acahti")
 
-	hit, sudo = "", ""
+	hit, authz, webauth = "", "", ""
 	req := httptest.NewRequest(http.MethodPost, "/acme/demo.git/git-receive-pack", nil)
 	req.SetBasicAuth("alice", aliceTok)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
-	if hit != "/acme/demo.git/git-receive-pack" || rr.Code != http.StatusTeapot || sudo != "alice" {
-		t.Fatalf("alice access_token push hit=%q code=%d sudo=%q", hit, rr.Code, sudo)
+	if hit != "/acme/demo.git/git-receive-pack" || rr.Code != http.StatusTeapot || webauth != "alice" || authz != "" {
+		t.Fatalf("alice access_token push hit=%q code=%d webauth=%q authz=%q", hit, rr.Code, webauth, authz)
 	}
 
-	hit, sudo = "", ""
+	hit, authz, webauth = "", "", ""
 	req = httptest.NewRequest(http.MethodPost, "/acme/demo.git/git-receive-pack", nil)
 	req.SetBasicAuth("alice", "secret")
 	rr = httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
-	if hit != "/acme/demo.git/git-receive-pack" || rr.Code != http.StatusTeapot || sudo != "alice" {
-		t.Fatalf("alice password push hit=%q code=%d sudo=%q", hit, rr.Code, sudo)
+	if hit != "/acme/demo.git/git-receive-pack" || rr.Code != http.StatusTeapot || webauth != "alice" || authz != "" {
+		t.Fatalf("alice password push hit=%q code=%d webauth=%q authz=%q", hit, rr.Code, webauth, authz)
 	}
 
-	hit, sudo = "", ""
+	hit, authz, webauth = "", "", ""
 	req = httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs?service=git-upload-pack", nil)
 	req.SetBasicAuth("alice", aliceTok)
 	rr = httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
-	if hit != "/acme/demo.git/info/refs" || rr.Code != http.StatusTeapot || sudo != "alice" {
-		t.Fatalf("alice clone hit=%q code=%d sudo=%q", hit, rr.Code, sudo)
+	if hit != "/acme/demo.git/info/refs" || rr.Code != http.StatusTeapot || webauth != "alice" || authz != "" {
+		t.Fatalf("alice clone hit=%q code=%d webauth=%q authz=%q", hit, rr.Code, webauth, authz)
 	}
 
-	hit, sudo = "", ""
+	hit, authz, webauth = "", "", ""
 	req = httptest.NewRequest(http.MethodPost, "/acme/demo.git/git-receive-pack", nil)
 	req.SetBasicAuth("bob", aliceTok)
 	rr = httptest.NewRecorder()
@@ -329,7 +331,7 @@ func TestGitPushActUser(t *testing.T) {
 		t.Fatalf("access_token username mismatch hit=%q code=%d", hit, rr.Code)
 	}
 
-	hit, sudo = "", ""
+	hit, authz, webauth = "", "", ""
 	req = httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs", nil)
 	req.SetBasicAuth("oauth2", "forge-tok")
 	rr = httptest.NewRecorder()
@@ -338,7 +340,7 @@ func TestGitPushActUser(t *testing.T) {
 		t.Fatalf("forgejo pat hit=%q code=%d", hit, rr.Code)
 	}
 
-	hit, sudo = "", ""
+	hit, authz, webauth = "", "", ""
 	req = httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs?service=git-receive-pack", nil)
 	req.SetBasicAuth("acahti", robotTok)
 	rr = httptest.NewRecorder()
@@ -347,7 +349,7 @@ func TestGitPushActUser(t *testing.T) {
 		t.Fatalf("robot receive-pack hit=%q code=%d", hit, rr.Code)
 	}
 
-	hit, sudo = "", ""
+	hit, authz, webauth = "", "", ""
 	req = httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs?service=git-upload-pack", nil)
 	req.SetBasicAuth("acahti", robotTok)
 	rr = httptest.NewRecorder()
@@ -356,7 +358,7 @@ func TestGitPushActUser(t *testing.T) {
 		t.Fatalf("robot clone hit=%q code=%d", hit, rr.Code)
 	}
 
-	hit, sudo = "", ""
+	hit, authz, webauth = "", "", ""
 	req = httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs?service=git-upload-pack", nil)
 	req.SetBasicAuth("oauth2", robotTok)
 	rr = httptest.NewRecorder()

@@ -177,30 +177,31 @@ func New(cfg config.Config, cat *catalog.Catalog, hub *events.Hub) http.Handler 
 		case closedKernel(p):
 			writeClosed(w)
 		case strings.HasPrefix(p, "/api/packages/"):
-			gitAs(a, cat, cfg.AdminToken, cfg.AdminUser, fjProxy, w, r)
+			gitAs(a, cat, cfg.AdminUser, fjProxy, w, r)
 		case gitHTTP(p):
-			gitAs(a, cat, cfg.AdminToken, cfg.AdminUser, fjProxy, w, r)
+			gitAs(a, cat, cfg.AdminUser, fjProxy, w, r)
 		default:
 			mux.ServeHTTP(w, r)
 		}
 	})
 }
 
-func gitAs(a *auth.Service, cat *catalog.Catalog, admin, adminUser string, p *httputil.ReverseProxy, w http.ResponseWriter, r *http.Request) {
+func gitAs(a *auth.Service, cat *catalog.Catalog, adminUser string, p *httputil.ReverseProxy, w http.ResponseWriter, r *http.Request) {
 	login := gitLogin(a, cat, r)
 	if login == "" {
 		w.Header().Set("WWW-Authenticate", `Basic realm="acahti"`)
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	// Robot AdminUser is machine-only; clone/push/packages must Sudo the real person
+	// Robot AdminUser is machine-only; clone/push/packages must be the real person
 	// (laptop login, MCP access_token, or CI job identity).
 	if adminUser != "" && login == adminUser {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	r.Header.Set("Authorization", "token "+admin)
-	r.Header.Set("Sudo", login)
+	// Forgejo git HTTP ignores Sudo and would stamp act_user as the token owner.
+	// Identity is reverse-proxy auth (X-WebAuth-User); do not send the admin token.
+	r.Header.Del("Authorization")
 	r.Header.Set("X-WebAuth-User", login)
 	p.ServeHTTP(w, r)
 }
