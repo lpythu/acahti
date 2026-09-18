@@ -106,7 +106,7 @@ flowchart TB
 |---|---|---|
 | `/ui/*` | people (cookie) | catalog BFF |
 | `/mcp`, `/acahti/v1` | agents (OAuth) | same catalog |
-| `/{org}/{repo}.git` | git | reverse proxy → git kernel (admin token + `Sudo`) |
+| `/{org}/{repo}.git` | git | reverse proxy → git kernel (`X-WebAuth-User`) |
 | `/api/packages/*` | package clients | same identity proxy as git HTTPS → git kernel |
 | `/hooks/*` | kernels | index upsert + SSE |
 | `/api/v1/*`, `/ci/*` | — | 404 |

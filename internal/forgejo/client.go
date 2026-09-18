@@ -235,18 +235,7 @@ func listPage[T any](c *Client, path string, q page.Query, extra url.Values, sud
 }
 
 func (c *Client) UserSudo(login string) (User, error) {
-	return c.user(login, "")
-}
-
-func (c *Client) TokenUser(token string) (User, error) {
-	if strings.TrimSpace(token) == "" {
-		return User{}, fmt.Errorf("login failed")
-	}
-	return c.user("", token)
-}
-
-func (c *Client) user(sudo, token string) (User, error) {
-	b, _, err := c.do(http.MethodGet, "/api/v1/user", token, sudo, nil)
+	b, _, err := c.do(http.MethodGet, "/api/v1/user", "", login, nil)
 	if err != nil {
 		return User{}, err
 	}

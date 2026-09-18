@@ -193,24 +193,19 @@ func gitAs(a *auth.Service, cat *catalog.Catalog, adminUser string, p *httputil.
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	// Robot AdminUser is machine-only; clone/push/packages must be the real person
-	// (laptop login, MCP access_token, or CI job identity).
 	if adminUser != "" && login == adminUser {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	// Forgejo git HTTP ignores Sudo and would stamp act_user as the token owner.
-	// Identity is reverse-proxy auth (X-WebAuth-User); do not send the admin token.
 	r.Header.Del("Authorization")
 	r.Header.Set("X-WebAuth-User", login)
 	p.ServeHTTP(w, r)
 }
 
-// gitLogin accepts Acahti identity only: login+password, or MCP/job access_token
-// (auth.Issue). Forgejo PATs are not an identity — Forgejo is not public.
+// gitLogin: Acahti login + password, or login + access_token (MCP / job identity).
 func gitLogin(a *auth.Service, cat *catalog.Catalog, r *http.Request) string {
 	if u, pass, ok := r.BasicAuth(); ok {
-		if user, valid := a.Parse(pass); valid && (u == user || u == "git") {
+		if user, valid := a.Parse(pass); valid && u == user {
 			return user
 		}
 		if cat != nil {

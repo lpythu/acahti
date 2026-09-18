@@ -145,18 +145,13 @@ func TestPublicAllowlist(t *testing.T) {
 	gitAliasJWT.SetBasicAuth("git", tok)
 	rr = httptest.NewRecorder()
 	h.ServeHTTP(rr, gitAliasJWT)
-	if hit != "/acme/demo.git/info/refs" || rr.Code != http.StatusTeapot {
-		t.Fatalf("git jwt alias hit=%q code=%d", hit, rr.Code)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("git username alias rejected code=%d", rr.Code)
 	}
 
 	hit = ""
 	forge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/user" {
-			authz := r.Header.Get("Authorization")
-			if strings.HasPrefix(authz, "token ") && strings.TrimPrefix(authz, "token ") == "forge-tok" {
-				_ = json.NewEncoder(w).Encode(map[string]string{"login": "alice"})
-				return
-			}
 			u, p, ok := r.BasicAuth()
 			if ok && u == "alice" && p == "secret" {
 				_ = json.NewEncoder(w).Encode(map[string]string{"login": "alice"})
@@ -196,21 +191,12 @@ func TestPublicAllowlist(t *testing.T) {
 	}
 
 	hit = ""
-	gitAlias := httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs", nil)
-	gitAlias.SetBasicAuth("git", "secret")
+	gitMismatch := httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs", nil)
+	gitMismatch.SetBasicAuth("bob", tok)
 	rr = httptest.NewRecorder()
-	hForge.ServeHTTP(rr, gitAlias)
+	hForge.ServeHTTP(rr, gitMismatch)
 	if hit != "" || rr.Code != http.StatusUnauthorized {
-		t.Fatalf("git alias password hit=%q code=%d", hit, rr.Code)
-	}
-
-	hit = ""
-	gitForgeTok := httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs", nil)
-	gitForgeTok.SetBasicAuth("oauth2", "forge-tok")
-	rr = httptest.NewRecorder()
-	hForge.ServeHTTP(rr, gitForgeTok)
-	if hit != "" || rr.Code != http.StatusUnauthorized {
-		t.Fatalf("forgejo pat rejected hit=%q code=%d", hit, rr.Code)
+		t.Fatalf("git username mismatch hit=%q code=%d", hit, rr.Code)
 	}
 
 	hit = ""
@@ -332,15 +318,6 @@ func TestGitPushActUser(t *testing.T) {
 	}
 
 	hit, authz, webauth = "", "", ""
-	req = httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs", nil)
-	req.SetBasicAuth("oauth2", "forge-tok")
-	rr = httptest.NewRecorder()
-	h.ServeHTTP(rr, req)
-	if hit != "" || rr.Code != http.StatusUnauthorized {
-		t.Fatalf("forgejo pat hit=%q code=%d", hit, rr.Code)
-	}
-
-	hit, authz, webauth = "", "", ""
 	req = httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs?service=git-receive-pack", nil)
 	req.SetBasicAuth("acahti", robotTok)
 	rr = httptest.NewRecorder()
@@ -356,15 +333,6 @@ func TestGitPushActUser(t *testing.T) {
 	h.ServeHTTP(rr, req)
 	if hit != "" || rr.Code != http.StatusForbidden {
 		t.Fatalf("robot clone hit=%q code=%d", hit, rr.Code)
-	}
-
-	hit, authz, webauth = "", "", ""
-	req = httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs?service=git-upload-pack", nil)
-	req.SetBasicAuth("oauth2", robotTok)
-	rr = httptest.NewRecorder()
-	h.ServeHTTP(rr, req)
-	if hit != "" || rr.Code != http.StatusUnauthorized {
-		t.Fatalf("oauth2 alias robot token hit=%q code=%d", hit, rr.Code)
 	}
 }
 

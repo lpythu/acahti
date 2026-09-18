@@ -26,13 +26,6 @@ func (c *Catalog) Authenticate(user, pass string) (forgejo.User, error) {
 	return c.fj.BasicUser(user, pass)
 }
 
-func (c *Catalog) TokenUser(token string) (forgejo.User, error) {
-	if c == nil || c.fj == nil {
-		return forgejo.User{}, fmt.Errorf("login failed")
-	}
-	return c.fj.TokenUser(token)
-}
-
 func (c *Catalog) ListUsers(q page.Query) (page.Result[forgejo.User], error) {
 	if c == nil || c.fj == nil || !c.fj.Ready() {
 		return page.Result[forgejo.User]{}, fmt.Errorf("git unavailable")
