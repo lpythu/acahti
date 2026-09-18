@@ -53,7 +53,7 @@ Org catalog (Owners put once under Admin → Org secrets). Harbor (office) and A
 |---|---|
 | `harbor_username` / `harbor_password` | `DOCKER_USERNAME` / `DOCKER_PASSWORD` (office) |
 | `acr_username` / `acr_password` | Aliyun AccessKey used by `docker-login` to mint ACR `GetAuthorizationToken` (bj-test / `cd.hk`) |
-| `kubeconfig_office` / `kubeconfig_hk` | `KUBECONFIG` |
+| `kubeconfig_office` / `kubeconfig_bj` | `KUBECONFIG` |
 | `codeup_netrc` | `CODEUP_NETRC` (Go modules still fetched from Codeup git) |
 | `oss_access_key_id` / `oss_access_key_secret` | `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` |
 | `argos_dash_url` / `argos_token` | `ARGOS_DASH_URL` / `ARGOS_TOKEN` |

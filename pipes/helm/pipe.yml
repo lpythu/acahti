@@ -21,4 +21,4 @@ inputs:
     description: "true to pass --take-ownership"
   jump:
     required: false
-    description: SSH host on the Runner that can reach the API (HK ACK is VPC-only; office k3s is LAN)
+    description: SSH host on the Runner that can reach the API (bj-test ACK is VPC-only; jump tbj)

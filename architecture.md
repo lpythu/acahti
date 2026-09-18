@@ -204,7 +204,7 @@ Harbor (office) and ACR (hk) are a pair of **user** registries. YAML names the h
 | triggering user (install/publish Acahti packages) | `docker-build` / `npm-publish-acahti` / `pypi-publish-acahti` | do not write; expand injects it |
 | `harbor_username` / `harbor_password` | office `docker-login` | name as `DOCKER_USERNAME` / `DOCKER_PASSWORD` |
 | `acr_username` / `acr_password` | hk `docker-login` | same mapping |
-| `kubeconfig_office` / `kubeconfig_hk` | `helm` | name as `KUBECONFIG` |
+| `kubeconfig_office` / `kubeconfig_bj` | `helm` | name as `KUBECONFIG` |
 | `argos_dash_url` / `argos_token` | product `argos run --dash` via `uv` | name as `ARGOS_DASH_URL` / `ARGOS_TOKEN` |
 | `oss_*` | `oss-put` | name them |
 | `codeup_netrc` | still cloning Codeup | name it |
