@@ -39,7 +39,7 @@ func (c *Catalog) applyCommitAuthor(p woodpecker.Pipeline) woodpecker.Pipeline {
 
 func (c *Catalog) commitWho(repo, sha string) (name, login, avatar, email string) {
 	repo, sha = strings.TrimSpace(repo), strings.TrimSpace(sha)
-	if c == nil || c.FJ == nil || repo == "" || sha == "" {
+	if c == nil || c.fj == nil || repo == "" || sha == "" {
 		return "", "", "", ""
 	}
 	if c.mem != nil {
@@ -51,7 +51,7 @@ func (c *Catalog) commitWho(repo, sha string) (name, login, avatar, email string
 	if !ok {
 		return "", "", "", ""
 	}
-	cm, err := c.FJ.GetCommit(owner, repoName, sha)
+	cm, err := c.fj.GetCommit(owner, repoName, sha)
 	if err != nil {
 		return "", "", "", ""
 	}
@@ -109,13 +109,13 @@ func (c *Catalog) withAuthors(people []AccessPerson) []AccessPerson {
 }
 
 func (c *Catalog) authorNames() map[string]string {
-	if c == nil || c.FJ == nil || c.mem == nil {
+	if c == nil || c.fj == nil || c.mem == nil {
 		return map[string]string{}
 	}
 	if m, ok := c.mem.authorsOf(); ok {
 		return m
 	}
-	users, err := c.FJ.AllUsers()
+	users, err := c.fj.AllUsers()
 	if err != nil {
 		return map[string]string{}
 	}

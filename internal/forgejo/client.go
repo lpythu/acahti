@@ -1,7 +1,6 @@
 package forgejo
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -12,26 +11,39 @@ import (
 	"strings"
 	"time"
 
+	"acahti/internal/httpx"
 	"acahti/internal/identity"
 	"acahti/internal/page"
 )
 
 type Client struct {
-	base  string
 	admin string
-	http  *http.Client
+	http  *httpx.Client
 }
 
 func New(base, adminToken string) *Client {
-	return &Client{
-		base:  strings.TrimRight(base, "/"),
-		admin: adminToken,
-		http:  &http.Client{Timeout: 45 * time.Second},
+	h := httpx.New(base)
+	h.Timeout = func(method, _ string) time.Duration {
+		if method == http.MethodGet || method == http.MethodHead {
+			return 8 * time.Second
+		}
+		return 0
 	}
+	h.OnError = func(_, _ string, _ int, body []byte) error {
+		return apiError(body)
+	}
+	return &Client{admin: adminToken, http: h}
 }
 
 func (c *Client) Ready() bool {
 	return c != nil && c.admin != ""
+}
+
+func (c *Client) Base() string {
+	if c == nil || c.http == nil {
+		return ""
+	}
+	return c.http.Base
 }
 
 type User struct {
@@ -167,45 +179,18 @@ type BranchProtection struct {
 }
 
 func (c *Client) do(method, path, token, sudo string, body any) ([]byte, int, error) {
-	var rdr io.Reader
-	if body != nil {
-		b, err := json.Marshal(body)
-		if err != nil {
-			return nil, 0, err
-		}
-		rdr = bytes.NewReader(b)
-	}
-	req, err := http.NewRequest(method, c.base+path, rdr)
-	if err != nil {
-		return nil, 0, err
-	}
-	if method == http.MethodGet || method == http.MethodHead {
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		defer cancel()
-		req = req.WithContext(ctx)
-	}
+	hdr := http.Header{}
 	if token == "" {
 		token = c.admin
 	}
 	if token != "" {
-		req.Header.Set("Authorization", "token "+token)
+		hdr.Set("Authorization", "token "+token)
 	}
 	if sudo != "" {
-		req.Header.Set("Sudo", sudo)
+		hdr.Set("Sudo", sudo)
 	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 400 {
-		return b, resp.StatusCode, apiError(b)
-	}
-	return b, resp.StatusCode, nil
+	res, err := c.http.Do(context.Background(), method, path, body, hdr)
+	return res.Body, res.Status, err
 }
 
 func apiError(b []byte) error {
@@ -270,12 +255,19 @@ func (c *Client) user(sudo, token string) (User, error) {
 }
 
 func (c *Client) BasicUser(user, pass string) (User, error) {
-	req, err := http.NewRequest(http.MethodGet, c.base+"/api/v1/user", nil)
+	req, err := http.NewRequest(http.MethodGet, c.Base()+"/api/v1/user", nil)
 	if err != nil {
 		return User{}, err
 	}
 	req.SetBasicAuth(user, pass)
-	resp, err := c.http.Do(req)
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	req = req.WithContext(ctx)
+	httpClient := c.http.HTTP
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: httpx.DefaultTimeout}
+	}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return User{}, err
 	}
@@ -523,26 +515,15 @@ func (c *Client) ListTeamRepos(teamID int64, q page.Query) (page.Result[Repo], e
 
 func (c *Client) TeamRepoCount(teamID int64) (int, error) {
 	path := fmt.Sprintf("/api/v1/teams/%d/repos?limit=1&page=1", teamID)
-	req, err := http.NewRequest(http.MethodGet, c.base+path, nil)
-	if err != nil {
-		return 0, err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
-	req = req.WithContext(ctx)
+	hdr := http.Header{}
 	if c.admin != "" {
-		req.Header.Set("Authorization", "token "+c.admin)
+		hdr.Set("Authorization", "token "+c.admin)
 	}
-	resp, err := c.http.Do(req)
+	res, err := c.http.Do(context.Background(), http.MethodGet, path, nil, hdr)
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, resp.Body)
-	if resp.StatusCode >= 400 {
-		return 0, fmt.Errorf("team repos %d", resp.StatusCode)
-	}
-	n, _ := strconv.Atoi(resp.Header.Get("X-Total-Count"))
+	n, _ := strconv.Atoi(res.Header.Get("X-Total-Count"))
 	return n, nil
 }
 
@@ -1118,22 +1099,17 @@ func (c *Client) ListBranchProtections(owner, name string) ([]BranchProtection, 
 }
 
 func (c *Client) PutBytes(path, sudo, contentType string, body []byte) (int, []byte, error) {
-	req, err := http.NewRequest(http.MethodPut, c.base+path, bytes.NewReader(body))
-	if err != nil {
-		return 0, nil, err
-	}
-	req.Header.Set("Authorization", "token "+c.admin)
+	hdr := http.Header{}
+	hdr.Set("Authorization", "token "+c.admin)
 	if sudo != "" {
-		req.Header.Set("Sudo", sudo)
+		hdr.Set("Sudo", sudo)
 	}
 	if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
+		hdr.Set("Content-Type", contentType)
 	}
-	resp, err := c.http.Do(req)
+	res, err := c.http.Do(context.Background(), http.MethodPut, path, body, hdr, httpx.SoftFail())
 	if err != nil {
 		return 0, nil, err
 	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
-	return resp.StatusCode, b, nil
+	return res.Status, res.Body, nil
 }

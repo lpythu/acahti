@@ -36,10 +36,10 @@ func (c *Catalog) requireRepoSecrets(user, owner, name string) error {
 }
 
 func (c *Catalog) kernel() (*woodpecker.Client, error) {
-	if c == nil || c.WP == nil || !c.WP.Ready() {
+	if c == nil || c.wp == nil || !c.wp.Ready() {
 		return nil, fmt.Errorf("pipeline kernel unavailable")
 	}
-	return c.WP, nil
+	return c.wp, nil
 }
 
 func (c *Catalog) ListOrgSecrets(user string, q page.Query) (page.Result[woodpecker.Secret], error) {

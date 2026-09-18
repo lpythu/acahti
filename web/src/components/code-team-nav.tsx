@@ -11,6 +11,7 @@ import {
   SidebarGroupLabel,
   SidebarInput,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -114,6 +115,7 @@ function TeamNode({
   onOpenChange: (open: boolean) => void
   forceOpen?: boolean
 }) {
+  const t = useT()
   const pipe = parsePipelinePath(pathname)
   const teamActive = !filterRepo && !pipe && filterTeam === team && !repoBase(pathname)
   const inTeam = repos.some((r) => {
@@ -121,6 +123,7 @@ function TeamNode({
     return repoActive(pathname, filterRepo, owner, name)
   })
   const open = forceOpen || (openProp ?? (inTeam || teamActive))
+  const n = repos.length
 
   return (
     <SidebarMenuItem>
@@ -131,8 +134,9 @@ function TeamNode({
           onClick={() => onOpenChange(!open)}
         >
           <FolderIcon />
-          <span className="flex-1 truncate">{team}</span>
-          <ChevronRightIcon className={cn("ml-auto size-4 shrink-0 transition-transform", open && "rotate-90")} />
+          <span className="min-w-0 flex-1 truncate">{team}</span>
+          <SidebarMenuBadge title={t("reposCount", { n })}>{n}</SidebarMenuBadge>
+          <ChevronRightIcon className={cn("size-4 shrink-0 transition-transform", open && "rotate-90")} />
         </SidebarMenuButton>
         <CollapsibleContent>
           <SidebarMenuSub>

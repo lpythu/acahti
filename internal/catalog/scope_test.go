@@ -41,3 +41,21 @@ func TestOrgRepos(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 }
+
+func TestOrgNames(t *testing.T) {
+	c := New(config.Config{Org: "saidc"}, nil, nil, nil)
+	if got := c.orgNames(nil); len(got) != 0 {
+		t.Fatalf("nil in: %v", got)
+	}
+	got := c.orgNames([]string{"saidc/ops", "acme/demo", "SAIDC/web"})
+	if len(got) != 2 || got[0] != "saidc/ops" || got[1] != "SAIDC/web" {
+		t.Fatalf("%v", got)
+	}
+}
+
+func TestRepoFullNames(t *testing.T) {
+	got := repoFullNames([]store.OrgRepo{{FullName: "saidc/ops"}, {FullName: "saidc/web"}})
+	if len(got) != 2 || got[0] != "saidc/ops" || got[1] != "saidc/web" {
+		t.Fatalf("%v", got)
+	}
+}

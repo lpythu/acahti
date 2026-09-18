@@ -8,24 +8,34 @@ import (
 	"testing"
 
 	"acahti/internal/auth"
+	"acahti/internal/catalog"
 	"acahti/internal/config"
 	"acahti/internal/events"
 	"acahti/internal/forgejo"
 	"acahti/internal/woodpecker"
 )
 
+func testCatalog(t *testing.T, cfg config.Config, fjURL, wpURL string) *catalog.Catalog {
+	t.Helper()
+	if fjURL == "" {
+		fjURL = "http://127.0.0.1:9"
+	}
+	if wpURL == "" {
+		wpURL = "http://127.0.0.1:9"
+	}
+	return catalog.New(cfg, forgejo.New(fjURL, cfg.AdminToken), woodpecker.New(wpURL, ""), nil)
+}
+
 func testHandler(t *testing.T, fjURL string) http.Handler {
 	t.Helper()
-	return New(config.Config{
+	cfg := config.Config{
 		SessionSecret: "test",
 		RootURL:       "http://127.0.0.1",
 		Org:           "acme",
 		ForgejoURL:    fjURL,
 		DataDir:       t.TempDir(),
-	},
-		forgejo.New("http://127.0.0.1:9", ""),
-		woodpecker.New("http://127.0.0.1:9", ""),
-		events.New())
+	}
+	return New(cfg, testCatalog(t, cfg, fjURL, ""), events.New())
 }
 
 func TestHooksAndNavTree(t *testing.T) {
@@ -44,12 +54,13 @@ func TestHooksAndNavTree(t *testing.T) {
 
 func TestForgejoHookPublishesPoke(t *testing.T) {
 	hub := events.New()
-	h := New(config.Config{
+	cfg := config.Config{
 		SessionSecret: "test",
 		RootURL:       "http://127.0.0.1",
 		Org:           "acme",
 		DataDir:       t.TempDir(),
-	}, forgejo.New("http://127.0.0.1:9", ""), woodpecker.New("http://127.0.0.1:9", ""), hub)
+	}
+	h := New(cfg, testCatalog(t, cfg, "", ""), hub)
 	raw := `{"action":"opened","pull_request":{"title":"secret"},"repository":{"full_name":"saidc/hidden"},"pusher":{"email":"leak@example.com"}}`
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/hooks/forgejo", strings.NewReader(raw)))
@@ -158,13 +169,14 @@ func TestPublicAllowlist(t *testing.T) {
 		w.WriteHeader(http.StatusTeapot)
 	}))
 	t.Cleanup(forge.Close)
-	hForge := New(config.Config{
+	cfg := config.Config{
 		SessionSecret: "test",
 		RootURL:       "http://127.0.0.1",
 		Org:           "acme",
 		ForgejoURL:    forge.URL,
 		DataDir:       t.TempDir(),
-	}, forgejo.New(forge.URL, ""), woodpecker.New("http://127.0.0.1:9", ""), events.New())
+	}
+	hForge := New(cfg, testCatalog(t, cfg, forge.URL, ""), events.New())
 
 	gitPw := httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs", nil)
 	gitPw.SetBasicAuth("alice", "secret")

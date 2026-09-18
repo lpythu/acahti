@@ -4,7 +4,7 @@ import { toast } from "sonner"
 
 import { EmptyState } from "@/components/empty-state"
 import { PipelineJobs } from "@/components/pipeline-jobs"
-import { StatusBadge } from "@/components/status-badge"
+import { PipelineRunHead } from "@/components/pipeline-run-head"
 import { AutoHideScroll } from "@/components/ui/auto-hide-scroll"
 import { Button } from "@/components/ui/button"
 import { CodeBlock } from "@/components/ui/code-block"
@@ -15,10 +15,9 @@ import { useLoad } from "@/hooks/use-load"
 import { useT } from "@/i18n/i18n"
 import type { FileBlob, Step } from "@/lib/api"
 import { api } from "@/lib/api"
-import { formatUnix } from "@/lib/format"
 import { langOf } from "@/lib/lang"
 import { pipelineHref } from "@/lib/nav"
-import { asPipeline, argosLinksOf, inFlight, jobsOf, namedSecrets, triggerKey, triggerVars, waitLine } from "@/lib/pipeline"
+import { asPipeline, inFlight, jobsOf, waitLine } from "@/lib/pipeline"
 import { useRepo } from "@/pages/repo-layout"
 
 export function PipelinePage() {
@@ -43,8 +42,6 @@ export function PipelinePage() {
   })
 
   const jobs = useMemo(() => (p ? jobsOf(p) : []), [p])
-  const argosLinks = useMemo(() => (p ? argosLinksOf(p) : []), [p])
-  const yamlSecretNames = useMemo(() => namedSecrets(files), [files])
   const activeStep = useMemo(() => {
     if (step && jobs.some((j) => j.steps.some((s) => s.pid === step.pid && s.name === step.name))) {
       return step
@@ -148,40 +145,17 @@ export function PipelinePage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-start justify-between gap-3 border-b px-4 py-3 lg:px-6">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3 lg:px-6">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-medium">
-              #{n} {p.title || p.event || t("pipelines")}
-            </h2>
-            <StatusBadge status={p.status} />
-            {argosLinks.map((item) => (
-              <Button key={item.url} size="sm" variant="outline" render={<a href={item.url} target="_blank" rel="noreferrer" />}>
-                {t("argosDash")}
-                {argosLinks.length > 1 ? ` ${item.name.replace(/^e2e\./, "")}` : ""}
-              </Button>
-            ))}
-          </div>
-          <p className="mt-1 truncate text-sm text-muted-foreground">
-            {t(triggerKey(p.event, p.ref), triggerVars(p))}
-            {p.branch ? ` · ${p.branch}` : ""}
-            {p.commit ? ` · ${p.commit.slice(0, 7)}` : ""}
-            {` · ${formatUnix(p.started || p.created)}`}
-          </p>
+          <PipelineRunHead pipe={p} hideRepo />
           {wait ? (
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-0.5 pl-8 text-xs text-muted-foreground">
               {t(wait.key, wait.vars)}
               {p.agent ? ` · ${t("waitAgent", { agent: p.agent })}` : ""}
             </p>
           ) : p.agent ? (
-            <p className="mt-1 text-sm text-muted-foreground">{t("waitAgent", { agent: p.agent })}</p>
+            <p className="mt-0.5 pl-8 text-xs text-muted-foreground">{t("waitAgent", { agent: p.agent })}</p>
           ) : null}
-          {p.error ? <p className="mt-1 text-sm">{p.error}</p> : null}
-          <p className="mt-1 text-sm text-muted-foreground">
-            {yamlSecretNames.length
-              ? t("yamlSecrets", { names: yamlSecretNames.join(", ") })
-              : t("yamlSecretsNone")}
-          </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {p.status === "blocked" ? (

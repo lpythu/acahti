@@ -3,6 +3,8 @@ package catalog
 import (
 	"testing"
 	"time"
+
+	"acahti/internal/forgejo"
 )
 
 func TestHeatRangeMondayAligned(t *testing.T) {
@@ -32,5 +34,15 @@ func TestFillHeatmap(t *testing.T) {
 	}
 	if got.Total != 6 {
 		t.Fatalf("total %d includes future", got.Total)
+	}
+}
+
+func TestHeatCounts(t *testing.T) {
+	got := heatCounts([]forgejo.HeatPoint{
+		{Timestamp: time.Date(2026, 9, 7, 8, 0, 0, 0, time.UTC).Unix(), Contributions: 3},
+		{Timestamp: 0, Contributions: 9},
+	})
+	if got["2026-09-07"] != 3 || len(got) != 1 {
+		t.Fatalf("%v", got)
 	}
 }

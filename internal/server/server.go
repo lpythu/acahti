@@ -15,19 +15,16 @@ import (
 	"acahti/internal/catalog"
 	"acahti/internal/config"
 	"acahti/internal/events"
-	"acahti/internal/forgejo"
 	"acahti/internal/identity"
 	"acahti/internal/invite"
 	"acahti/internal/mcp"
 	"acahti/internal/oauth"
 	"acahti/internal/passwd"
 	"acahti/internal/pipeline"
-	"acahti/internal/store"
 	"acahti/internal/web"
-	"acahti/internal/woodpecker"
 )
 
-func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *events.Hub) http.Handler {
+func New(cfg config.Config, cat *catalog.Catalog, hub *events.Hub) http.Handler {
 	a := auth.New([]byte(cfg.SessionSecret), cfg.AdminUser)
 	inv, err := invite.Open(cfg.DataDir)
 	if err != nil {
@@ -38,20 +35,16 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 	if err != nil {
 		log.Fatalf("password store: %v", err)
 	}
-	idx, err := store.Open(cfg.DatabaseURL)
-	if err != nil {
-		log.Printf("pipeline index: %v", err)
-	}
-	cat := catalog.New(cfg, fj, wp, idx)
 	cat.Notify = func(kind string, data any) { hub.Publish(kind, data) }
 	go func() {
 		cat.BackfillOrg()
+		cat.BackfillHeatmaps()
 		cat.Backfill()
 		cat.WatchPipelines()
 	}()
-	pages := web.New(cfg, cat, fj, wp, a, inv, oa, hub)
+	pages := web.New(cfg, cat, a, inv, oa, hub)
 	pages.Passwords = passwords
-	mc := mcp.New(cfg, a, fj, wp, cat)
+	mc := mcp.New(cfg, a, cat)
 	rest := &api.API{Cfg: cfg, Auth: a, Hub: hub, Cat: cat, MCP: mc}
 	fjProxy := reverse(cfg.ForgejoURL)
 
@@ -184,17 +177,17 @@ func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, hub *even
 		case closedKernel(p):
 			writeClosed(w)
 		case strings.HasPrefix(p, "/api/packages/"):
-			gitAs(a, fj, cfg.AdminToken, fjProxy, w, r)
+			gitAs(a, cat, cfg.AdminToken, fjProxy, w, r)
 		case gitHTTP(p):
-			gitAs(a, fj, cfg.AdminToken, fjProxy, w, r)
+			gitAs(a, cat, cfg.AdminToken, fjProxy, w, r)
 		default:
 			mux.ServeHTTP(w, r)
 		}
 	})
 }
 
-func gitAs(a *auth.Service, fj *forgejo.Client, admin string, p *httputil.ReverseProxy, w http.ResponseWriter, r *http.Request) {
-	login := gitLogin(a, fj, r)
+func gitAs(a *auth.Service, cat *catalog.Catalog, admin string, p *httputil.ReverseProxy, w http.ResponseWriter, r *http.Request) {
+	login := gitLogin(a, cat, r)
 	if login == "" {
 		w.Header().Set("WWW-Authenticate", `Basic realm="acahti"`)
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -206,16 +199,16 @@ func gitAs(a *auth.Service, fj *forgejo.Client, admin string, p *httputil.Revers
 	p.ServeHTTP(w, r)
 }
 
-func gitLogin(a *auth.Service, fj *forgejo.Client, r *http.Request) string {
+func gitLogin(a *auth.Service, cat *catalog.Catalog, r *http.Request) string {
 	if u, pass, ok := r.BasicAuth(); ok {
 		if user, valid := a.Parse(pass); valid {
 			return user
 		}
-		if fj != nil {
-			if fu, err := fj.TokenUser(pass); err == nil && fu.Login != "" {
+		if cat != nil {
+			if fu, err := cat.TokenUser(pass); err == nil && fu.Login != "" {
 				return fu.Login
 			}
-			if fu, err := fj.BasicUser(u, pass); err == nil && fu.Login == u {
+			if fu, err := cat.Authenticate(u, pass); err == nil && fu.Login == u {
 				return fu.Login
 			}
 		}

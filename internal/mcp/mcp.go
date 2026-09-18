@@ -13,11 +13,9 @@ import (
 	"acahti/internal/brand"
 	"acahti/internal/catalog"
 	"acahti/internal/config"
-	"acahti/internal/forgejo"
 	"acahti/internal/identity"
 	"acahti/internal/oauth"
 	"acahti/internal/page"
-	"acahti/internal/woodpecker"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -25,8 +23,6 @@ import (
 type Server struct {
 	Cfg     ConfigView
 	Auth    *auth.Service
-	FJ      *forgejo.Client
-	WP      *woodpecker.Client
 	Cat     *catalog.Catalog
 	handler http.Handler
 }
@@ -38,12 +34,10 @@ type ConfigView struct {
 	Version string
 }
 
-func New(cfg config.Config, a *auth.Service, fj *forgejo.Client, wp *woodpecker.Client, cat *catalog.Catalog) *Server {
+func New(cfg config.Config, a *auth.Service, cat *catalog.Catalog) *Server {
 	s := &Server{
 		Cfg:  ConfigView{Org: cfg.Org, RootURL: cfg.RootURL, Domain: cfg.Domain, Version: cfg.Version},
 		Auth: a,
-		FJ:   fj,
-		WP:   wp,
 		Cat:  cat,
 	}
 	s.handler = s.newHandler()
@@ -170,7 +164,7 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 	pq := page.FromInts(int(num("page")), int(num("page_size")))
 	switch name {
 	case "whoami":
-		u, err := s.FJ.UserSudo(token)
+		u, err := s.Cat.User(token)
 		var v map[string]any
 		if err != nil {
 			v = identity.View(token, "", s.Cfg.RootURL, s.Cfg.Domain, org)
@@ -182,51 +176,26 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 	case "repo_list":
 		return s.Cat.ListRepos(token, "", pq)
 	case "repo_get":
-		repo, err := s.FJ.GetRepo(str("owner"), str("name"), token)
+		repo, err := s.Cat.GetRepo(str("owner"), str("name"), token)
 		if err != nil {
 			return nil, err
 		}
-		if s.Cat != nil {
-			repo = s.Cat.PublicRepo(repo)
-			repo.CanManageSecrets = s.Cat.IsOrgAdmin(token) || repo.Permissions.Admin
-		}
+		repo.CanManageSecrets = s.Cat.IsOrgAdmin(token) || repo.Permissions.Admin
 		return repo, nil
 	case "repo_create":
-		repo, err := s.FJ.CreateOrgRepo(org, str("name"), true)
-		if err != nil {
-			return nil, err
-		}
-		s.Cat.RememberRepo(repo)
-		if team := str("team"); team != "" {
-			if err := s.Cat.AttachRepo(team, repo.Name); err != nil {
-				return nil, err
-			}
-			repo.Team = team
-		}
-		if s.WP.Ready() {
-			_ = s.WP.Activate(org+"/"+repo.Name, strconv.FormatInt(repo.ID, 10))
-		}
-		return s.Cat.PublicRepo(repo), nil
+		return s.Cat.CreateRepo(str("name"), str("team"))
 	case "branch_list":
 		return s.Cat.ListBranches(token, str("owner"), str("name"), pq)
 	case "ref_delete":
-		return map[string]any{"ok": true}, s.FJ.DeleteRef(str("owner"), str("name"), str("ref"))
+		return map[string]any{"ok": true}, s.Cat.DeleteRef(str("owner"), str("name"), str("ref"))
 	case "pr_create":
-		base := str("base")
-		if base == "" {
-			repo, err := s.FJ.GetRepo(str("owner"), str("name"), token)
-			if err != nil {
-				return nil, err
-			}
-			base = repo.DefaultBranch
-		}
-		return s.FJ.CreatePR(str("owner"), str("name"), str("title"), str("head"), base, str("body"), token)
+		return s.Cat.CreatePR(str("owner"), str("name"), str("title"), str("head"), str("base"), str("body"), token)
 	case "pr_list":
-		return s.FJ.ListPRs(str("owner"), str("name"), str("state"), pq)
+		return s.Cat.ListPulls(token, str("owner"), str("name"), str("state"), pq)
 	case "pr_get":
 		return s.Cat.PRDetail(token, str("owner"), str("name"), int(num("number")))
 	case "pr_comment":
-		return map[string]any{"ok": true}, s.FJ.CommentPR(str("owner"), str("name"), int(num("number")), str("body"), token)
+		return map[string]any{"ok": true}, s.Cat.CommentPR(str("owner"), str("name"), int(num("number")), str("body"), token)
 	case "pr_comments":
 		return s.Cat.ListComments(token, str("owner"), str("name"), int(num("number")), pq)
 	case "pr_merge":
@@ -242,25 +211,9 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 	case "pipeline_log":
 		return s.Cat.PipelineLogs(token, repoArg(str), num("number"), num("step"), num("tail_lines"))
 	case "pipeline_rerun":
-		pipe, err := s.WP.Rerun(repoArg(str), num("number"))
-		if err != nil {
-			return nil, err
-		}
-		return s.Cat.Remember(pipe), nil
+		return s.Cat.RerunPipeline(token, repoArg(str), num("number"))
 	case "pipeline_trigger":
-		repo := repoArg(str)
-		if err := s.seeRepo(token, repo); err != nil {
-			return nil, err
-		}
-		ref := str("ref")
-		if ref == "" {
-			ref = "dev"
-		}
-		pipe, err := s.WP.Trigger(repo, ref)
-		if err != nil {
-			return nil, err
-		}
-		return s.Cat.Remember(pipe), nil
+		return s.Cat.TriggerPipeline(token, repoArg(str), str("ref"))
 	case "pipeline_cancel":
 		pipe, err := s.Cat.CancelPipeline(token, repoArg(str), num("number"))
 		if err != nil {
@@ -283,7 +236,7 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 		if owner == "" {
 			owner = org
 		}
-		return s.FJ.ListPackages(owner, str("kind"), str("q"), pq, token)
+		return s.Cat.SearchPackages(owner, str("kind"), str("q"), pq, token)
 	case "pkg_delete":
 		return s.deletePackage(token, str)
 	case "pkg_publish":
@@ -291,14 +244,11 @@ func (s *Server) call(token, name string, a map[string]any) (any, error) {
 	case "agent_status":
 		return s.Cat.AgentStatus(pq)
 	case "deploy_approve":
-		repo := str("repo")
-		if err := s.WP.Approve(repo, num("number")); err != nil {
+		pipe, err := s.Cat.ApprovePipeline(token, str("repo"), num("number"))
+		if err != nil {
 			return nil, err
 		}
-		if pipe, err := s.Cat.Refresh(repo, num("number")); err == nil {
-			return map[string]any{"ok": true, "pipeline": pipe}, nil
-		}
-		return map[string]any{"ok": true}, nil
+		return map[string]any{"ok": true, "pipeline": pipe}, nil
 	case "secret_list":
 		return s.listSecrets(token, str, pq)
 	case "secret_put":
@@ -406,29 +356,14 @@ func (s *Server) deletePackage(token string, str func(string) string) (any, erro
 		owner = s.Cfg.Org
 	}
 	if version != "" {
-		if err := s.FJ.DeletePackage(owner, kind, name, version, token); err != nil {
+		if err := s.Cat.DeletePackage(owner, kind, name, version, token); err != nil {
 			return nil, err
 		}
 		return map[string]any{"ok": true, "deleted": []string{name + "@" + version}}, nil
 	}
-	all, err := page.Walk(func(q page.Query) (page.Result[forgejo.Package], error) {
-		return s.FJ.ListPackages(owner, kind, name, q, token)
-	})
+	deleted, err := s.Cat.DeletePackageVersions(owner, kind, name, token)
 	if err != nil {
 		return nil, err
-	}
-	deleted := make([]string, 0)
-	for _, p := range all {
-		if p.Name != name || !strings.EqualFold(p.Type, kind) {
-			continue
-		}
-		if err := s.FJ.DeletePackage(owner, p.Type, p.Name, p.Version, token); err != nil {
-			return nil, err
-		}
-		deleted = append(deleted, p.Name+"@"+p.Version)
-	}
-	if len(deleted) == 0 {
-		return nil, catalog.ErrNotFound
 	}
 	return map[string]any{"ok": true, "deleted": deleted}, nil
 }
@@ -457,26 +392,8 @@ func (s *Server) deleteSecret(token string, str func(string) string) (any, error
 	return map[string]any{"ok": true}, nil
 }
 
-func (s *Server) seeRepo(token, repo string) error {
-	owner, name, _ := strings.Cut(repo, "/")
-	if owner == "" || name == "" {
-		return fmt.Errorf("repo must be owner/name")
-	}
-	_, err := s.Cat.RepoHeader(token, owner, name, "")
-	return err
-}
-
 func (s *Server) waitChecks(owner, name, sha string) (any, error) {
-	var (
-		ok  bool
-		st  []forgejo.Status
-		err error
-	)
-	if s.Cat != nil {
-		ok, st, err = s.Cat.CommitChecks(owner, name, sha)
-	} else {
-		ok, st, err = s.FJ.ChecksGreen(owner, name, sha)
-	}
+	ok, st, err := s.Cat.CommitChecks(owner, name, sha)
 	if err != nil {
 		return nil, err
 	}
@@ -526,7 +443,7 @@ func (s *Server) publish(token, kind, fileURL, filename string) (any, error) {
 	default:
 		return nil, fmt.Errorf("kind must be pypi or npm")
 	}
-	code, raw, err := s.FJ.PutBytes(path, token, "application/octet-stream", b)
+	code, raw, err := s.Cat.PutBytes(path, token, "application/octet-stream", b)
 	if err != nil {
 		return nil, err
 	}

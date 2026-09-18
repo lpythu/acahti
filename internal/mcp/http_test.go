@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"acahti/internal/auth"
+	"acahti/internal/catalog"
 	"acahti/internal/config"
 	"acahti/internal/forgejo"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -28,7 +29,8 @@ func testHTTPServer(t *testing.T) (*httptest.Server, *auth.Service) {
 	}))
 	t.Cleanup(upstream.Close)
 	a := auth.New([]byte("test-only-signing-key"), "admin")
-	s := New(config.Config{RootURL: "https://instance.example", Domain: "instance.example", Org: "acme", Version: "test"}, a, forgejo.New(upstream.URL, "test-only"), nil, nil)
+	cat := catalog.New(config.Config{RootURL: "https://instance.example", Domain: "instance.example", Org: "acme", Version: "test"}, forgejo.New(upstream.URL, "test-only"), nil, nil)
+	s := New(config.Config{RootURL: "https://instance.example", Domain: "instance.example", Org: "acme", Version: "test"}, a, cat)
 	hs := httptest.NewServer(s)
 	t.Cleanup(hs.Close)
 	return hs, a

@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"acahti/internal/auth"
+	"acahti/internal/catalog"
+	"acahti/internal/config"
 	"acahti/internal/forgejo"
 	"acahti/internal/passwd"
 )
@@ -36,7 +38,7 @@ func TestPasswordEnsureReusesStored(t *testing.T) {
 	}
 	p := &Pages{
 		Auth:      auth.New([]byte("test"), "alice"),
-		FJ:        forgejo.New(fj.URL, "t"),
+		Cat: catalog.New(config.Config{AdminUser: "alice"}, forgejo.New(fj.URL, "t"), nil, nil),
 		Passwords: store,
 	}
 	got := callPassword(t, p, "alice", `{"username":"gaowenrong"}`)
@@ -79,7 +81,7 @@ func TestPasswordEnsureInitsWhenMissing(t *testing.T) {
 	}
 	p := &Pages{
 		Auth:      auth.New([]byte("test"), "alice"),
-		FJ:        forgejo.New(fj.URL, "t"),
+		Cat: catalog.New(config.Config{AdminUser: "alice"}, forgejo.New(fj.URL, "t"), nil, nil),
 		Passwords: store,
 	}
 	got := callPassword(t, p, "alice", `{"username":"gaowenrong"}`)
@@ -121,7 +123,7 @@ func TestPasswordEnsureInitsWhenVaultEmpty(t *testing.T) {
 	}
 	p := &Pages{
 		Auth:      auth.New([]byte("test"), "alice"),
-		FJ:        forgejo.New(fj.URL, "t"),
+		Cat: catalog.New(config.Config{AdminUser: "alice"}, forgejo.New(fj.URL, "t"), nil, nil),
 		Passwords: store,
 		passwordSet: func(string) (bool, bool) {
 			return true, true

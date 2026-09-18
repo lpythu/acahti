@@ -111,7 +111,7 @@ func markTeam(repos []forgejo.Repo, team string, visible map[string]bool) []forg
 }
 
 func (c *Catalog) IsOrgAdmin(user string) bool {
-	if user == "" || !c.FJ.Ready() {
+	if user == "" || !c.fj.Ready() {
 		return false
 	}
 	key := c.Cfg.Org + "\x00" + user
@@ -123,10 +123,10 @@ func (c *Catalog) IsOrgAdmin(user string) bool {
 	ok := false
 	if user == c.Cfg.AdminUser {
 		ok = true
-	} else if u, err := c.FJ.UserSudo(user); err == nil && u.IsAdmin {
+	} else if u, err := c.fj.UserSudo(user); err == nil && u.IsAdmin {
 		ok = true
-	} else if t, err := c.FJ.FindOrgTeam(c.Cfg.Org, "Owners"); err == nil {
-		ok, _ = c.FJ.TeamHasMember(t.ID, user)
+	} else if t, err := c.fj.FindOrgTeam(c.Cfg.Org, "Owners"); err == nil {
+		ok, _ = c.fj.TeamHasMember(t.ID, user)
 	}
 	if c.mem != nil {
 		c.mem.setAdmin(key, ok)
@@ -135,7 +135,7 @@ func (c *Catalog) IsOrgAdmin(user string) bool {
 }
 
 func (c *Catalog) seeOK(user, owner, name string) error {
-	if _, err := c.FJ.GetRepo(owner, name, user); err != nil {
+	if _, err := c.fj.GetRepo(owner, name, user); err != nil {
 		return fmt.Errorf("%w: %s", ErrNotFound, err)
 	}
 	return nil
@@ -155,7 +155,7 @@ func (c *Catalog) userRepos(user string) ([]forgejo.Repo, error) {
 }
 
 func (c *Catalog) seeRepo(user, owner, name string) (forgejo.Repo, error) {
-	repo, err := c.FJ.GetRepo(owner, name, user)
+	repo, err := c.fj.GetRepo(owner, name, user)
 	if err != nil {
 		return forgejo.Repo{}, fmt.Errorf("%w: %s", ErrNotFound, err)
 	}

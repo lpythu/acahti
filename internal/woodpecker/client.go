@@ -1,11 +1,9 @@
 package woodpecker
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -13,23 +11,32 @@ import (
 	"sync"
 	"time"
 
+	"acahti/internal/httpx"
 	"acahti/internal/page"
 )
 
 type Client struct {
-	base  string
 	token string
-	http  *http.Client
+	http  *httpx.Client
 	mu    sync.Mutex
 	ids   map[string]int64
 	names map[int64]string
 }
 
 func New(base, token string) *Client {
+	h := httpx.New(base)
+	h.Timeout = func(_, path string) time.Duration {
+		if strings.Contains(path, "/logs/") {
+			return 45 * time.Second
+		}
+		return 8 * time.Second
+	}
+	h.OnError = func(method, path string, status int, body []byte) error {
+		return fmt.Errorf("woodpecker %s %s: %d %s", method, path, status, strings.TrimSpace(string(body)))
+	}
 	return &Client{
-		base:  strings.TrimRight(base, "/"),
 		token: token,
-		http:  &http.Client{Timeout: 45 * time.Second},
+		http:  h,
 		ids:   map[string]int64{},
 		names: map[int64]string{},
 	}
@@ -37,6 +44,13 @@ func New(base, token string) *Client {
 
 func (c *Client) Ready() bool {
 	return c != nil && c.token != ""
+}
+
+func (c *Client) Base() string {
+	if c == nil || c.http == nil {
+		return ""
+	}
+	return c.http.Base
 }
 
 type Repo struct {
@@ -96,14 +110,16 @@ type Job struct {
 }
 
 type Step struct {
-	ID      int64  `json:"id"`
-	PID     int64  `json:"pid"`
-	PPID    int64  `json:"ppid"`
-	Name    string `json:"name"`
-	State   string `json:"state"`
-	Error   string `json:"error"`
-	Type    string `json:"type"`
-	LogTail string `json:"log_tail,omitempty"`
+	ID       int64  `json:"id"`
+	PID      int64  `json:"pid"`
+	PPID     int64  `json:"ppid"`
+	Name     string `json:"name"`
+	State    string `json:"state"`
+	Error    string `json:"error"`
+	Type     string `json:"type"`
+	Started  int64  `json:"started,omitempty"`
+	Finished int64  `json:"finished,omitempty"`
+	LogTail  string `json:"log_tail,omitempty"`
 }
 
 func (p Pipeline) Steps() []Step {
@@ -166,21 +182,16 @@ type Agent struct {
 }
 
 func (c *Client) csrf() string {
-	req, err := http.NewRequest(http.MethodGet, c.base+"/web-config.js", nil)
-	if err != nil {
-		return ""
-	}
+	hdr := http.Header{}
 	if c.token != "" {
-		req.Header.Set("Cookie", "user_sess="+c.token)
+		hdr.Set("Cookie", "user_sess="+c.token)
 	}
-	resp, err := c.http.Do(req)
+	res, err := c.http.Do(context.Background(), http.MethodGet, "/web-config.js", nil, hdr, httpx.SoftFail())
 	if err != nil {
 		return ""
 	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
 	const p = `WOODPECKER_CSRF = "`
-	s := string(b)
+	s := string(res.Body)
 	i := strings.Index(s, p)
 	if i < 0 {
 		return ""
@@ -194,47 +205,18 @@ func (c *Client) csrf() string {
 }
 
 func (c *Client) do(method, path string, body any) ([]byte, int, error) {
-	var rdr io.Reader
-	if body != nil {
-		b, err := json.Marshal(body)
-		if err != nil {
-			return nil, 0, err
-		}
-		rdr = bytes.NewReader(b)
-	}
-	req, err := http.NewRequest(method, c.base+path, rdr)
-	if err != nil {
-		return nil, 0, err
-	}
-	timeout := 8 * time.Second
-	if strings.Contains(path, "/logs/") {
-		timeout = 45 * time.Second
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	req = req.WithContext(ctx)
+	hdr := http.Header{}
 	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
-		req.Header.Set("Cookie", "user_sess="+c.token)
+		hdr.Set("Authorization", "Bearer "+c.token)
+		hdr.Set("Cookie", "user_sess="+c.token)
 		if method != http.MethodGet && method != http.MethodHead {
 			if csrf := c.csrf(); csrf != "" {
-				req.Header.Set("X-CSRF-TOKEN", csrf)
+				hdr.Set("X-CSRF-TOKEN", csrf)
 			}
 		}
 	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 400 {
-		return b, resp.StatusCode, fmt.Errorf("woodpecker %s %s: %d %s", method, path, resp.StatusCode, strings.TrimSpace(string(b)))
-	}
-	return b, resp.StatusCode, nil
+	res, err := c.http.Do(context.Background(), method, path, body, hdr)
+	return res.Body, res.Status, err
 }
 
 func (c *Client) ListRepos(q page.Query) (page.Result[Repo], error) {

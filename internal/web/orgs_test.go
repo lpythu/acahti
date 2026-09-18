@@ -40,7 +40,7 @@ func orgPages(t *testing.T) *Pages {
 	a := auth.New([]byte("test"), "alice")
 	fjClient := forgejo.New(fj.URL, "t")
 	cat := catalog.New(cfg, fjClient, nil, nil)
-	return New(cfg, cat, fjClient, nil, a, nil, nil, nil)
+	return New(cfg, cat, a, nil, nil, nil)
 }
 
 func withSession(t *testing.T, p *Pages, user, org, method, path, body string) *httptest.ResponseRecorder {

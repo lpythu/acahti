@@ -41,6 +41,8 @@ export type Step = {
   state: string
   error?: string
   type?: string
+  started?: number
+  finished?: number
 }
 
 export type PipelineJob = {

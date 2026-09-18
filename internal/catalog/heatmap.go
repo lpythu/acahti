@@ -1,6 +1,11 @@
 package catalog
 
-import "time"
+import (
+	"log"
+	"time"
+
+	"acahti/internal/forgejo"
+)
 
 const heatWeeks = 53
 
@@ -20,15 +25,66 @@ func (c *Catalog) BoardHeatmap(user string) (Heatmap, error) {
 	if c.Idx == nil {
 		return fillHeatmap(nil, start, end, now), nil
 	}
-	names, err := c.visiblePipeRepos(user, "")
-	if err != nil {
-		return Heatmap{}, err
-	}
-	counts, err := c.Idx.DailyCounts(names, start.Unix(), end.Unix())
+	counts, err := c.Idx.Heatmap(user, start, end)
 	if err != nil {
 		return Heatmap{}, err
 	}
 	return fillHeatmap(counts, start, end, now), nil
+}
+
+func (c *Catalog) BackfillHeatmaps() {
+	if !c.indexed() || c.fj == nil || !c.fj.Ready() {
+		return
+	}
+	seen := map[string]struct{}{}
+	if logins, err := c.Idx.HeatmapLogins(); err == nil {
+		for _, login := range logins {
+			seen[login] = struct{}{}
+		}
+	}
+	if users, err := c.fj.AllUsers(); err == nil {
+		for _, u := range users {
+			if u.Login != "" {
+				seen[u.Login] = struct{}{}
+			}
+		}
+	}
+	for login := range seen {
+		c.syncHeatmap(login)
+	}
+}
+
+func (c *Catalog) rememberHeat(login string) {
+	if login == "" {
+		return
+	}
+	go c.syncHeatmap(login)
+}
+
+func (c *Catalog) syncHeatmap(login string) {
+	if login == "" || c.Idx == nil || c.fj == nil || !c.fj.Ready() {
+		return
+	}
+	points, err := c.fj.UserHeatmap(login)
+	if err != nil {
+		log.Printf("heatmap %s: %v", login, err)
+		return
+	}
+	if err := c.Idx.ReplaceHeatmap(login, heatCounts(points)); err != nil {
+		log.Printf("heatmap %s: %v", login, err)
+	}
+}
+
+func heatCounts(points []forgejo.HeatPoint) map[string]int64 {
+	out := map[string]int64{}
+	for _, p := range points {
+		if p.Timestamp <= 0 || p.Contributions == 0 {
+			continue
+		}
+		key := time.Unix(p.Timestamp, 0).UTC().Format("2006-01-02")
+		out[key] += p.Contributions
+	}
+	return out
 }
 
 func heatRange(now time.Time) (start, end time.Time) {

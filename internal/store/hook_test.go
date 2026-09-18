@@ -88,3 +88,15 @@ func TestParseForgejoStatus(t *testing.T) {
 		t.Fatalf("%s %d %v", repo, n, ok)
 	}
 }
+
+func TestForgejoActor(t *testing.T) {
+	if got := ForgejoActor(map[string]any{"sender": map[string]any{"login": "ada"}}); got != "ada" {
+		t.Fatalf("sender %q", got)
+	}
+	if got := ForgejoActor(map[string]any{"pusher": map[string]any{"username": "bob"}}); got != "bob" {
+		t.Fatalf("pusher %q", got)
+	}
+	if ForgejoActor(nil) != "" || ForgejoActor(map[string]any{}) != "" {
+		t.Fatal("empty")
+	}
+}

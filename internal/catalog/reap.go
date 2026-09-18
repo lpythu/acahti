@@ -43,7 +43,7 @@ func (c *Catalog) WatchPipelines() {
 }
 
 func (c *Catalog) Reap(now time.Time, watches map[string]logWatch) {
-	if c.Idx == nil || c.WP == nil || !c.WP.Ready() {
+	if c.Idx == nil || c.wp == nil || !c.wp.Ready() {
 		return
 	}
 	listed, err := page.Walk(func(q page.Query) (page.Result[woodpecker.Pipeline], error) {
@@ -66,10 +66,10 @@ func (c *Catalog) Reap(now time.Time, watches map[string]logWatch) {
 }
 
 func (c *Catalog) reapOne(p woodpecker.Pipeline, now time.Time, prev, keep map[string]logWatch) {
-	if c.WP == nil || !c.WP.Ready() {
+	if c.wp == nil || !c.wp.Ready() {
 		return
 	}
-	raw, err := c.WP.GetPipeline(p.Repo, p.Number)
+	raw, err := c.wp.GetPipeline(p.Repo, p.Number)
 	if err != nil {
 		for _, s := range runningSteps(p) {
 			key := watchKey(p.Repo, p.Number, stepID(s))
@@ -95,7 +95,7 @@ func (c *Catalog) reapOne(p woodpecker.Pipeline, now time.Time, prev, keep map[s
 	for _, s := range steps {
 		id := stepID(s)
 		key := watchKey(fresh.Repo, fresh.Number, id)
-		text, err := c.WP.PipelineLog(fresh.Repo, fresh.Number, id)
+		text, err := c.wp.PipelineLog(fresh.Repo, fresh.Number, id)
 		if err != nil {
 			if w, ok := prev[key]; ok {
 				keep[key] = w
@@ -147,7 +147,7 @@ func (c *Catalog) emit(p woodpecker.Pipeline) {
 }
 
 func (c *Catalog) reapQueue(fp map[string]string) {
-	if c.WP == nil || !c.WP.Ready() {
+	if c.wp == nil || !c.wp.Ready() {
 		return
 	}
 	seen := map[string]woodpecker.Pipeline{}

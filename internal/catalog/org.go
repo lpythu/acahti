@@ -115,17 +115,17 @@ func (c *Catalog) RememberRepo(r forgejo.Repo) {
 }
 
 func (c *Catalog) syncTeamIDs(name string) {
-	if !c.indexed() || name == "" || c.FJ == nil || !c.FJ.Ready() {
+	if !c.indexed() || name == "" || c.fj == nil || !c.fj.Ready() {
 		return
 	}
 	t := store.OrgTeam{Name: name}
-	if w, err := c.FJ.FindOrgTeam(c.Cfg.Org, name); err == nil {
+	if w, err := c.fj.FindOrgTeam(c.Cfg.Org, name); err == nil {
 		t.WriteID = w.ID
 	}
-	if r, err := c.FJ.FindOrgTeam(c.Cfg.Org, roleTeamName(name, permRead)); err == nil {
+	if r, err := c.fj.FindOrgTeam(c.Cfg.Org, roleTeamName(name, permRead)); err == nil {
 		t.ReadID = r.ID
 	}
-	if a, err := c.FJ.FindOrgTeam(c.Cfg.Org, roleTeamName(name, permAdmin)); err == nil {
+	if a, err := c.fj.FindOrgTeam(c.Cfg.Org, roleTeamName(name, permAdmin)); err == nil {
 		t.AdminID = a.ID
 	}
 	_ = c.Idx.UpsertTeam(t)
@@ -150,7 +150,7 @@ func (c *Catalog) ApplyForgejoCatalog(payload map[string]any) bool {
 }
 
 func (c *Catalog) BackfillOrg() {
-	if !c.indexed() || c.FJ == nil || !c.FJ.Ready() {
+	if !c.indexed() || c.fj == nil || !c.fj.Ready() {
 		return
 	}
 	var (
@@ -159,7 +159,7 @@ func (c *Catalog) BackfillOrg() {
 	)
 	for i := 0; i < 20; i++ {
 		raw, err = page.Walk(func(q page.Query) (page.Result[forgejo.Team], error) {
-			return c.FJ.ListOrgTeams(c.Cfg.Org, q)
+			return c.fj.ListOrgTeams(c.Cfg.Org, q)
 		})
 		if err == nil {
 			break
@@ -171,7 +171,7 @@ func (c *Catalog) BackfillOrg() {
 		return
 	}
 	orgRepos, err := page.Walk(func(q page.Query) (page.Result[forgejo.Repo], error) {
-		return c.FJ.ListOrgRepos(c.Cfg.Org, q)
+		return c.fj.ListOrgRepos(c.Cfg.Org, q)
 	})
 	if err != nil {
 		log.Printf("org backfill: repos: %v", err)
@@ -216,7 +216,7 @@ func (c *Catalog) BackfillOrg() {
 		byLogin := map[string]string{}
 		for perm, role := range t.roles {
 			users, err := page.Walk(func(q page.Query) (page.Result[forgejo.User], error) {
-				return c.FJ.ListTeamMembers(role.ID, q)
+				return c.fj.ListTeamMembers(role.ID, q)
 			})
 			if err != nil {
 				log.Printf("org backfill: members %s: %v", role.Name, err)
@@ -237,7 +237,7 @@ func (c *Catalog) BackfillOrg() {
 			continue
 		}
 		owned, err := page.Walk(func(q page.Query) (page.Result[forgejo.Repo], error) {
-			return c.FJ.ListTeamRepos(id, q)
+			return c.fj.ListTeamRepos(id, q)
 		})
 		if err != nil {
 			log.Printf("org backfill: team repos %s: %v", name, err)
@@ -267,7 +267,7 @@ func (c *Catalog) BackfillOrg() {
 			continue
 		}
 		users, err := page.Walk(func(q page.Query) (page.Result[forgejo.User], error) {
-			return c.FJ.ListCollaborators(owner, name, q)
+			return c.fj.ListCollaborators(owner, name, q)
 		})
 		if err != nil {
 			log.Printf("org backfill: collaborators %s: %v", r.FullName, err)
@@ -279,7 +279,7 @@ func (c *Catalog) BackfillOrg() {
 			}
 			perm := forgejo.NormalizePerm(u.Permissions.Level())
 			if !u.Permissions.Admin && !u.Permissions.Push {
-				if p, err := c.FJ.CollaboratorPerm(owner, name, u.Login); err == nil && p != "" {
+				if p, err := c.fj.CollaboratorPerm(owner, name, u.Login); err == nil && p != "" {
 					perm = p
 				}
 			}
@@ -288,7 +288,7 @@ func (c *Catalog) BackfillOrg() {
 	}
 	for _, hit := range forgejoTeamReposToStrip(folder, fjRepos) {
 		for _, role := range hit.roles.roles {
-			_ = c.FJ.RemoveTeamRepo(role.ID, c.Cfg.Org, hit.name)
+			_ = c.fj.RemoveTeamRepo(role.ID, c.Cfg.Org, hit.name)
 		}
 	}
 	for _, l := range grantedFolderLinks(folder) {
@@ -301,7 +301,7 @@ func (c *Catalog) BackfillOrg() {
 			continue
 		}
 		for _, role := range t.roles {
-			_ = c.FJ.AddTeamRepo(role.ID, c.Cfg.Org, short)
+			_ = c.fj.AddTeamRepo(role.ID, c.Cfg.Org, short)
 		}
 	}
 	links := make([]store.TeamRepoLink, 0, len(folder))

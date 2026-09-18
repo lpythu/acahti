@@ -77,17 +77,17 @@ func (c *Catalog) findTeam(name string) (teamRoles, error) {
 func (c *Catalog) ensureRoleTeam(team, perm string) (forgejo.Team, error) {
 	perm = forgejo.NormalizePerm(perm)
 	name := roleTeamName(team, perm)
-	if t, err := c.FJ.FindOrgTeam(c.Cfg.Org, name); err == nil {
+	if t, err := c.fj.FindOrgTeam(c.Cfg.Org, name); err == nil {
 		return t, nil
 	}
-	t, err := c.FJ.CreateTeam(c.Cfg.Org, name, perm)
+	t, err := c.fj.CreateTeam(c.Cfg.Org, name, perm)
 	if err != nil {
 		return forgejo.Team{}, err
 	}
 	if perm != permWrite {
 		if repos, err := c.grantedTeamRepos(team); err == nil {
 			for _, r := range repos {
-				_ = c.FJ.AddTeamRepo(t.ID, c.Cfg.Org, r.Name)
+				_ = c.fj.AddTeamRepo(t.ID, c.Cfg.Org, r.Name)
 			}
 		}
 	}
@@ -245,10 +245,10 @@ func (c *Catalog) CreateTeam(user, name string) (TeamAccess, error) {
 	if err := ValidTeamName(name); err != nil {
 		return TeamAccess{}, err
 	}
-	if _, err := c.FJ.FindOrgTeam(c.Cfg.Org, name); err == nil {
+	if _, err := c.fj.FindOrgTeam(c.Cfg.Org, name); err == nil {
 		return TeamAccess{}, fmt.Errorf("%w: team exists", ErrInvalid)
 	}
-	if _, err := c.FJ.CreateTeam(c.Cfg.Org, name, permWrite); err != nil {
+	if _, err := c.fj.CreateTeam(c.Cfg.Org, name, permWrite); err != nil {
 		return TeamAccess{}, err
 	}
 	c.syncTeamIDs(name)
@@ -267,7 +267,7 @@ func (c *Catalog) DeleteTeam(user, name string) error {
 		return err
 	}
 	for _, role := range t.roles {
-		if err := c.FJ.DeleteTeam(role.ID); err != nil {
+		if err := c.fj.DeleteTeam(role.ID); err != nil {
 			return err
 		}
 	}
@@ -296,14 +296,14 @@ func (c *Catalog) SetTeamMember(user, team, login, perm string) error {
 	if err != nil {
 		return err
 	}
-	if err := c.FJ.AddTeamMember(want.ID, login); err != nil {
+	if err := c.fj.AddTeamMember(want.ID, login); err != nil {
 		return err
 	}
 	for p, role := range t.roles {
 		if p == perm || role.ID == want.ID {
 			continue
 		}
-		_ = c.FJ.RemoveTeamMember(role.ID, login)
+		_ = c.fj.RemoveTeamMember(role.ID, login)
 	}
 	if c.indexed() {
 		_ = c.Idx.SetTeamMember(team, login, perm)
@@ -322,7 +322,7 @@ func (c *Catalog) RemoveTeamMember(user, team, login string) error {
 		return err
 	}
 	for _, role := range t.roles {
-		_ = c.FJ.RemoveTeamMember(role.ID, login)
+		_ = c.fj.RemoveTeamMember(role.ID, login)
 	}
 	if c.indexed() {
 		_ = c.Idx.RemoveTeamMember(team, login)
@@ -343,7 +343,7 @@ func (c *Catalog) AttachRepo(team, repo string) error {
 	if repo == "" {
 		return fmt.Errorf("%w repo", ErrInvalid)
 	}
-	got, err := c.FJ.GetRepo(c.Cfg.Org, repo, "")
+	got, err := c.fj.GetRepo(c.Cfg.Org, repo, "")
 	if err != nil {
 		return fmt.Errorf("%w: %s", ErrNotFound, err)
 	}
@@ -386,13 +386,13 @@ func (c *Catalog) SetRepoTeamGrant(user, owner, name string, granted bool) error
 			}
 		}
 		for _, role := range t.roles {
-			if err := c.FJ.AddTeamRepo(role.ID, c.Cfg.Org, name); err != nil {
+			if err := c.fj.AddTeamRepo(role.ID, c.Cfg.Org, name); err != nil {
 				return err
 			}
 		}
 	} else {
 		for _, role := range t.roles {
-			_ = c.FJ.RemoveTeamRepo(role.ID, c.Cfg.Org, name)
+			_ = c.fj.RemoveTeamRepo(role.ID, c.Cfg.Org, name)
 		}
 	}
 	if c.indexed() {
@@ -433,7 +433,7 @@ func (c *Catalog) RemoveTeamRepo(user, team, repo string) error {
 		repo = repo[i+1:]
 	}
 	for _, role := range t.roles {
-		_ = c.FJ.RemoveTeamRepo(role.ID, c.Cfg.Org, repo)
+		_ = c.fj.RemoveTeamRepo(role.ID, c.Cfg.Org, repo)
 	}
 	if c.indexed() {
 		_ = c.Idx.RemoveTeamRepo(team, c.Cfg.Org+"/"+repo)
@@ -469,7 +469,7 @@ func (c *Catalog) RepoAccess(user, owner, name string) (RepoAccess, error) {
 		inTeam[p.Login] = true
 	}
 	cols, err := page.Walk(func(q page.Query) (page.Result[forgejo.User], error) {
-		return c.FJ.ListCollaborators(owner, name, q)
+		return c.fj.ListCollaborators(owner, name, q)
 	})
 	if err != nil {
 		cols = nil
@@ -480,7 +480,7 @@ func (c *Catalog) RepoAccess(user, owner, name string) (RepoAccess, error) {
 			continue
 		}
 		perm := u.Permissions.Level()
-		if p, err := c.FJ.CollaboratorPerm(owner, name, u.Login); err == nil && p != "" {
+		if p, err := c.fj.CollaboratorPerm(owner, name, u.Login); err == nil && p != "" {
 			perm = p
 		}
 		direct = append(direct, AccessPerson{Login: u.Login, Author: identity.Name(u.Login, u.FullName), Permission: perm})
@@ -504,7 +504,7 @@ func (c *Catalog) SetCollaborator(user, owner, name, login, perm string) error {
 	if login == "" {
 		return fmt.Errorf("%w login", ErrInvalid)
 	}
-	if err := c.FJ.AddCollaborator(owner, name, login, perm); err != nil {
+	if err := c.fj.AddCollaborator(owner, name, login, perm); err != nil {
 		return err
 	}
 	if c.indexed() {
@@ -519,7 +519,7 @@ func (c *Catalog) RemoveCollaborator(user, owner, name, login string) error {
 	if _, err := c.requireRepoAdmin(user, owner, name); err != nil {
 		return err
 	}
-	if err := c.FJ.RemoveCollaborator(owner, name, login); err != nil {
+	if err := c.fj.RemoveCollaborator(owner, name, login); err != nil {
 		return err
 	}
 	if c.indexed() {

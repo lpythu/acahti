@@ -133,6 +133,12 @@ CREATE INDEX IF NOT EXISTS repo_collaborators_login_idx ON repo_collaborators (l
 ALTER TABLE repos ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT false;
 ALTER TABLE team_repos ADD COLUMN IF NOT EXISTS granted boolean NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS team_repos_granted_idx ON team_repos (team) WHERE granted;
+CREATE TABLE IF NOT EXISTS user_heatmap (
+  login text NOT NULL,
+  day date NOT NULL,
+  value bigint NOT NULL DEFAULT 0,
+  PRIMARY KEY (login, day)
+);
 UPDATE pipelines SET jobs = (
   SELECT COALESCE(jsonb_agg(x.elem ORDER BY x.ord), '[]'::jsonb)
   FROM (

@@ -150,3 +150,22 @@ func repoFrom(v any) string {
 	}
 	return ""
 }
+
+func ForgejoActor(payload map[string]any) string {
+	if payload == nil {
+		return ""
+	}
+	for _, key := range []string{"sender", "pusher", "user"} {
+		m, _ := payload[key].(map[string]any)
+		if m == nil {
+			continue
+		}
+		if s, _ := m["login"].(string); strings.TrimSpace(s) != "" {
+			return strings.TrimSpace(s)
+		}
+		if s, _ := m["username"].(string); strings.TrimSpace(s) != "" {
+			return strings.TrimSpace(s)
+		}
+	}
+	return ""
+}

@@ -21,15 +21,15 @@ import (
 
 type Catalog struct {
 	Cfg    config.Config
-	FJ     *forgejo.Client
-	WP     *woodpecker.Client
+	fj     *forgejo.Client
+	wp     *woodpecker.Client
 	Idx    *store.Store
 	Notify func(kind string, data any)
 	mem    *memo
 }
 
 func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, idx *store.Store) *Catalog {
-	return &Catalog{Cfg: cfg, FJ: fj, WP: wp, Idx: idx, mem: newMemo()}
+	return &Catalog{Cfg: cfg, fj: fj, wp: wp, Idx: idx, mem: newMemo()}
 }
 
 type BranchInfo struct {
@@ -225,11 +225,11 @@ func (c *Catalog) RepoContents(user, owner, name, ref, path string, q page.Query
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		ents, _ = c.FJ.ListContents(owner, name, ref, path)
+		ents, _ = c.fj.ListContents(owner, name, ref, path)
 	}()
 	go func() {
 		defer wg.Done()
-		if file, err := c.FJ.GetFile(owner, name, ref, readmePath); err == nil && file.Type == "file" {
+		if file, err := c.fj.GetFile(owner, name, ref, readmePath); err == nil && file.Type == "file" {
 			readme = decodeContent(file)
 		}
 	}()
@@ -258,7 +258,7 @@ func (c *Catalog) SetDefaultBranch(user, owner, name, branch string) error {
 	if branch == "" {
 		return fmt.Errorf("%w: branch", ErrInvalid)
 	}
-	repo, err := c.FJ.SetDefaultBranch(owner, name, branch)
+	repo, err := c.fj.SetDefaultBranch(owner, name, branch)
 	if err != nil {
 		return err
 	}
@@ -275,13 +275,13 @@ func (c *Catalog) SetBranchProtected(user, owner, name, branch string, protected
 		return fmt.Errorf("%w: branch", ErrInvalid)
 	}
 	if protected {
-		return c.FJ.ProtectBranch(owner, name, branch)
+		return c.fj.ProtectBranch(owner, name, branch)
 	}
-	return c.FJ.UnprotectBranch(owner, name, branch)
+	return c.fj.UnprotectBranch(owner, name, branch)
 }
 
 func (c *Catalog) ListBranches(user, owner, name string, q page.Query) (page.Result[BranchInfo], error) {
-	repo, err := c.FJ.GetRepo(owner, name, user)
+	repo, err := c.fj.GetRepo(owner, name, user)
 	if err != nil {
 		return page.Result[BranchInfo]{}, fmt.Errorf("%w: %s", ErrNotFound, err)
 	}
@@ -293,11 +293,11 @@ func (c *Catalog) ListBranches(user, owner, name string, q page.Query) (page.Res
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		prot, _ = c.FJ.ListBranchProtections(owner, name)
+		prot, _ = c.fj.ListBranchProtections(owner, name)
 	}()
 	go func() {
 		defer wg.Done()
-		res, err = c.FJ.ListBranches(owner, name, q)
+		res, err = c.fj.ListBranches(owner, name, q)
 	}()
 	wg.Wait()
 	if err != nil {
@@ -325,7 +325,7 @@ func (c *Catalog) ListTags(user, owner, name string, q page.Query) (page.Result[
 	if err := c.seeOK(user, owner, name); err != nil {
 		return page.Result[TagInfo]{}, err
 	}
-	res, err := c.FJ.ListTags(owner, name, q)
+	res, err := c.fj.ListTags(owner, name, q)
 	if err != nil {
 		return page.Result[TagInfo]{}, err
 	}
@@ -338,7 +338,7 @@ func (c *Catalog) ListTags(user, owner, name string, q page.Query) (page.Result[
 
 func (c *Catalog) ListCommits(user, owner, name, ref string, q page.Query) (page.Result[forgejo.Commit], error) {
 	if ref == "" {
-		repo, err := c.FJ.GetRepo(owner, name, user)
+		repo, err := c.fj.GetRepo(owner, name, user)
 		if err != nil {
 			return page.Result[forgejo.Commit]{}, fmt.Errorf("%w: %s", ErrNotFound, err)
 		}
@@ -349,7 +349,7 @@ func (c *Catalog) ListCommits(user, owner, name, ref string, q page.Query) (page
 	} else if err := c.seeOK(user, owner, name); err != nil {
 		return page.Result[forgejo.Commit]{}, err
 	}
-	res, err := c.FJ.ListCommits(owner, name, ref, q)
+	res, err := c.fj.ListCommits(owner, name, ref, q)
 	if err != nil {
 		return page.Result[forgejo.Commit]{}, err
 	}
@@ -358,7 +358,7 @@ func (c *Catalog) ListCommits(user, owner, name, ref string, q page.Query) (page
 }
 
 func (c *Catalog) paintCommitChecks(owner, name string, items []forgejo.Commit) {
-	if c.FJ == nil || !c.FJ.Ready() || len(items) == 0 {
+	if c.fj == nil || !c.fj.Ready() || len(items) == 0 {
 		return
 	}
 	var wg sync.WaitGroup
@@ -366,7 +366,7 @@ func (c *Catalog) paintCommitChecks(owner, name string, items []forgejo.Commit) 
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			st, err := c.FJ.CommitStatuses(owner, name, items[i].SHA)
+			st, err := c.fj.CommitStatuses(owner, name, items[i].SHA)
 			if err != nil || len(st) == 0 {
 				return
 			}
@@ -396,7 +396,7 @@ func (c *Catalog) ListPulls(user, owner, name, state string, q page.Query) (page
 	if err := c.seeOK(user, owner, name); err != nil {
 		return page.Result[forgejo.PR]{}, err
 	}
-	res, err := c.FJ.ListPRs(owner, name, state, q)
+	res, err := c.fj.ListPRs(owner, name, state, q)
 	if err != nil {
 		return page.Result[forgejo.PR]{}, err
 	}
@@ -411,14 +411,14 @@ func (c *Catalog) ListComments(user, owner, name string, number int, q page.Quer
 	if err := c.seeOK(user, owner, name); err != nil {
 		return page.Result[forgejo.Comment]{}, err
 	}
-	return c.FJ.ListComments(owner, name, number, q)
+	return c.fj.ListComments(owner, name, number, q)
 }
 
 func (c *Catalog) ListPackageVersions(user, kind, name string, q page.Query) (page.Result[forgejo.Package], error) {
-	if !c.FJ.Ready() {
+	if !c.fj.Ready() {
 		return page.Of([]forgejo.Package{}, q, false), nil
 	}
-	res, err := c.FJ.ListPackages(c.Cfg.Org, kind, name, q, user)
+	res, err := c.fj.ListPackages(c.Cfg.Org, kind, name, q, user)
 	if err != nil {
 		return page.Result[forgejo.Package]{}, err
 	}
@@ -432,10 +432,10 @@ func (c *Catalog) ListPackageVersions(user, kind, name string, q page.Query) (pa
 }
 
 func (c *Catalog) ListPackageRows(user, kind string, q page.Query) (page.Result[PackageRow], error) {
-	if !c.FJ.Ready() {
+	if !c.fj.Ready() {
 		return page.Of([]PackageRow{}, q, false), nil
 	}
-	res, err := c.FJ.ListPackages(c.Cfg.Org, kind, "", q, user)
+	res, err := c.fj.ListPackages(c.Cfg.Org, kind, "", q, user)
 	if err != nil {
 		return page.Result[PackageRow]{}, err
 	}
@@ -467,7 +467,7 @@ func (c *Catalog) PRDetail(user, owner, name string, number int) (PRDetail, erro
 	if _, err := c.seeRepo(user, owner, name); err != nil {
 		return PRDetail{}, err
 	}
-	pr, err := c.FJ.GetPR(owner, name, number)
+	pr, err := c.fj.GetPR(owner, name, number)
 	if err != nil {
 		return PRDetail{}, err
 	}
@@ -487,7 +487,7 @@ func (c *Catalog) MergePR(user, owner, name string, number int) (map[string]any,
 	if _, err := c.seeRepo(user, owner, name); err != nil {
 		return nil, err
 	}
-	pr, err := c.FJ.GetPR(owner, name, number)
+	pr, err := c.fj.GetPR(owner, name, number)
 	if err != nil {
 		return nil, err
 	}
@@ -498,7 +498,7 @@ func (c *Catalog) MergePR(user, owner, name string, number int) (map[string]any,
 	if !ok {
 		return nil, fmt.Errorf("checks not green")
 	}
-	if err := c.FJ.MergePR(owner, name, number, user); err != nil {
+	if err := c.fj.MergePR(owner, name, number, user); err != nil {
 		return nil, err
 	}
 	return map[string]any{"merged": true, "statuses": st}, nil
@@ -508,14 +508,14 @@ func (c *Catalog) ClosePR(user, owner, name string, number int) (map[string]any,
 	if _, err := c.seeRepo(user, owner, name); err != nil {
 		return nil, err
 	}
-	if err := c.FJ.ClosePR(owner, name, number, user); err != nil {
+	if err := c.fj.ClosePR(owner, name, number, user); err != nil {
 		return nil, err
 	}
 	return map[string]any{"ok": true, "state": "closed"}, nil
 }
 
 func (c *Catalog) CommitChecks(owner, name, sha string) (bool, []forgejo.Status, error) {
-	ok, st, err := c.FJ.ChecksGreen(owner, name, sha)
+	ok, st, err := c.fj.ChecksGreen(owner, name, sha)
 	if err != nil {
 		return false, nil, err
 	}
@@ -625,27 +625,30 @@ func (c *Catalog) ListPipelines(user, repo, team, status string, q page.Query) (
 	return res, nil
 }
 
+func repoFullNames(repos []store.OrgRepo) []string {
+	out := make([]string, 0, len(repos))
+	for _, r := range repos {
+		out = append(out, r.FullName)
+	}
+	return out
+}
+
 func (c *Catalog) visiblePipeRepos(user, team string) ([]string, error) {
 	if !c.indexed() {
 		return []string{}, nil
 	}
 	admin := c.IsOrgAdmin(user)
+	var repos []store.OrgRepo
+	var err error
 	if team != "" {
-		repos, err := c.Idx.VisibleTeamRepos(user, team, admin)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]string, 0, len(repos))
-		for _, r := range repos {
-			out = append(out, r.FullName)
-		}
-		return c.orgNames(out), nil
+		repos, err = c.Idx.VisibleTeamRepos(user, team, admin)
+	} else {
+		repos, err = c.Idx.VisibleRepos(user, admin)
 	}
-	names, err := c.Idx.VisibleRepoNames(user, admin)
 	if err != nil {
 		return nil, err
 	}
-	return c.orgNames(names), nil
+	return c.orgNames(repoFullNames(repos)), nil
 }
 
 func (c *Catalog) canSeeIndexedRepo(user, repo string) bool {
@@ -704,7 +707,7 @@ func (c *Catalog) CommitDetail(user, owner, name, sha string, q page.Query) (Com
 	if _, err := c.seeRepo(user, owner, name); err != nil {
 		return CommitDetail{}, err
 	}
-	cm, err := c.FJ.GetCommit(owner, name, sha)
+	cm, err := c.fj.GetCommit(owner, name, sha)
 	if err != nil {
 		return CommitDetail{}, err
 	}
@@ -717,7 +720,7 @@ func (c *Catalog) CommitDetail(user, owner, name, sha string, q page.Query) (Com
 		}
 	}
 	if needPatch {
-		if raw, err := c.FJ.GetCommitDiff(owner, name, sha); err == nil {
+		if raw, err := c.fj.GetCommitDiff(owner, name, sha); err == nil {
 			parsed := forgejo.ParseUnifiedDiff(raw)
 			if len(files) == 0 {
 				files = parsed
@@ -877,10 +880,10 @@ func (c *Catalog) queueInfo() woodpecker.QueueInfo {
 			return q
 		}
 	}
-	if c.WP == nil || !c.WP.Ready() {
+	if c.wp == nil || !c.wp.Ready() {
 		return woodpecker.QueueInfo{}
 	}
-	q, err := c.WP.QueueInfo()
+	q, err := c.wp.QueueInfo()
 	if err != nil {
 		return woodpecker.QueueInfo{}
 	}
@@ -929,10 +932,10 @@ func (c *Catalog) pipelineFiles(p woodpecker.Pipeline) []FileBlob {
 		}
 	}
 	owner, name, ok := strings.Cut(p.Repo, "/")
-	if !ok || c.FJ == nil {
+	if !ok || c.fj == nil {
 		return nil
 	}
-	ents, err := c.FJ.ListContents(owner, name, ref, ".acahti/pipelines")
+	ents, err := c.fj.ListContents(owner, name, ref, ".acahti/pipelines")
 	if err != nil {
 		return nil
 	}
@@ -959,7 +962,7 @@ func (c *Catalog) pipelineFiles(p woodpecker.Pipeline) []FileBlob {
 			}
 			content := decodeContent(e)
 			if content == "" {
-				if raw, err := c.FJ.GetFile(owner, name, ref, filePath); err == nil {
+				if raw, err := c.fj.GetFile(owner, name, ref, filePath); err == nil {
 					content = decodeContent(raw)
 				}
 			}
@@ -1043,7 +1046,7 @@ func (c *Catalog) mergeArgos(p woodpecker.Pipeline) woodpecker.Pipeline {
 }
 
 func (c *Catalog) captureArgos(p woodpecker.Pipeline) woodpecker.Pipeline {
-	if c.WP == nil || !c.WP.Ready() {
+	if c.wp == nil || !c.wp.Ready() {
 		return p
 	}
 	for i := range p.Jobs {
@@ -1082,7 +1085,7 @@ func (c *Catalog) captureArgos(p woodpecker.Pipeline) woodpecker.Pipeline {
 				if id == 0 {
 					continue
 				}
-				raw, err := c.WP.PipelineLog(p.Repo, p.Number, id)
+				raw, err := c.wp.PipelineLog(p.Repo, p.Number, id)
 				if err != nil {
 					continue
 				}
@@ -1107,7 +1110,7 @@ func (c *Catalog) captureArgos(p woodpecker.Pipeline) woodpecker.Pipeline {
 }
 
 func (c *Catalog) captureTerminalLogs(p woodpecker.Pipeline) woodpecker.Pipeline {
-	if c.WP == nil || !c.WP.Ready() {
+	if c.wp == nil || !c.wp.Ready() {
 		return p
 	}
 	for i := range p.Jobs {
@@ -1120,7 +1123,7 @@ func (c *Catalog) captureTerminalLogs(p woodpecker.Pipeline) woodpecker.Pipeline
 			if id == 0 {
 				continue
 			}
-			raw, err := c.WP.PipelineLog(p.Repo, p.Number, id)
+			raw, err := c.wp.PipelineLog(p.Repo, p.Number, id)
 			if err != nil {
 				if s.Error != "" {
 					s.LogTail = s.Error
@@ -1153,10 +1156,10 @@ func (c *Catalog) cancelPipeline(user, repo string, number int64, reason string)
 			return woodpecker.Pipeline{}, err
 		}
 	}
-	if c.WP == nil || !c.WP.Ready() {
+	if c.wp == nil || !c.wp.Ready() {
 		return woodpecker.Pipeline{}, fmt.Errorf("ci unavailable")
 	}
-	raw, err := c.WP.GetPipeline(repo, number)
+	raw, err := c.wp.GetPipeline(repo, number)
 	if err != nil {
 		return woodpecker.Pipeline{}, err
 	}
@@ -1165,8 +1168,8 @@ func (c *Catalog) cancelPipeline(user, repo string, number int64, reason string)
 	if !woodpecker.InFlight(raw.Status) && !woodpecker.PendingAfterFailure(raw) {
 		return c.Remember(raw), nil
 	}
-	if err := c.WP.Cancel(repo, number); err != nil {
-		again, rerr := c.WP.GetPipeline(repo, number)
+	if err := c.wp.Cancel(repo, number); err != nil {
+		again, rerr := c.wp.GetPipeline(repo, number)
 		if rerr == nil {
 			again.Repo = repo
 			if !woodpecker.InFlight(again.Status) {
@@ -1259,7 +1262,7 @@ func (c *Catalog) DeletePipeline(user, repo string, number int64) error {
 	if !woodpecker.DeleteAllowed(fresh.Status) {
 		return fmt.Errorf("cannot delete pipeline with status %s", fresh.Status)
 	}
-	if err := c.WP.Delete(repo, number); err != nil {
+	if err := c.wp.Delete(repo, number); err != nil {
 		return err
 	}
 	if c.Idx != nil {
@@ -1269,18 +1272,18 @@ func (c *Catalog) DeletePipeline(user, repo string, number int64) error {
 }
 
 func (c *Catalog) Refresh(repo string, number int64) (woodpecker.Pipeline, error) {
-	if c.WP == nil || !c.WP.Ready() {
+	if c.wp == nil || !c.wp.Ready() {
 		return woodpecker.Pipeline{}, fmt.Errorf("ci unavailable")
 	}
-	p, err := c.WP.GetPipeline(repo, number)
+	p, err := c.wp.GetPipeline(repo, number)
 	if err != nil {
 		return woodpecker.Pipeline{}, err
 	}
 	p.Repo = repo
 	p.HydrateJobs()
 	if woodpecker.PendingAfterFailure(p) {
-		if err := c.WP.Cancel(repo, number); err == nil {
-			if again, err := c.WP.GetPipeline(repo, number); err == nil {
+		if err := c.wp.Cancel(repo, number); err == nil {
+			if again, err := c.wp.GetPipeline(repo, number); err == nil {
 				again.Repo = repo
 				p = again
 			}
@@ -1295,7 +1298,7 @@ func (c *Catalog) IngestWoodpecker(raw []byte) (woodpecker.Pipeline, bool) {
 		return woodpecker.Pipeline{}, false
 	}
 	p := h.Pipeline
-	if (len(p.Jobs) == 0 || woodpecker.PendingAfterFailure(p)) && c.WP != nil && c.WP.Ready() {
+	if (len(p.Jobs) == 0 || woodpecker.PendingAfterFailure(p)) && c.wp != nil && c.wp.Ready() {
 		if d, err := c.Refresh(h.Repo, h.Number); err == nil {
 			return d, true
 		}
@@ -1304,6 +1307,7 @@ func (c *Catalog) IngestWoodpecker(raw []byte) (woodpecker.Pipeline, bool) {
 }
 
 func (c *Catalog) IngestForgejo(payload map[string]any) (woodpecker.Pipeline, bool) {
+	c.rememberHeat(store.ForgejoActor(payload))
 	repo, n, ok := store.ParseForgejoStatus(payload)
 	if ok {
 		p, err := c.Refresh(repo, n)
@@ -1319,14 +1323,14 @@ func (c *Catalog) IngestForgejo(payload map[string]any) (woodpecker.Pipeline, bo
 }
 
 func (c *Catalog) Backfill() {
-	if c.Idx == nil || c.WP == nil || !c.WP.Ready() {
+	if c.Idx == nil || c.wp == nil || !c.wp.Ready() {
 		return
 	}
 	var repos []woodpecker.Repo
 	var err error
 	for i := 0; i < 20; i++ {
 		repos, err = page.Walk(func(q page.Query) (page.Result[woodpecker.Repo], error) {
-			return c.WP.ListRepos(q)
+			return c.wp.ListRepos(q)
 		})
 		if err == nil {
 			break
@@ -1341,13 +1345,13 @@ func (c *Catalog) Backfill() {
 		if !r.IsActive || r.FullName == "" {
 			continue
 		}
-		res, err := c.WP.ListPipelines(r.FullName, page.Query{Page: 1, Size: page.MaxSize})
+		res, err := c.wp.ListPipelines(r.FullName, page.Query{Page: 1, Size: page.MaxSize})
 		if err != nil {
 			continue
 		}
 		for _, p := range res.Items {
 			if len(p.Jobs) == 0 {
-				if d, err := c.WP.GetPipeline(r.FullName, p.Number); err == nil {
+				if d, err := c.wp.GetPipeline(r.FullName, p.Number); err == nil {
 					p = d
 				}
 			}
@@ -1422,7 +1426,7 @@ func (c *Catalog) StepLog(user, repo string, number, step int64) (string, error)
 			}
 		}
 	}
-	raw, err := c.WP.PipelineLog(repo, number, step)
+	raw, err := c.wp.PipelineLog(repo, number, step)
 	if err != nil {
 		return "", err
 	}
@@ -1500,7 +1504,7 @@ func (c *Catalog) fillPRHeads(items []forgejo.PR) {
 		if !ok || p.Number == 0 {
 			continue
 		}
-		full, err := c.FJ.GetPR(owner, name, p.Number)
+		full, err := c.fj.GetPR(owner, name, p.Number)
 		if err != nil {
 			continue
 		}
@@ -1513,7 +1517,7 @@ func (c *Catalog) fillPRHeads(items []forgejo.PR) {
 }
 
 func (c *Catalog) BoardPRs(user string, q page.Query) (page.Result[forgejo.PR], error) {
-	if !c.FJ.Ready() {
+	if !c.fj.Ready() {
 		return page.Of([]forgejo.PR{}, q, false), nil
 	}
 	var allow map[string]bool
@@ -1528,7 +1532,7 @@ func (c *Catalog) BoardPRs(user string, q page.Query) (page.Result[forgejo.PR], 
 	need := q.Norm().Page*q.Norm().Size + 1
 	pq := page.Query{Page: 1, Size: page.MaxSize}
 	for len(matched) < need && pq.Page <= page.MaxWalk {
-		res, err := c.FJ.SearchPRs(c.Cfg.Org, "open", pq)
+		res, err := c.fj.SearchPRs(c.Cfg.Org, "open", pq)
 		if err != nil {
 			return page.Result[forgejo.PR]{}, err
 		}
@@ -1600,10 +1604,10 @@ type AgentStatus struct {
 }
 
 func (c *Catalog) AgentStatus(q page.Query) (AgentStatus, error) {
-	if c.WP == nil || !c.WP.Ready() {
+	if c.wp == nil || !c.wp.Ready() {
 		return AgentStatus{Items: []woodpecker.Agent{}, Page: q.Norm().Page, Size: q.Norm().Size, Queue: woodpecker.QueueInfo{}}, nil
 	}
-	agents, err := c.WP.Agents()
+	agents, err := c.wp.Agents()
 	if err != nil {
 		return AgentStatus{}, err
 	}
@@ -1614,7 +1618,7 @@ func (c *Catalog) AgentStatus(q page.Query) (AgentStatus, error) {
 }
 
 func (c *Catalog) Queue() woodpecker.QueueInfo {
-	if c.WP == nil || !c.WP.Ready() {
+	if c.wp == nil || !c.wp.Ready() {
 		return woodpecker.QueueInfo{}
 	}
 	return c.queueInfo()

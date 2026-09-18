@@ -10,6 +10,41 @@ UI reads are a **read/write split** (local read models, not a Postgres replica):
 | Teams, repos, members, nav, ACL | `acahti` teams / repos / members | Acahti mutation write-through + git webhook + startup reconcile |
 | Git contents, commits, PRs, packages, step logs | live kernel | those objects live in the kernel |
 
+## Code rule (CQRS facade)
+
+`catalog.Catalog` is the **only** application face for Forgejo and Woodpecker. `web`, `mcp`, `api`, and hooks must not hold or call `forgejo.Client` / `woodpecker.Client`.
+
+```mermaid
+flowchart TB
+  SPA --> Web
+  Agent --> MCP
+  Web --> Cat
+  MCP --> Cat
+  Hook --> Cat
+  Cat -->|"query"| Idx[(acahti index)]
+  Cat -->|"command + live miss"| FJ[forgejo]
+  Cat -->|"command + live miss"| WP[woodpecker]
+  Cat -->|"Remember / SyncOrg"| Idx
+```
+
+**Query**
+
+1. Indexed? → `store` (+ short TTL memo for queue paint).
+2. Live whitelist miss → kernel GET via Catalog (optional write-back `Remember`).
+3. Else empty page / NotFound. Do not Walk kernels to assemble list, board, sidebar, or visibility.
+
+**Command**
+
+1. ACL / Ready.
+2. Kernel mutate.
+3. `Remember` or org upsert / SyncOrg.
+4. `Notify` (SSE).
+5. Return `Present(...)` shape.
+
+Live whitelist (GET kernel, still through Catalog): git contents / commits / diff / branches / tags / PR detail / packages / statuses; CI detail miss or in-flight refresh, step log, `QueueInfo`, agents.
+
+Kernel HTTP transport is shared `internal/httpx` (timeouts, JSON, SoftFail). Domain clients stay in `internal/forgejo` and `internal/woodpecker`.
+
 The git kernel remains the source of git objects, PRs, packages, and `.acahti/pipelines/` YAML on a **write or detail miss**. Gateway does not Walk the git kernel to assemble list, board, sidebar, or visibility.
 
 ## Stack

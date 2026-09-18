@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/sidebar"
 import { useT } from "@/i18n/i18n"
 import type { FileBlob, Step } from "@/lib/api"
+import { formatDuration } from "@/lib/format"
 import type { Job } from "@/lib/pipeline"
 
 function JobNode({
@@ -30,7 +31,6 @@ function JobNode({
   activeFile?: FileBlob | null
   onStep: (step: Step) => void
 }) {
-  const t = useT()
   const [open, setOpen] = useState(true)
 
   return (
@@ -40,36 +40,24 @@ function JobNode({
           <ChevronRightIcon className={cn("size-4 transition-transform", open && "rotate-90")} />
           <RunStatusIcon status={job.state} />
           <span>{job.name}</span>
-          {job.argos_url ? (
-            <a
-              className="ml-auto text-xs text-sky-700 hover:underline dark:text-sky-400"
-              href={job.argos_url}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(event) => event.stopPropagation()}
-            >
-              {t("argosDash")}
-            </a>
-          ) : null}
         </SidebarMenuButton>
         <CollapsibleContent>
           <SidebarMenuSub>
             {job.steps.map((s) => {
               const selected = !activeFile && activeStep?.pid === s.pid && activeStep.name === s.name
-              const state = s.state
+              const duration = formatDuration(s.started, s.finished, s.state)
               return (
                 <SidebarMenuSubItem key={`${s.pid}-${s.name}`}>
                   <SidebarMenuSubButton
                     isActive={selected}
-                    render={
-                      <button
-                        type="button"
-                        onClick={() => onStep(s)}
-                      />
-                    }
+                    className="w-full [&>span:last-child]:overflow-visible"
+                    render={<button type="button" onClick={() => onStep(s)} />}
                   >
-                    <RunStatusIcon status={state} />
-                    <span>{s.name || `#${s.pid}`}</span>
+                    <RunStatusIcon status={s.state} />
+                    <span className="min-w-0 truncate">{s.name || `#${s.pid}`}</span>
+                    {duration ? (
+                      <span className="ml-auto shrink-0 tabular-nums text-xs text-muted-foreground">{duration}</span>
+                    ) : null}
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
               )

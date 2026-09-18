@@ -11,12 +11,15 @@ import (
 )
 
 func TestPipelineJobsFromKernelWorkflows(t *testing.T) {
-	p, err := DecodeKernel([]byte(`{"number":2,"status":"success","workflows":[{"name":"ci","state":"success","children":[{"pid":2,"name":"check","state":"success"}]}]}`))
+	p, err := DecodeKernel([]byte(`{"number":2,"status":"success","workflows":[{"name":"ci","state":"success","children":[{"pid":2,"name":"check","state":"success","started":100,"finished":109}]}]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(p.Jobs) != 1 || p.Jobs[0].Name != "ci" || len(p.Jobs[0].Steps) != 1 || p.Jobs[0].Steps[0].Name != "check" {
 		t.Fatalf("jobs=%v", p.Jobs)
+	}
+	if p.Jobs[0].Steps[0].Started != 100 || p.Jobs[0].Steps[0].Finished != 109 {
+		t.Fatalf("step times=%+v", p.Jobs[0].Steps[0])
 	}
 	out, err := json.Marshal(p)
 	if err != nil {

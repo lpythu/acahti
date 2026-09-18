@@ -177,21 +177,6 @@ export function triggerKind(event?: string, ref?: string): TriggerKind {
   }
 }
 
-export function triggerKey(event?: string, ref?: string): MessageKey {
-  switch (triggerKind(event, ref)) {
-    case "push":
-      return "triggerPush"
-    case "tag":
-      return "triggerTag"
-    case "pr":
-      return "triggerPR"
-    case "cron":
-      return "triggerCron"
-    default:
-      return "triggerManual"
-  }
-}
-
 export function triggerVars(p: Pipeline): Record<string, string> {
   const ref = shortRef(p.ref) || p.branch || p.title || ""
   return {
@@ -252,24 +237,4 @@ export function waitLine(p: { status?: string; wait?: string; queue_position?: n
   if (p.wait === "deps") return { key: "statusWaiting" }
   if (p.wait === "concurrency") return { key: "statusSlot" }
   return null
-}
-
-export function namedSecrets(files: { content?: string }[] | undefined): string[] {
-  const names = new Set<string>()
-  for (const f of files || []) {
-    const text = f.content || ""
-    for (const m of text.matchAll(/secrets:\s*\[([^\]]+)\]/g)) {
-      for (const part of m[1].split(",")) {
-        const n = part.replace(/['"]/g, "").trim()
-        if (n) names.add(n)
-      }
-    }
-    for (const m of text.matchAll(/secrets:\s*\n((?:[ \t]+[A-Za-z0-9_]+:[ \t]*[A-Za-z0-9_]+\n?)+)/g)) {
-      for (const line of m[1].split("\n")) {
-        const kv = line.match(/^[ \t]+[A-Za-z0-9_]+:[ \t]*([A-Za-z0-9_]+)\s*$/)
-        if (kv) names.add(kv[1])
-      }
-    }
-  }
-  return [...names].sort()
 }

@@ -11,7 +11,7 @@ export function BoardHeatmap() {
   const { data, loading, reload } = useLoad(() => api.boardHeatmap(), [])
 
   useEvents((ev) => {
-    if (ev.type === "pipeline.updated") void reload()
+    if (ev.type === "forgejo") void reload()
   })
 
   if (loading && !data) {

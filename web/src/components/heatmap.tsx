@@ -4,7 +4,6 @@ import { cn } from "cn"
 export type HeatDay = { date: string; value: number }
 
 type HeatCell = { date: string; value: number }
-type HeatColumn = { key: string; label: string }
 
 const COLORS = ["var(--heat-0)", "var(--heat-1)", "var(--heat-2)", "var(--heat-3)", "var(--heat-4)"] as const
 const WEEKS = 53
@@ -26,36 +25,60 @@ export function Heatmap({
 }) {
   const grid = useMemo(() => calendarGrid(days, locale), [days, locale])
   const levels = useMemo(() => heatLevels(grid.values), [grid.values])
+  const n = grid.columns.length
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      <div className="w-full min-w-0" style={{ containerType: "inline-size" }}>
+      <div className="flex min-w-0">
+        <div className="w-8 shrink-0" />
         <div
-          className="grid w-full min-w-0 items-start"
-          style={{
-            gap: `clamp(1px, calc((100cqw - 32px) / ${grid.columns.length} * 0.18), 6px)`,
-            gridTemplateColumns: `32px repeat(${grid.columns.length}, minmax(0, 1fr))`,
-            gridTemplateRows: `16px repeat(7, auto)`,
-          }}
+          className="text-muted-foreground mb-1 grid min-w-0 flex-1 text-[11px] leading-none"
+          style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}
         >
-          <span />
           {grid.columns.map((col) => (
-            <span key={col.key} className="text-muted-foreground overflow-visible whitespace-nowrap text-[11px] leading-none">
+            <span key={col.key} className="overflow-hidden whitespace-nowrap">
               {col.label}
             </span>
           ))}
+        </div>
+      </div>
+      <div className="flex min-w-0 items-start">
+        <div className="text-muted-foreground grid w-8 shrink-0 grid-rows-7 self-stretch pr-1 text-[11px] leading-none">
           {grid.rows.map((row, rowIndex) => (
-            <Row
-              key={row}
-              row={row}
-              showLabel={rowIndex === 0 || rowIndex === 2 || rowIndex === 4}
-              columns={grid.columns}
-              values={grid.values}
-              dates={grid.dates}
-              levels={levels}
-              renderTooltip={renderTooltip}
-            />
+            <span key={row} className="flex items-center justify-end">
+              {rowIndex === 0 || rowIndex === 2 || rowIndex === 4 ? row : ""}
+            </span>
           ))}
+        </div>
+        <div
+          className="grid min-w-0 flex-1"
+          style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}
+        >
+          {grid.rows.flatMap((row) =>
+            grid.columns.map((col) => {
+              const key = cellKey(col.key, row)
+              const value = grid.values.get(key) ?? 0
+              const date = grid.dates.get(key) ?? ""
+              return (
+                <div
+                  key={key}
+                  className="aspect-square min-w-0"
+                  style={{ padding: "max(0.5px, 12.5%)" }}
+                  title={renderTooltip ? renderTooltip({ date, value }) : date}
+                >
+                  <div
+                    role="img"
+                    aria-label={date ? `${date} ${value}` : undefined}
+                    className="size-full"
+                    style={{
+                      backgroundColor: COLORS[levelFor(value, levels)],
+                      borderRadius: "min(3px, 20%)",
+                    }}
+                  />
+                </div>
+              )
+            }),
+          )}
         </div>
       </div>
       <div className="text-muted-foreground flex items-center justify-end gap-1.5 text-xs">
@@ -66,50 +89,6 @@ export function Heatmap({
         {moreLabel ? <span>{moreLabel}</span> : null}
       </div>
     </div>
-  )
-}
-
-function Row({
-  row,
-  showLabel,
-  columns,
-  values,
-  dates,
-  levels,
-  renderTooltip,
-}: {
-  row: string
-  showLabel: boolean
-  columns: HeatColumn[]
-  values: Map<string, number>
-  dates: Map<string, string>
-  levels: number[]
-  renderTooltip?: (cell: HeatCell) => string
-}) {
-  return (
-    <>
-      <span className="text-muted-foreground flex self-stretch items-center justify-end pr-1 text-[11px] leading-none">
-        {showLabel ? row : ""}
-      </span>
-      {columns.map((col) => {
-        const key = cellKey(col.key, row)
-        const value = values.get(key) ?? 0
-        const date = dates.get(key) ?? ""
-        return (
-          <div
-            key={key}
-            role="img"
-            aria-label={date ? `${date} ${value}` : undefined}
-            className="aspect-square w-full min-w-0"
-            style={{
-              backgroundColor: COLORS[levelFor(value, levels)],
-              borderRadius: "min(3px, 20%)",
-            }}
-            title={renderTooltip ? renderTooltip({ date, value }) : date}
-          />
-        )
-      })}
-    </>
   )
 }
 

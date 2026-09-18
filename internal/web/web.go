@@ -17,15 +17,12 @@ import (
 	"acahti/internal/oauth"
 	"acahti/internal/page"
 	"acahti/internal/passwd"
-	"acahti/internal/woodpecker"
 	"acahti/skills"
 )
 
 type Pages struct {
 	Cfg         config.Config
 	Cat         *catalog.Catalog
-	FJ          *forgejo.Client
-	WP          *woodpecker.Client
 	Hub         *events.Hub
 	Auth        *auth.Service
 	InviteStore *invite.Store
@@ -35,13 +32,13 @@ type Pages struct {
 	passwordSet func(login string) (has, ok bool)
 }
 
-func New(cfg config.Config, cat *catalog.Catalog, fj *forgejo.Client, wp *woodpecker.Client, a *auth.Service, inv *invite.Store, oa *oauth.Server, hub *events.Hub) *Pages {
+func New(cfg config.Config, cat *catalog.Catalog, a *auth.Service, inv *invite.Store, oa *oauth.Server, hub *events.Hub) *Pages {
 	sub, err := fs.Sub(distFS, "dist")
 	if err != nil {
 		sub = distFS
 	}
 	return &Pages{
-		Cfg: cfg, Cat: cat, FJ: fj, WP: wp, Hub: hub,
+		Cfg: cfg, Cat: cat, Hub: hub,
 		Auth: a, InviteStore: inv, OAuth: oa, files: sub,
 	}
 }
@@ -103,10 +100,8 @@ func (p *Pages) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	author := ""
-	if p.FJ != nil {
-		if u, err := p.FJ.UserSudo(user); err == nil {
-			author = u.FullName
-		}
+	if u, err := p.Cat.User(user); err == nil {
+		author = u.FullName
 	}
 	p.writeSession(w, r, user, author, admin)
 }
@@ -120,7 +115,7 @@ func (p *Pages) Login(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-	u, err := p.FJ.BasicUser(strings.TrimSpace(body.Username), body.Password)
+	u, err := p.Cat.Authenticate(strings.TrimSpace(body.Username), body.Password)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid username or password"})
 		return
@@ -189,12 +184,11 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "DOMAIN or ROOT_URL required"})
 			return
 		}
-		u, err := p.FJ.CreateUser(login, email, pw, body.Admin)
+		u, err := p.Cat.CreateUser(login, email, pw, body.Admin)
 		if err != nil {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 			return
 		}
-		_ = p.FJ.AddOrgMember(p.Cfg.Org, u.Login)
 		u.FullName = identity.Name(u.Login, u.FullName)
 		_ = p.rememberPassword(u.Login, pw)
 		u.Password = pw
@@ -202,7 +196,7 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"user": u})
 		return
 	}
-	out, err := p.FJ.ListUsers(page.Parse(r))
+	out, err := p.Cat.ListUsers(page.Parse(r))
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
@@ -268,11 +262,10 @@ func (p *Pages) PatchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := identity.Name(login, body.GitName)
-	if err := p.FJ.EditUser(login, map[string]any{"full_name": name}); err != nil {
+	if err := p.Cat.EditUser(login, map[string]any{"full_name": name}); err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	p.Cat.ForgetAuthors()
 	writeJSON(w, http.StatusOK, identity.View(login, name, p.Cfg.RootURL, p.Cfg.Domain, p.Cfg.Org))
 }
 
@@ -348,13 +341,12 @@ func (p *Pages) Join(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	email := identity.Email(login, identity.Domain(p.Cfg.RootURL, p.Cfg.Domain))
-	u, err := p.FJ.CreateUser(login, email, body.Password, false)
+	u, err := p.Cat.CreateUser(login, email, body.Password, false)
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
 	_ = p.InviteStore.Delete(code)
-	_ = p.FJ.AddOrgMember(p.Cfg.Org, u.Login)
 	_ = p.rememberPassword(u.Login, body.Password)
 	p.SetSession(w, u.Login)
 	p.writeSession(w, r, u.Login, u.FullName, false)
@@ -436,7 +428,7 @@ func (p *Pages) Password(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "password": pw, "has_password": has})
 		return
 	}
-	if err := p.FJ.SetPassword(target, body.Password); err != nil {
+	if err := p.Cat.SetPassword(target, body.Password); err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
@@ -477,7 +469,7 @@ func (p *Pages) initPassword(login string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := p.FJ.SetPassword(login, pw); err != nil {
+	if err := p.Cat.SetPassword(login, pw); err != nil {
 		return "", err
 	}
 	if err := p.rememberPassword(login, pw); err != nil {

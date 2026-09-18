@@ -65,7 +65,7 @@ func eventsPages(t *testing.T) (*Pages, *events.Hub) {
 	a := auth.New([]byte("test"), "alice")
 	hub := events.New()
 	cat := catalog.New(cfg, forgejo.New(fj.URL, "t"), nil, nil)
-	return New(cfg, cat, forgejo.New(fj.URL, "t"), nil, a, nil, nil, hub), hub
+	return New(cfg, cat, a, nil, nil, hub), hub
 }
 
 func replayEvents(t *testing.T, p *Pages, user string) string {

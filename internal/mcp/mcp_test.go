@@ -78,7 +78,7 @@ func TestWaitChecksEmptyIsDone(t *testing.T) {
 		_, _ = w.Write([]byte(`[]`))
 	}))
 	t.Cleanup(hs.Close)
-	s := &Server{FJ: forgejo.New(hs.URL, "t")}
+	s := &Server{Cat: catalog.New(config.Config{}, forgejo.New(hs.URL, "t"), nil, nil)}
 	out, err := s.waitChecks("acme", "demo", "abc")
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +97,7 @@ func TestWaitChecksLatestPerContext(t *testing.T) {
 		]`))
 	}))
 	t.Cleanup(hs.Close)
-	s := &Server{FJ: forgejo.New(hs.URL, "t")}
+	s := &Server{Cat: catalog.New(config.Config{}, forgejo.New(hs.URL, "t"), nil, nil)}
 	out, err := s.waitChecks("acme", "demo", "abc")
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +115,7 @@ func TestWaitChecksSnapshot(t *testing.T) {
 		_, _ = w.Write([]byte(`[{"status":"pending","context":"ci"}]`))
 	}))
 	t.Cleanup(hs.Close)
-	s := &Server{FJ: forgejo.New(hs.URL, "t")}
+	s := &Server{Cat: catalog.New(config.Config{}, forgejo.New(hs.URL, "t"), nil, nil)}
 	start := time.Now()
 	out, err := s.waitChecks("acme", "demo", "abc")
 	if err != nil {
@@ -214,7 +214,7 @@ func TestAgentStatusIncludesQueue(t *testing.T) {
 
 func TestSecretListMemberNotFound(t *testing.T) {
 	cat := secretCatalog(t)
-	s := &Server{Cfg: ConfigView{Org: "saidc", RootURL: "https://acahti.example"}, FJ: cat.FJ, Cat: cat}
+	s := &Server{Cfg: ConfigView{Org: "saidc", RootURL: "https://acahti.example"}, Cat: cat}
 
 	if _, err := s.CallForAPI("bob", "secret_list", map[string]any{"scope": "org"}); !errors.Is(err, catalog.ErrNotFound) {
 		t.Fatalf("member org list: %v", err)

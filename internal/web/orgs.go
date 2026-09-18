@@ -50,17 +50,15 @@ func (p *Pages) listOrgs(user string) []Org {
 		raw []forgejo.Org
 		err error
 	)
-	if p.FJ != nil && p.FJ.Ready() {
-		if p.isAdmin(user) {
-			raw, err = page.Walk(func(q page.Query) (page.Result[forgejo.Org], error) {
-				return p.FJ.ListAdminOrgs(q)
-			})
-		}
-		if err != nil || raw == nil {
-			raw, _ = page.Walk(func(q page.Query) (page.Result[forgejo.Org], error) {
-				return p.FJ.ListUserOrgs(user, q)
-			})
-		}
+	if p.isAdmin(user) {
+		raw, err = page.Walk(func(q page.Query) (page.Result[forgejo.Org], error) {
+			return p.Cat.ListAdminOrgs(q)
+		})
+	}
+	if err != nil || raw == nil {
+		raw, _ = page.Walk(func(q page.Query) (page.Result[forgejo.Org], error) {
+			return p.Cat.ListUserOrgs(user, q)
+		})
 	}
 	seen := map[string]struct{}{}
 	out := make([]Org, 0, len(raw)+1)
@@ -144,7 +142,7 @@ func (p *Pages) Orgs(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
-		org, err := p.FJ.CreateOrg(user, name, strings.TrimSpace(body.FullName))
+		org, err := p.Cat.CreateOrg(user, name, strings.TrimSpace(body.FullName))
 		if err != nil {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 			return
@@ -174,10 +172,8 @@ func (p *Pages) Orgs(w http.ResponseWriter, r *http.Request) {
 		}
 		p.setOrgCookie(w, name)
 		author := ""
-		if p.FJ != nil {
-			if u, err := p.FJ.UserSudo(user); err == nil {
-				author = u.FullName
-			}
+		if u, err := p.Cat.User(user); err == nil {
+			author = u.FullName
 		}
 		req := r.Clone(r.Context())
 		req.AddCookie(&http.Cookie{Name: orgCookie, Value: name})
