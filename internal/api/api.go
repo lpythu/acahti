@@ -40,7 +40,7 @@ func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if path == "/events" && r.Method == http.MethodGet {
 		login, ok := a.Auth.Parse(a.token(r))
 		if !ok {
-			oauth.Challenge(w, a.Cfg.RootURL+"/.well-known/oauth-protected-resource")
+			oauth.Challenge(w, oauth.ResourceMetadataURL(a.Cfg.RootURL))
 			return
 		}
 		var allow func(events.Event) bool
@@ -53,7 +53,7 @@ func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	tok := a.token(r)
 	login, ok := a.Auth.Parse(tok)
 	if !ok {
-		oauth.Challenge(w, a.Cfg.RootURL+"/.well-known/oauth-protected-resource")
+		oauth.Challenge(w, oauth.ResourceMetadataURL(a.Cfg.RootURL))
 		return
 	}
 	args := map[string]any{}

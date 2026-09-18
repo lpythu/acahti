@@ -24,7 +24,11 @@ func New(secret []byte, admin string) *Service {
 }
 
 func (s *Service) Issue(user string) string {
-	exp := strconv.FormatInt(time.Now().Add(s.TTL).Unix(), 10)
+	return s.IssueFor(user, s.TTL)
+}
+
+func (s *Service) IssueFor(user string, ttl time.Duration) string {
+	exp := strconv.FormatInt(time.Now().Add(ttl).Unix(), 10)
 	mac := hmac.New(sha256.New, s.Secret)
 	mac.Write([]byte(user + "|" + exp))
 	return base64.RawURLEncoding.EncodeToString([]byte(user + "|" + exp + "|" + hex.EncodeToString(mac.Sum(nil))))

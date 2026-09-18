@@ -354,6 +354,11 @@ func TestSkillAndOAuth(t *testing.T) {
 	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "/oauth/authorize") {
 		t.Fatalf("as metadata %d %s", rr.Code, rr.Body.String())
 	}
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource/mcp", nil))
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "/mcp") {
+		t.Fatalf("resource metadata %d %s", rr.Code, rr.Body.String())
+	}
 
 	rr = httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize"}`)))

@@ -78,6 +78,35 @@ func TestPKCERoundTrip(t *testing.T) {
 	if !ok || user != "alice" {
 		t.Fatalf("access_token %q %v", at, ok)
 	}
+	if int(tok["expires_in"].(float64)) != int(AccessTTL.Seconds()) {
+		t.Fatalf("expires_in %v", tok["expires_in"])
+	}
+	if int(tok["refresh_token_expires_in"].(float64)) != int(RefreshTTL.Seconds()) {
+		t.Fatalf("refresh_token_expires_in %v", tok["refresh_token_expires_in"])
+	}
+	rt, _ := tok["refresh_token"].(string)
+	if rt == "" {
+		t.Fatal("refresh_token")
+	}
+
+	form = url.Values{"grant_type": {"refresh_token"}, "refresh_token": {rt}}
+	tokReq = httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
+	tokReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr = httptest.NewRecorder()
+	s.Token(rr, tokReq)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("refresh %d %s", rr.Code, rr.Body.String())
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &tok); err != nil {
+		t.Fatal(err)
+	}
+	if tok["refresh_token"] != rt {
+		t.Fatalf("refresh rotated: %v", tok["refresh_token"])
+	}
+	at, _ = tok["access_token"].(string)
+	if user, ok = a.Parse(at); !ok || user != "alice" {
+		t.Fatalf("refreshed access_token %q %v", at, ok)
+	}
 
 	rr = httptest.NewRecorder()
 	s.Metadata(rr, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server", nil))
@@ -85,18 +114,20 @@ func TestPKCERoundTrip(t *testing.T) {
 		t.Fatalf("as metadata %d %s", rr.Code, rr.Body.String())
 	}
 	rr = httptest.NewRecorder()
-	s.Resource(rr, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource", nil))
+	s.Resource(rr, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource/mcp", nil))
 	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"logo_uri":"http://acahti.example/acahti.png"`) {
 		t.Fatalf("resource metadata %d %s", rr.Code, rr.Body.String())
 	}
 
+	meta := ResourceMetadataURL("http://acahti.example")
 	rr = httptest.NewRecorder()
-	Challenge(rr, "http://acahti.example/.well-known/oauth-protected-resource")
+	Challenge(rr, meta)
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("challenge %d", rr.Code)
 	}
 	b, _ := io.ReadAll(rr.Body)
-	if !strings.Contains(rr.Header().Get("WWW-Authenticate"), "resource_metadata") || !strings.Contains(string(b), "unauthorized") {
+	if !strings.Contains(rr.Header().Get("WWW-Authenticate"), meta) || !strings.Contains(string(b), "unauthorized") {
 		t.Fatalf("challenge headers %s body %s", rr.Header().Get("WWW-Authenticate"), b)
 	}
 }
+

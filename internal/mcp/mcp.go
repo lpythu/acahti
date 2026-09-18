@@ -142,7 +142,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Link", brand.Link(s.Cfg.RootURL))
 	login, ok := s.Auth.Parse(auth.Bearer(r))
 	if !ok {
-		oauth.Challenge(w, s.Cfg.RootURL+"/.well-known/oauth-protected-resource")
+		oauth.Challenge(w, oauth.ResourceMetadataURL(s.Cfg.RootURL))
 		return
 	}
 	s.handler.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), loginKey{}, login)))

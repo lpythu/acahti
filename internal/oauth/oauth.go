@@ -19,6 +19,17 @@ import (
 	"acahti/internal/brand"
 )
 
+// Cursor MCP often fails to apply refresh tokens and re-prompts instead.
+// Access tokens are therefore long-lived; refresh tokens are not rotated.
+const (
+	AccessTTL  = 90 * 24 * time.Hour
+	RefreshTTL = 400 * 24 * time.Hour
+)
+
+func ResourceMetadataURL(root string) string {
+	return strings.TrimRight(root, "/") + "/.well-known/oauth-protected-resource/mcp"
+}
+
 type client struct {
 	ID           string   `json:"client_id"`
 	Name         string   `json:"client_name"`
@@ -85,6 +96,12 @@ func Open(dir, rootURL string, a *auth.Service) (*Server, error) {
 }
 
 func (s *Server) persist() {
+	now := time.Now().Unix()
+	for k, rec := range s.refresh {
+		if rec.Expires < now {
+			delete(s.refresh, k)
+		}
+	}
 	d := disk{Refresh: s.refresh}
 	for _, c := range s.clients {
 		d.Clients = append(d.Clients, c)
@@ -257,7 +274,7 @@ func (s *Server) tokenCode(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_grant"})
 		return
 	}
-	s.issue(w, rec.User, rec.ClientID)
+	s.issue(w, rec.User, rec.ClientID, "")
 }
 
 func (s *Server) tokenRefresh(w http.ResponseWriter, r *http.Request) {
@@ -269,22 +286,25 @@ func (s *Server) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_grant"})
 		return
 	}
-	s.issue(w, rec.User, rec.ClientID)
+	s.issue(w, rec.User, rec.ClientID, rt)
 }
 
-func (s *Server) issue(w http.ResponseWriter, user, clientID string) {
-	at := s.Auth.Issue(user)
-	rt := nonce(24)
+func (s *Server) issue(w http.ResponseWriter, user, clientID, rt string) {
+	at := s.Auth.IssueFor(user, AccessTTL)
+	if rt == "" {
+		rt = nonce(24)
+	}
 	s.mu.Lock()
-	s.refresh[rt] = refreshRec{User: user, ClientID: clientID, Expires: time.Now().Add(90 * 24 * time.Hour).Unix()}
+	s.refresh[rt] = refreshRec{User: user, ClientID: clientID, Expires: time.Now().Add(RefreshTTL).Unix()}
 	s.persist()
 	s.mu.Unlock()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"access_token":  at,
-		"token_type":    "Bearer",
-		"expires_in":    int(s.Auth.TTL.Seconds()),
-		"refresh_token": rt,
-		"scope":         "mcp",
+		"access_token":             at,
+		"token_type":               "Bearer",
+		"expires_in":               int(AccessTTL.Seconds()),
+		"refresh_token":            rt,
+		"refresh_token_expires_in": int(RefreshTTL.Seconds()),
+		"scope":                    "mcp",
 	})
 }
 

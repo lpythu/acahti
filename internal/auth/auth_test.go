@@ -1,6 +1,9 @@
 package auth
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestIssueParse(t *testing.T) {
 	s := New([]byte("secret"), "acahti_bot")
@@ -14,5 +17,8 @@ func TestIssueParse(t *testing.T) {
 	}
 	if !s.IsAdmin("acahti_bot") || s.IsAdmin("alice") {
 		t.Fatal("admin")
+	}
+	if _, ok := s.Parse(s.IssueFor("alice", -time.Minute)); ok {
+		t.Fatal("expired token accepted")
 	}
 }

@@ -56,6 +56,7 @@ func New(cfg config.Config, cat *catalog.Catalog, hub *events.Hub) http.Handler 
 	mux.HandleFunc("GET /skill.md", pages.Skill)
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", oa.Metadata)
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource", oa.Resource)
+	mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", oa.Resource)
 	mux.HandleFunc("POST /oauth/register", oa.Register)
 	mux.HandleFunc("GET /oauth/authorize", oa.Authorize)
 	mux.HandleFunc("POST /oauth/token", oa.Token)
