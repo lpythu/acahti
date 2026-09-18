@@ -735,6 +735,14 @@ func (c *Client) ListCommits(owner, name, sha string, q page.Query) (page.Result
 	return listPage[Commit](c, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/commits", q, extra, "")
 }
 
+func (c *Client) ListHeatCommits(owner, name string, q page.Query) (page.Result[Commit], error) {
+	extra := url.Values{}
+	extra.Set("stat", "false")
+	extra.Set("verification", "false")
+	extra.Set("files", "false")
+	return listPage[Commit](c, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/commits", q, extra, "")
+}
+
 func (c *Client) GetCommit(owner, name, sha string) (Commit, error) {
 	b, _, err := c.do(http.MethodGet, "/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name)+"/git/commits/"+url.PathEscape(sha), "", "", nil)
 	if err != nil {

@@ -28,7 +28,14 @@ export function BoardHeatmap() {
         locale={locale}
         fewerLabel={t("heatFewer")}
         moreLabel={t("heatMore")}
-        renderTooltip={(cell) => t("heatDay", { date: cell.date, n: cell.value })}
+        renderTooltip={(cell) => {
+          const date = new Intl.DateTimeFormat(locale.startsWith("zh") ? "zh-CN" : "en-US", {
+            dateStyle: "long",
+          }).format(new Date(`${cell.date}T00:00:00`))
+          if (cell.value <= 0) return t("heatNone", { date })
+          if (cell.value === 1) return t("heatOne", { date })
+          return t("heatDay", { date, n: cell.value })
+        }}
       />
     </section>
   )

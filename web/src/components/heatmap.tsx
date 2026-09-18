@@ -1,4 +1,5 @@
-import { useMemo, type ReactNode } from "react"
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { createPortal } from "react-dom"
 import { cn } from "cn"
 
 export type HeatDay = { date: string; value: number }
@@ -26,6 +27,19 @@ export function Heatmap({
   const grid = useMemo(() => calendarGrid(days, locale), [days, locale])
   const levels = useMemo(() => heatLevels(grid.values), [grid.values])
   const n = grid.columns.length
+  const [tip, setTip] = useState<{ text: string; left: number; top: number } | null>(null)
+  const tipRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const el = tipRef.current
+    if (!el || !tip) return
+    const r = el.getBoundingClientRect()
+    const pad = 8
+    let shift = 0
+    if (r.left < pad) shift = pad - r.left
+    else if (r.right > window.innerWidth - pad) shift = window.innerWidth - pad - r.right
+    if (shift) el.style.left = `${tip.left + shift}px`
+  }, [tip])
 
   return (
     <div className={cn("flex flex-col gap-3", className)}>
@@ -59,16 +73,22 @@ export function Heatmap({
               const key = cellKey(col.key, row)
               const value = grid.values.get(key) ?? 0
               const date = grid.dates.get(key) ?? ""
+              const text = date && renderTooltip ? renderTooltip({ date, value }) : ""
               return (
                 <div
                   key={key}
                   className="aspect-square min-w-0"
                   style={{ padding: "max(0.5px, 12.5%)" }}
-                  title={renderTooltip ? renderTooltip({ date, value }) : date}
+                  onPointerEnter={(e) => {
+                    if (!text) return
+                    const r = e.currentTarget.getBoundingClientRect()
+                    setTip({ text, left: r.left + r.width / 2, top: r.top })
+                  }}
+                  onPointerLeave={() => setTip(null)}
                 >
                   <div
                     role="img"
-                    aria-label={date ? `${date} ${value}` : undefined}
+                    aria-label={text || undefined}
                     className="size-full"
                     style={{
                       backgroundColor: COLORS[levelFor(value, levels)],
@@ -88,6 +108,19 @@ export function Heatmap({
         ))}
         {moreLabel ? <span>{moreLabel}</span> : null}
       </div>
+      {tip
+        ? createPortal(
+            <div
+              ref={tipRef}
+              role="tooltip"
+              className="pointer-events-none fixed z-50 max-w-[calc(100vw-16px)] -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md bg-foreground px-3 py-1.5 text-xs text-background"
+              style={{ left: tip.left, top: tip.top - 8 }}
+            >
+              {tip.text}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }
@@ -167,7 +200,9 @@ function cellKey(column: string, row: string): string {
 }
 
 function todayKey(now: Date): string {
-  return now.toISOString().slice(0, 10)
+  const month = String(now.getMonth() + 1).padStart(2, "0")
+  const day = String(now.getDate()).padStart(2, "0")
+  return `${now.getFullYear()}-${month}-${day}`
 }
 
 function parseDay(value: string): Date | null {

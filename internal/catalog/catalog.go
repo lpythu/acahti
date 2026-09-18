@@ -20,12 +20,15 @@ import (
 )
 
 type Catalog struct {
-	Cfg    config.Config
-	fj     *forgejo.Client
-	wp     *woodpecker.Client
-	Idx    *store.Store
-	Notify func(kind string, data any)
-	mem    *memo
+	Cfg       config.Config
+	fj        *forgejo.Client
+	wp        *woodpecker.Client
+	Idx       *store.Store
+	Notify    func(kind string, data any)
+	mem       *memo
+	heatMu    sync.Mutex
+	heatBusy  bool
+	heatAgain bool
 }
 
 func New(cfg config.Config, fj *forgejo.Client, wp *woodpecker.Client, idx *store.Store) *Catalog {
@@ -1307,7 +1310,9 @@ func (c *Catalog) IngestWoodpecker(raw []byte) (woodpecker.Pipeline, bool) {
 }
 
 func (c *Catalog) IngestForgejo(payload map[string]any) (woodpecker.Pipeline, bool) {
-	c.rememberHeat(store.ForgejoActor(payload))
+	if _, ok := payload["commits"]; ok {
+		go c.BackfillHeatmaps()
+	}
 	repo, n, ok := store.ParseForgejoStatus(payload)
 	if ok {
 		p, err := c.Refresh(repo, n)
