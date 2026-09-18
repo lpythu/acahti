@@ -361,7 +361,7 @@ func TestExpandDockerLoginDoesNotInjectHarbor(t *testing.T) {
   login:
     pipe: docker-login@v1
     with:
-      registry: saidc-registry.cn-hongkong.cr.aliyuncs.com
+      registry: saidc-bj-registry.cn-beijing.cr.aliyuncs.com
     secrets:
       DOCKER_USERNAME: acr_username
       DOCKER_PASSWORD: acr_password

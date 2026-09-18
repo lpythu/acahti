@@ -6,7 +6,7 @@ inputs:
       One image per line. First field is the primary tag. Optional KEY=VAL:
       also extra tags (comma-separated), context (default .), file (Dockerfile),
       anything else is --build-arg. Dockerfile defaults are HK ACR
-      saidc-registry.cn-hongkong.cr.aliyuncs.com/base/…; office CD
+      saidc-bj-registry.cn-beijing.cr.aliyuncs.com/base/…; office CD
       overrides the host to harbor.saidc.
       Job identity is written as BuildKit secrets id=npmrc and id=netrc
       (HTTP Basic from ACAHTI_USER / ACAHTI_TOKEN). Dockerfiles mount
