@@ -54,7 +54,7 @@ func (s *Store) Heatmap(login string, since, until time.Time) (map[string]int64,
 SELECT to_char(day, 'YYYY-MM-DD'), value
 FROM user_heatmap
 WHERE login = $1 AND day >= $2::date AND day < $3::date
-`, login, since.UTC().Format("2006-01-02"), until.UTC().Format("2006-01-02"))
+`, login, since.Format("2006-01-02"), until.Format("2006-01-02"))
 	if err != nil {
 		return nil, err
 	}

@@ -7,6 +7,7 @@ UI reads are a **read/write split** (local read models, not a Postgres replica):
 | Surface | Read | Write |
 |---|---|---|
 | Pipeline runs | `acahti.pipelines` | pipeline kernel + webhook / mutation / backfill |
+| Board heatmap | `user_heatmap` | Forgejo `/users/{login}/heatmap` via `RememberHeat` and startup backfill |
 | Teams, repos, members, nav, ACL | `acahti` teams / repos / members | Acahti mutation write-through + git webhook + startup reconcile |
 | Git contents, commits, PRs, packages, step logs | live kernel | those objects live in the kernel |
 

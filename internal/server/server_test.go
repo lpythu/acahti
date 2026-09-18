@@ -209,8 +209,8 @@ func TestPublicAllowlist(t *testing.T) {
 	gitForgeTok.SetBasicAuth("oauth2", "forge-tok")
 	rr = httptest.NewRecorder()
 	hForge.ServeHTTP(rr, gitForgeTok)
-	if hit != "/acme/demo.git/info/refs" || rr.Code != http.StatusTeapot {
-		t.Fatalf("git forge token alias hit=%q code=%d", hit, rr.Code)
+	if hit != "" || rr.Code != http.StatusUnauthorized {
+		t.Fatalf("forgejo pat rejected hit=%q code=%d", hit, rr.Code)
 	}
 
 	hit = ""
@@ -255,6 +255,114 @@ func TestPublicAllowlist(t *testing.T) {
 		if strings.Contains(rr.Body.String(), "<html") {
 			t.Fatalf("%s returned HTML", path)
 		}
+	}
+}
+
+func TestGitPushActUser(t *testing.T) {
+	var (
+		hit  string
+		sudo string
+	)
+	forge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/user" {
+			u, p, ok := r.BasicAuth()
+			if ok && u == "alice" && p == "secret" {
+				_ = json.NewEncoder(w).Encode(map[string]string{"login": "alice"})
+				return
+			}
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		hit = r.URL.Path
+		sudo = r.Header.Get("Sudo")
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	t.Cleanup(forge.Close)
+
+	cfg := config.Config{
+		SessionSecret: "test",
+		RootURL:       "http://127.0.0.1",
+		Org:           "acme",
+		AdminUser:     "acahti",
+		AdminToken:    "admin-tok",
+		ForgejoURL:    forge.URL,
+		DataDir:       t.TempDir(),
+	}
+	h := New(cfg, testCatalog(t, cfg, forge.URL, ""), events.New())
+	a := auth.New([]byte("test"), "acahti")
+	aliceTok := a.Issue("alice")
+	robotTok := a.Issue("acahti")
+
+	hit, sudo = "", ""
+	req := httptest.NewRequest(http.MethodPost, "/acme/demo.git/git-receive-pack", nil)
+	req.SetBasicAuth("alice", aliceTok)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if hit != "/acme/demo.git/git-receive-pack" || rr.Code != http.StatusTeapot || sudo != "alice" {
+		t.Fatalf("alice access_token push hit=%q code=%d sudo=%q", hit, rr.Code, sudo)
+	}
+
+	hit, sudo = "", ""
+	req = httptest.NewRequest(http.MethodPost, "/acme/demo.git/git-receive-pack", nil)
+	req.SetBasicAuth("alice", "secret")
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if hit != "/acme/demo.git/git-receive-pack" || rr.Code != http.StatusTeapot || sudo != "alice" {
+		t.Fatalf("alice password push hit=%q code=%d sudo=%q", hit, rr.Code, sudo)
+	}
+
+	hit, sudo = "", ""
+	req = httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs?service=git-upload-pack", nil)
+	req.SetBasicAuth("alice", aliceTok)
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if hit != "/acme/demo.git/info/refs" || rr.Code != http.StatusTeapot || sudo != "alice" {
+		t.Fatalf("alice clone hit=%q code=%d sudo=%q", hit, rr.Code, sudo)
+	}
+
+	hit, sudo = "", ""
+	req = httptest.NewRequest(http.MethodPost, "/acme/demo.git/git-receive-pack", nil)
+	req.SetBasicAuth("bob", aliceTok)
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if hit != "" || rr.Code != http.StatusUnauthorized {
+		t.Fatalf("access_token username mismatch hit=%q code=%d", hit, rr.Code)
+	}
+
+	hit, sudo = "", ""
+	req = httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs", nil)
+	req.SetBasicAuth("oauth2", "forge-tok")
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if hit != "" || rr.Code != http.StatusUnauthorized {
+		t.Fatalf("forgejo pat hit=%q code=%d", hit, rr.Code)
+	}
+
+	hit, sudo = "", ""
+	req = httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs?service=git-receive-pack", nil)
+	req.SetBasicAuth("acahti", robotTok)
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if hit != "" || rr.Code != http.StatusForbidden {
+		t.Fatalf("robot receive-pack hit=%q code=%d", hit, rr.Code)
+	}
+
+	hit, sudo = "", ""
+	req = httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs?service=git-upload-pack", nil)
+	req.SetBasicAuth("acahti", robotTok)
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if hit != "" || rr.Code != http.StatusForbidden {
+		t.Fatalf("robot clone hit=%q code=%d", hit, rr.Code)
+	}
+
+	hit, sudo = "", ""
+	req = httptest.NewRequest(http.MethodGet, "/acme/demo.git/info/refs?service=git-upload-pack", nil)
+	req.SetBasicAuth("oauth2", robotTok)
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if hit != "" || rr.Code != http.StatusUnauthorized {
+		t.Fatalf("oauth2 alias robot token hit=%q code=%d", hit, rr.Code)
 	}
 }
 

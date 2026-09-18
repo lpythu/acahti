@@ -177,20 +177,26 @@ func New(cfg config.Config, cat *catalog.Catalog, hub *events.Hub) http.Handler 
 		case closedKernel(p):
 			writeClosed(w)
 		case strings.HasPrefix(p, "/api/packages/"):
-			gitAs(a, cat, cfg.AdminToken, fjProxy, w, r)
+			gitAs(a, cat, cfg.AdminToken, cfg.AdminUser, fjProxy, w, r)
 		case gitHTTP(p):
-			gitAs(a, cat, cfg.AdminToken, fjProxy, w, r)
+			gitAs(a, cat, cfg.AdminToken, cfg.AdminUser, fjProxy, w, r)
 		default:
 			mux.ServeHTTP(w, r)
 		}
 	})
 }
 
-func gitAs(a *auth.Service, cat *catalog.Catalog, admin string, p *httputil.ReverseProxy, w http.ResponseWriter, r *http.Request) {
+func gitAs(a *auth.Service, cat *catalog.Catalog, admin, adminUser string, p *httputil.ReverseProxy, w http.ResponseWriter, r *http.Request) {
 	login := gitLogin(a, cat, r)
 	if login == "" {
 		w.Header().Set("WWW-Authenticate", `Basic realm="acahti"`)
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	// Robot AdminUser is machine-only; clone/push/packages must Sudo the real person
+	// (laptop login, MCP access_token, or CI job identity).
+	if adminUser != "" && login == adminUser {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 	r.Header.Set("Authorization", "token "+admin)
@@ -199,15 +205,14 @@ func gitAs(a *auth.Service, cat *catalog.Catalog, admin string, p *httputil.Reve
 	p.ServeHTTP(w, r)
 }
 
+// gitLogin accepts Acahti identity only: login+password, or MCP/job access_token
+// (auth.Issue). Forgejo PATs are not an identity — Forgejo is not public.
 func gitLogin(a *auth.Service, cat *catalog.Catalog, r *http.Request) string {
 	if u, pass, ok := r.BasicAuth(); ok {
-		if user, valid := a.Parse(pass); valid {
+		if user, valid := a.Parse(pass); valid && (u == user || u == "git") {
 			return user
 		}
 		if cat != nil {
-			if fu, err := cat.TokenUser(pass); err == nil && fu.Login != "" {
-				return fu.Login
-			}
 			if fu, err := cat.Authenticate(u, pass); err == nil && fu.Login == u {
 				return fu.Login
 			}

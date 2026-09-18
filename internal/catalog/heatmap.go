@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"acahti/internal/forgejo"
-	"acahti/internal/page"
+	"acahti/internal/store"
 )
 
 const heatWeeks = 53
-const heatCommitPages = 80
+
+var heatZone = time.FixedZone("UTC+8", 8*60*60)
 
 type HeatDay struct {
 	Date  string `json:"date"`
@@ -35,177 +36,66 @@ func (c *Catalog) BoardHeatmap(user string) (Heatmap, error) {
 	return fillHeatmap(counts, start, end, now), nil
 }
 
+func (c *Catalog) RememberHeat(payload map[string]any) {
+	c.syncHeat(store.ForgejoActor(payload))
+}
+
 func (c *Catalog) BackfillHeatmaps() {
-	c.heatMu.Lock()
-	if c.heatBusy {
-		c.heatAgain = true
-		c.heatMu.Unlock()
+	if !c.indexed() || c.fj == nil || !c.fj.Ready() {
 		return
 	}
-	c.heatBusy = true
-	c.heatMu.Unlock()
-
-	wrote := c.syncCommitHeat()
-
-	c.heatMu.Lock()
-	again := c.heatAgain
-	c.heatAgain = false
-	c.heatBusy = false
-	c.heatMu.Unlock()
-	if again {
-		c.BackfillHeatmaps()
-		return
+	seen := map[string]struct{}{}
+	if logins, err := c.Idx.HeatmapLogins(); err == nil {
+		for _, login := range logins {
+			if login != "" {
+				seen[login] = struct{}{}
+			}
+		}
 	}
-	if wrote && c.Notify != nil {
+	if users, err := c.fj.AllUsers(); err == nil {
+		for _, u := range users {
+			if login := strings.TrimSpace(u.Login); login != "" {
+				seen[login] = struct{}{}
+			}
+		}
+	}
+	for login := range seen {
+		c.syncHeat(login)
+	}
+	if c.Notify != nil {
 		c.Notify("forgejo", map[string]any{"ok": true})
 	}
 }
 
-func (c *Catalog) syncCommitHeat() bool {
-	if !c.indexed() || c.fj == nil || !c.fj.Ready() {
-		return false
+func (c *Catalog) syncHeat(login string) {
+	if login == "" || !c.indexed() || c.fj == nil || !c.fj.Ready() {
+		return
 	}
-	users, err := c.fj.AllUsers()
+	points, err := c.fj.UserHeatmap(login)
 	if err != nil {
-		log.Printf("heatmap users: %v", err)
-		return false
+		log.Printf("heatmap %s: %v", login, err)
+		return
 	}
-	byEmail, byName := heatUserIndex(users)
-	logins := map[string]struct{}{}
-	for _, u := range users {
-		if login := strings.TrimSpace(u.Login); login != "" {
-			logins[login] = struct{}{}
-		}
+	if err := c.Idx.ReplaceHeatmap(login, heatCounts(points)); err != nil {
+		log.Printf("heatmap %s: %v", login, err)
 	}
-	if extra, err := c.Idx.HeatmapLogins(); err == nil {
-		for _, login := range extra {
-			if login != "" {
-				logins[login] = struct{}{}
-			}
-		}
-	}
-	repos, err := c.Idx.VisibleRepos("", true)
-	if err != nil {
-		log.Printf("heatmap repos: %v", err)
-		return false
-	}
-	start, _ := heatRange(time.Now())
-	startKey := start.Format("2006-01-02")
-	counts := map[string]map[string]int64{}
-	for _, repo := range repos {
-		owner, name, ok := strings.Cut(repo.FullName, "/")
-		if !ok || owner == "" || name == "" {
+}
+
+func heatCounts(points []forgejo.HeatPoint) map[string]int64 {
+	out := map[string]int64{}
+	for _, p := range points {
+		if p.Timestamp <= 0 || p.Contributions == 0 {
 			continue
 		}
-		c.addRepoCommits(owner, name, startKey, byEmail, byName, counts)
+		key := time.Unix(p.Timestamp, 0).In(heatZone).Format("2006-01-02")
+		out[key] += p.Contributions
 	}
-	for login := range logins {
-		if err := c.Idx.ReplaceHeatmap(login, counts[login]); err != nil {
-			log.Printf("heatmap %s: %v", login, err)
-		}
-	}
-	return true
-}
-
-func (c *Catalog) addRepoCommits(owner, name, startKey string, byEmail, byName map[string]string, counts map[string]map[string]int64) {
-	for n := 1; n <= heatCommitPages; n++ {
-		res, err := c.fj.ListHeatCommits(owner, name, page.Query{Page: n, Size: page.MaxSize})
-		if err != nil {
-			log.Printf("heatmap %s/%s: %v", owner, name, err)
-			return
-		}
-		older := false
-		for _, cm := range res.Items {
-			day, ok := commitHeatDay(cm.Commit.Author.Date)
-			if !ok {
-				continue
-			}
-			if day < startKey {
-				older = true
-				continue
-			}
-			login := commitHeatLogin(cm, byEmail, byName)
-			if login == "" {
-				continue
-			}
-			days := counts[login]
-			if days == nil {
-				days = map[string]int64{}
-				counts[login] = days
-			}
-			days[day]++
-		}
-		if older || !res.HasMore {
-			return
-		}
-	}
-}
-
-func heatUserIndex(users []forgejo.User) (byEmail, byName map[string]string) {
-	byEmail = map[string]string{}
-	names := map[string]string{}
-	dup := map[string]bool{}
-	for _, u := range users {
-		login := strings.TrimSpace(u.Login)
-		if login == "" {
-			continue
-		}
-		if email := strings.ToLower(strings.TrimSpace(u.Email)); email != "" {
-			byEmail[email] = login
-		}
-		for _, name := range []string{login, strings.TrimSpace(u.FullName)} {
-			key := strings.ToLower(name)
-			if key == "" {
-				continue
-			}
-			if prev, ok := names[key]; ok && prev != login {
-				dup[key] = true
-				continue
-			}
-			names[key] = login
-		}
-	}
-	byName = map[string]string{}
-	for key, login := range names {
-		if !dup[key] {
-			byName[key] = login
-		}
-	}
-	return byEmail, byName
-}
-
-func commitHeatLogin(cm forgejo.Commit, byEmail, byName map[string]string) string {
-	if cm.Author != nil {
-		if login := strings.TrimSpace(cm.Author.Login); login != "" {
-			return login
-		}
-	}
-	if email := strings.ToLower(strings.TrimSpace(cm.Commit.Author.Email)); email != "" {
-		if login := byEmail[email]; login != "" {
-			return login
-		}
-	}
-	if name := strings.ToLower(strings.TrimSpace(cm.Commit.Author.Name)); name != "" {
-		return byName[name]
-	}
-	return ""
-}
-
-func commitHeatDay(raw string) (string, bool) {
-	raw = strings.TrimSpace(raw)
-	if len(raw) >= 10 && raw[4] == '-' && raw[7] == '-' {
-		return raw[:10], true
-	}
-	t, err := time.Parse(time.RFC3339, raw)
-	if err != nil {
-		return "", false
-	}
-	return t.UTC().Format("2006-01-02"), true
+	return out
 }
 
 func heatRange(now time.Time) (start, end time.Time) {
-	now = now.UTC()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	now = now.In(heatZone)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, heatZone)
 	start = today.AddDate(0, 0, -364)
 	for start.Weekday() != time.Monday {
 		start = start.AddDate(0, 0, -1)
@@ -214,16 +104,16 @@ func heatRange(now time.Time) (start, end time.Time) {
 }
 
 func fillHeatmap(counts map[string]int64, start, end, now time.Time) Heatmap {
-	today := now.UTC()
-	today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
-	// Viewer local today can be one calendar day ahead of UTC.
-	limit := today.AddDate(0, 0, 1)
+	start = time.Date(start.In(heatZone).Year(), start.In(heatZone).Month(), start.In(heatZone).Day(), 0, 0, 0, 0, heatZone)
+	end = time.Date(end.In(heatZone).Year(), end.In(heatZone).Month(), end.In(heatZone).Day(), 0, 0, 0, 0, heatZone)
+	now = now.In(heatZone)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, heatZone)
 	out := Heatmap{Days: make([]HeatDay, 0, heatWeeks*7)}
 	for d := start; d.Before(end); d = d.AddDate(0, 0, 1) {
 		key := d.Format("2006-01-02")
 		n := counts[key]
 		out.Days = append(out.Days, HeatDay{Date: key, Value: n})
-		if !d.After(limit) {
+		if !d.After(today) {
 			out.Total += n
 		}
 	}

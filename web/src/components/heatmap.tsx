@@ -164,13 +164,15 @@ function intlLocale(locale: string): string {
   return locale.startsWith("zh") ? "zh-CN" : "en-US"
 }
 
+const HEAT_TZ = "Asia/Shanghai"
+
 function weekdayLabel(row: number, locale: string, anchor: Date): string {
-  const date = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + row)
-  return new Intl.DateTimeFormat(intlLocale(locale), { weekday: "short" }).format(date)
+  const date = new Date(anchor.getTime() + row * 86_400_000)
+  return new Intl.DateTimeFormat(intlLocale(locale), { weekday: "short", timeZone: HEAT_TZ }).format(date)
 }
 
 function mondayAnchor(): Date {
-  return new Date(2026, 8, 7)
+  return new Date("2026-09-07T00:00:00+08:00")
 }
 
 function weekMonthLabel(week: readonly HeatDay[], isFirst: boolean, locale: string): string {
@@ -178,7 +180,7 @@ function weekMonthLabel(week: readonly HeatDay[], isFirst: boolean, locale: stri
   const source = firstOfMonth ?? (isFirst ? week[0] : undefined)
   const date = parseDay(source?.date ?? "")
   if (!date) return ""
-  return new Intl.DateTimeFormat(intlLocale(locale), { month: "short" }).format(date)
+  return new Intl.DateTimeFormat(intlLocale(locale), { month: "short", timeZone: HEAT_TZ }).format(date)
 }
 
 function heatLevels(values: Map<string, number>): number[] {
@@ -200,13 +202,11 @@ function cellKey(column: string, row: string): string {
 }
 
 function todayKey(now: Date): string {
-  const month = String(now.getMonth() + 1).padStart(2, "0")
-  const day = String(now.getDate()).padStart(2, "0")
-  return `${now.getFullYear()}-${month}-${day}`
+  return new Date(now.getTime() + 8 * 3_600_000).toISOString().slice(0, 10)
 }
 
 function parseDay(value: string): Date | null {
   if (!value) return null
-  const date = new Date(`${value}T00:00:00`)
+  const date = new Date(`${value}T00:00:00+08:00`)
   return Number.isNaN(date.getTime()) ? null : date
 }

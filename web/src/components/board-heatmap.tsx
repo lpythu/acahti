@@ -31,7 +31,8 @@ export function BoardHeatmap() {
         renderTooltip={(cell) => {
           const date = new Intl.DateTimeFormat(locale.startsWith("zh") ? "zh-CN" : "en-US", {
             dateStyle: "long",
-          }).format(new Date(`${cell.date}T00:00:00`))
+            timeZone: "Asia/Shanghai",
+          }).format(new Date(`${cell.date}T00:00:00+08:00`))
           if (cell.value <= 0) return t("heatNone", { date })
           if (cell.value === 1) return t("heatOne", { date })
           return t("heatDay", { date, n: cell.value })

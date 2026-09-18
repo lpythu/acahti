@@ -37,23 +37,14 @@ func TestFillHeatmap(t *testing.T) {
 	}
 }
 
-func TestCommitHeat(t *testing.T) {
-	cm := forgejo.Commit{Author: &forgejo.CommitUser{Login: "ada"}}
-	if commitHeatLogin(cm, nil, nil) != "ada" {
-		t.Fatal("login")
-	}
-	cm = forgejo.Commit{}
-	cm.Commit.Author.Email = "Ada@Ex.com"
-	cm.Commit.Author.Name = "Ada Lovelace"
-	if commitHeatLogin(cm, map[string]string{"ada@ex.com": "ada"}, nil) != "ada" {
-		t.Fatal("email")
-	}
-	cm.Commit.Author.Email = ""
-	if commitHeatLogin(cm, nil, map[string]string{"ada lovelace": "ada"}) != "ada" {
-		t.Fatal("name")
-	}
-	day, ok := commitHeatDay("2026-09-18T01:30:00+08:00")
-	if !ok || day != "2026-09-18" {
-		t.Fatalf("day %s %v", day, ok)
+func TestHeatCounts(t *testing.T) {
+	// 2026-09-17 16:30 UTC is 2026-09-18 00:30 in UTC+8.
+	got := heatCounts([]forgejo.HeatPoint{
+		{Timestamp: time.Date(2026, 9, 17, 16, 30, 0, 0, time.UTC).Unix(), Contributions: 3},
+		{Timestamp: time.Date(2026, 9, 17, 16, 45, 0, 0, time.UTC).Unix(), Contributions: 1},
+		{Timestamp: 0, Contributions: 9},
+	})
+	if got["2026-09-18"] != 4 || len(got) != 1 {
+		t.Fatalf("%v", got)
 	}
 }
