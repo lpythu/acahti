@@ -16,9 +16,9 @@ export function AcahtiMark({ className }: { className?: string }) {
         strokeWidth="5.2"
         strokeLinecap="round"
         strokeLinejoin="round"
-        d="M19 43 32 21.5 45 43"
+        d="M18 41c3-14 8-21 14-21s11 7 14 21c-5 5-23 5-28 0z"
       />
-      <circle cx="32" cy="36.5" r="3.15" fill="#0d9488" />
+      <circle cx="32" cy="33" r="3.15" fill="#0d9488" />
     </svg>
   )
 }
