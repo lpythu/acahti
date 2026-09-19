@@ -372,14 +372,15 @@ func TestSkillAndOAuth(t *testing.T) {
 		t.Fatalf("mcp link %s", rr.Header().Get("Link"))
 	}
 	rr = httptest.NewRecorder()
-	callReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"whoami"}}`))
+	callReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"whoami","arguments":{}}}`))
 	callReq.Header.Set("Content-Type", "application/json")
+	callReq.Header.Set("Accept", "application/json, text/event-stream")
 	h.ServeHTTP(rr, callReq)
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("mcp call unauth %d", rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("mcp call unauth %d %s", rr.Code, rr.Body.String())
 	}
-	if !strings.Contains(rr.Header().Get("WWW-Authenticate"), "resource_metadata") {
-		t.Fatalf("challenge %s", rr.Header().Get("WWW-Authenticate"))
+	if !strings.Contains(rr.Body.String(), "authentication required") {
+		t.Fatalf("mcp call unauth body %s", rr.Body.String())
 	}
 
 	for _, path := range []string{"/favicon.ico", "/acahti.png", "/apple-touch-icon.png"} {

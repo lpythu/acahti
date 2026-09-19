@@ -162,14 +162,20 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	raw := auth.Bearer(r)
 	login, ok := s.Auth.Parse(raw)
 	if !ok {
-		// Handshake, SSE GET, and discovery stay public. Cursor opens GET /mcp
-		// after initialize; a 401 there shows Authenticate even when a ticket
-		// is already stored. Only tool execution needs a bearer.
-		if r.Method != http.MethodPost || rpcMethod(r) != "tools/call" {
-			s.handler.ServeHTTP(w, r)
+		if login = s.Auth.CookieUser(r); login != "" {
+			ok = true
+		}
+	}
+	if !ok {
+		// No ticket: keep HTTP 200 so Cursor does not mark the server Error.
+		// A 401 on tools/call after a public handshake is what showed
+		// "Error · Unauthorized"; Logout then only reconnected without a ticket.
+		// A bad ticket still 401s so the client can refresh.
+		if raw != "" && r.Method == http.MethodPost && rpcMethod(r) == "tools/call" {
+			oauth.Challenge(w, oauth.ResourceMetadataURL(oauth.PublicRoot(s.Cfg.RootURL, s.Cfg.Domain, r.Host)), true)
 			return
 		}
-		oauth.Challenge(w, oauth.ResourceMetadataURL(oauth.PublicRoot(s.Cfg.RootURL, s.Cfg.Domain, r.Host)), raw != "")
+		s.handler.ServeHTTP(w, r)
 		return
 	}
 	s.handler.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), loginKey{}, login)))
