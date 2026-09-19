@@ -101,6 +101,10 @@ func TestHTTPHandshakePublic(t *testing.T) {
 	if status != 200 || !strings.Contains(string(raw), `"whoami"`) {
 		t.Fatalf("public tools/list: %d %s", status, raw)
 	}
+	status, headers, _ := request(t, hs.URL, "", "GET", "")
+	if status != 405 || headers.Get("WWW-Authenticate") != "" {
+		t.Fatalf("public GET: %d www-authenticate=%q", status, headers.Get("WWW-Authenticate"))
+	}
 }
 
 func TestHTTPAuthentication(t *testing.T) {

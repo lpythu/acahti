@@ -157,21 +157,15 @@ func rpcMethod(r *http.Request) string {
 	return msg.Method
 }
 
-func publicRPC(method string) bool {
-	switch method {
-	case "initialize", "notifications/initialized", "ping", "tools/list":
-		return true
-	default:
-		return false
-	}
-}
-
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Link", brand.Link(s.Cfg.RootURL))
 	raw := auth.Bearer(r)
 	login, ok := s.Auth.Parse(raw)
 	if !ok {
-		if publicRPC(rpcMethod(r)) {
+		// Handshake, SSE GET, and discovery stay public. Cursor opens GET /mcp
+		// after initialize; a 401 there shows Authenticate even when a ticket
+		// is already stored. Only tool execution needs a bearer.
+		if r.Method != http.MethodPost || rpcMethod(r) != "tools/call" {
 			s.handler.ServeHTTP(w, r)
 			return
 		}
