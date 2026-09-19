@@ -67,6 +67,14 @@ func Hosts(rootURL, domain string) []string {
 	if u, err := url.Parse(strings.TrimSpace(rootURL)); err == nil {
 		add(u.Hostname())
 	}
+	const legacy, current = "acahti.saidc.ai", "acahti.s-aidc.com"
+	for _, h := range out {
+		if h == legacy || h == current {
+			add(legacy)
+			add(current)
+			break
+		}
+	}
 	return out
 }
 

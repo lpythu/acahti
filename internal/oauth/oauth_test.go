@@ -14,7 +14,7 @@ import (
 
 func TestPKCERoundTrip(t *testing.T) {
 	a := auth.New([]byte("secret"), "acahti_bot")
-	s, err := Open(t.TempDir(), "http://acahti.example", a)
+	s, err := Open(t.TempDir(), "http://acahti.example", "", a)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,10 +78,10 @@ func TestPKCERoundTrip(t *testing.T) {
 	if !ok || user != "alice" {
 		t.Fatalf("access_token %q %v", at, ok)
 	}
-	if int(tok["expires_in"].(float64)) != int(AccessTTL.Seconds()) {
+	if int(tok["expires_in"].(float64)) != AdvertisedExpiresIn {
 		t.Fatalf("expires_in %v", tok["expires_in"])
 	}
-	if int(tok["refresh_token_expires_in"].(float64)) != int(RefreshTTL.Seconds()) {
+	if int(tok["refresh_token_expires_in"].(float64)) != AdvertisedExpiresIn {
 		t.Fatalf("refresh_token_expires_in %v", tok["refresh_token_expires_in"])
 	}
 	rt, _ := tok["refresh_token"].(string)
@@ -108,6 +108,15 @@ func TestPKCERoundTrip(t *testing.T) {
 		t.Fatalf("refreshed access_token %q %v", at, ok)
 	}
 
+	jsonBody := `{"grant_type":"refresh_token","refresh_token":"` + rt + `"}`
+	tokReq = httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(jsonBody))
+	tokReq.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	s.Token(rr, tokReq)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("json refresh %d %s", rr.Code, rr.Body.String())
+	}
+
 	rr = httptest.NewRecorder()
 	s.Metadata(rr, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server", nil))
 	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"logo_uri":"http://acahti.example/acahti.png"`) {
@@ -121,13 +130,47 @@ func TestPKCERoundTrip(t *testing.T) {
 
 	meta := ResourceMetadataURL("http://acahti.example")
 	rr = httptest.NewRecorder()
-	Challenge(rr, meta)
+	Challenge(rr, meta, false)
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("challenge %d", rr.Code)
 	}
 	b, _ := io.ReadAll(rr.Body)
-	if !strings.Contains(rr.Header().Get("WWW-Authenticate"), meta) || !strings.Contains(string(b), "unauthorized") {
+	if !strings.Contains(rr.Header().Get("WWW-Authenticate"), meta) || strings.Contains(rr.Header().Get("WWW-Authenticate"), "invalid_token") || !strings.Contains(string(b), "unauthorized") {
 		t.Fatalf("challenge headers %s body %s", rr.Header().Get("WWW-Authenticate"), b)
+	}
+	rr = httptest.NewRecorder()
+	Challenge(rr, meta, true)
+	b, _ = io.ReadAll(rr.Body)
+	if !strings.Contains(rr.Header().Get("WWW-Authenticate"), `error="invalid_token"`) || !strings.Contains(string(b), "invalid_token") {
+		t.Fatalf("invalid challenge headers %s body %s", rr.Header().Get("WWW-Authenticate"), b)
+	}
+}
+
+func TestHostAwareMetadata(t *testing.T) {
+	a := auth.New([]byte("secret"), "acahti_bot")
+	s, err := Open(t.TempDir(), "https://acahti.s-aidc.com", "acahti.s-aidc.com", a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource/mcp", nil)
+	req.Host = "acahti.saidc.ai"
+	rr := httptest.NewRecorder()
+	s.Resource(rr, req)
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"resource":"https://acahti.saidc.ai/mcp"`) {
+		t.Fatalf("resource %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestPublicRoot(t *testing.T) {
+	root := "https://acahti.s-aidc.com"
+	if PublicRoot(root, "acahti.s-aidc.com", "acahti.saidc.ai") != "https://acahti.saidc.ai" {
+		t.Fatalf("alias %s", PublicRoot(root, "acahti.s-aidc.com", "acahti.saidc.ai"))
+	}
+	if PublicRoot(root, "acahti.s-aidc.com", "evil.example") != root {
+		t.Fatalf("unknown host %s", PublicRoot(root, "acahti.s-aidc.com", "evil.example"))
+	}
+	if PublicRoot("http://acahti.example", "", "acahti.example:8080") != "http://acahti.example" {
+		t.Fatalf("port %s", PublicRoot("http://acahti.example", "", "acahti.example:8080"))
 	}
 }
 

@@ -99,6 +99,11 @@ func TestHTTPAuthentication(t *testing.T) {
 		if status != 401 || !strings.Contains(headers.Get("WWW-Authenticate"), "oauth-protected-resource") {
 			t.Fatalf("auth: %d %v", status, headers)
 		}
+		wantInvalid := token != ""
+		hasInvalid := strings.Contains(headers.Get("WWW-Authenticate"), "invalid_token")
+		if hasInvalid != wantInvalid {
+			t.Fatalf("auth invalid_token=%v want %v token=%q header=%s", hasInvalid, wantInvalid, token, headers.Get("WWW-Authenticate"))
+		}
 	}
 }
 

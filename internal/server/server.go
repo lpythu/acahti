@@ -30,7 +30,7 @@ func New(cfg config.Config, cat *catalog.Catalog, hub *events.Hub) http.Handler 
 	if err != nil {
 		log.Fatalf("invite store: %v", err)
 	}
-	oa, _ := oauth.Open(cfg.DataDir, cfg.RootURL, a)
+	oa, _ := oauth.Open(cfg.DataDir, cfg.RootURL, cfg.Domain, a)
 	passwords, err := passwd.Open(cfg.DataDir)
 	if err != nil {
 		log.Fatalf("password store: %v", err)

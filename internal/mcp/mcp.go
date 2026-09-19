@@ -140,9 +140,10 @@ func (s *Server) newHandler() http.Handler {
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Link", brand.Link(s.Cfg.RootURL))
-	login, ok := s.Auth.Parse(auth.Bearer(r))
+	raw := auth.Bearer(r)
+	login, ok := s.Auth.Parse(raw)
 	if !ok {
-		oauth.Challenge(w, oauth.ResourceMetadataURL(s.Cfg.RootURL))
+		oauth.Challenge(w, oauth.ResourceMetadataURL(oauth.PublicRoot(s.Cfg.RootURL, s.Cfg.Domain, r.Host)), raw != "")
 		return
 	}
 	s.handler.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), loginKey{}, login)))

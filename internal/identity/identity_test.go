@@ -20,8 +20,12 @@ func TestEmailAndHosts(t *testing.T) {
 		t.Fatal("name")
 	}
 	got := Hosts("https://acahti.saidc.ai", "acahti.saidc.ai")
-	if !reflect.DeepEqual(got, []string{"acahti.saidc.ai"}) {
+	if !reflect.DeepEqual(got, []string{"acahti.saidc.ai", "acahti.s-aidc.com"}) {
 		t.Fatalf("hosts=%v", got)
+	}
+	got = Hosts("https://acahti.s-aidc.com", "acahti.s-aidc.com")
+	if !reflect.DeepEqual(got, []string{"acahti.s-aidc.com", "acahti.saidc.ai"}) {
+		t.Fatalf("current hosts=%v", got)
 	}
 	if Domain("https://acahti.example.com", "") != "acahti.example.com" {
 		t.Fatalf("domain from url")

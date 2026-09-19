@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -17,17 +19,47 @@ import (
 
 	"acahti/internal/auth"
 	"acahti/internal/brand"
+	"acahti/internal/identity"
 )
 
 // Cursor MCP often fails to apply refresh tokens and re-prompts instead.
 // Access tokens are therefore long-lived; refresh tokens are not rotated.
+//
+// AdvertisedExpiresIn is the wire expires_in / refresh_token_expires_in.
+// Cursor has treated those RFC 6749 second counts as milliseconds, so a
+// real 90d access TTL became ~2h and a 400d refresh TTL became ~10h.
+// MaxInt32 is ~68y as seconds and ~25d as milliseconds, and does not
+// overflow int32. Server-side HMAC / refresh records still use AccessTTL
+// and RefreshTTL.
 const (
-	AccessTTL  = 90 * 24 * time.Hour
-	RefreshTTL = 400 * 24 * time.Hour
+	AccessTTL           = 90 * 24 * time.Hour
+	RefreshTTL          = 400 * 24 * time.Hour
+	AdvertisedExpiresIn = math.MaxInt32
 )
 
 func ResourceMetadataURL(root string) string {
 	return strings.TrimRight(root, "/") + "/.well-known/oauth-protected-resource/mcp"
+}
+
+func PublicRoot(rootURL, domain, host string) string {
+	root := strings.TrimRight(strings.TrimSpace(rootURL), "/")
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return root
+	}
+	for _, allowed := range identity.Hosts(rootURL, domain) {
+		if host == allowed {
+			scheme := "https"
+			if u, err := url.Parse(root); err == nil && u.Scheme != "" {
+				scheme = u.Scheme
+			}
+			return scheme + "://" + host
+		}
+	}
+	return root
 }
 
 type client struct {
@@ -58,6 +90,7 @@ type disk struct {
 type Server struct {
 	Auth    *auth.Service
 	RootURL string
+	Domain  string
 	path    string
 	mu      sync.Mutex
 	clients map[string]client
@@ -65,7 +98,7 @@ type Server struct {
 	refresh map[string]refreshRec
 }
 
-func Open(dir, rootURL string, a *auth.Service) (*Server, error) {
+func Open(dir, rootURL, domain string, a *auth.Service) (*Server, error) {
 	if dir == "" {
 		dir = "."
 	}
@@ -75,6 +108,7 @@ func Open(dir, rootURL string, a *auth.Service) (*Server, error) {
 	s := &Server{
 		Auth:    a,
 		RootURL: strings.TrimRight(rootURL, "/"),
+		Domain:  strings.TrimSpace(domain),
 		path:    filepath.Join(dir, "oauth.json"),
 		clients: map[string]client{},
 		codes:   map[string]codeRec{},
@@ -139,28 +173,38 @@ func (s *Server) allowRedirect(c client, uri string) bool {
 	return false
 }
 
-func (s *Server) Metadata(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) publicRoot(r *http.Request) string {
+	host := ""
+	if r != nil {
+		host = r.Host
+	}
+	return PublicRoot(s.RootURL, s.Domain, host)
+}
+
+func (s *Server) Metadata(w http.ResponseWriter, r *http.Request) {
+	root := s.publicRoot(r)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"issuer":                                s.RootURL,
-		"authorization_endpoint":                s.RootURL + "/oauth/authorize",
-		"token_endpoint":                        s.RootURL + "/oauth/token",
-		"registration_endpoint":                 s.RootURL + "/oauth/register",
+		"issuer":                                root,
+		"authorization_endpoint":                root + "/oauth/authorize",
+		"token_endpoint":                        root + "/oauth/token",
+		"registration_endpoint":                 root + "/oauth/register",
 		"code_challenge_methods_supported":      []string{"S256"},
 		"response_types_supported":              []string{"code"},
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
 		"token_endpoint_auth_methods_supported": []string{"none"},
 		"scopes_supported":                      []string{"mcp"},
-		"logo_uri":                              brand.PNGURL(s.RootURL),
+		"logo_uri":                              brand.PNGURL(root),
 	})
 }
 
-func (s *Server) Resource(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) Resource(w http.ResponseWriter, r *http.Request) {
+	root := s.publicRoot(r)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"resource":                 s.RootURL + "/mcp",
-		"authorization_servers":    []string{s.RootURL},
+		"resource":                 root + "/mcp",
+		"authorization_servers":    []string{root},
 		"bearer_methods_supported": []string{"header"},
 		"resource_name":            "Acahti",
-		"logo_uri":                 brand.PNGURL(s.RootURL),
+		"logo_uri":                 brand.PNGURL(root),
 	})
 }
 
@@ -240,12 +284,31 @@ func (s *Server) Approve(w http.ResponseWriter, r *http.Request, user string) {
 	writeJSON(w, http.StatusOK, map[string]string{"redirect": u.String()})
 }
 
+func parseTokenForm(r *http.Request) {
+	ct := r.Header.Get("Content-Type")
+	if i := strings.Index(ct, ";"); i >= 0 {
+		ct = strings.TrimSpace(ct[:i])
+	}
+	if strings.EqualFold(ct, "application/json") {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		r.Form = url.Values{}
+		for k, v := range body {
+			if s, ok := v.(string); ok {
+				r.Form.Set(k, s)
+			}
+		}
+		return
+	}
+	_ = r.ParseForm()
+}
+
 func (s *Server) Token(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
-	_ = r.ParseForm()
+	parseTokenForm(r)
 	switch r.Form.Get("grant_type") {
 	case "authorization_code":
 		s.tokenCode(w, r)
@@ -301,9 +364,9 @@ func (s *Server) issue(w http.ResponseWriter, user, clientID, rt string) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"access_token":             at,
 		"token_type":               "Bearer",
-		"expires_in":               int(AccessTTL.Seconds()),
+		"expires_in":               AdvertisedExpiresIn,
 		"refresh_token":            rt,
-		"refresh_token_expires_in": int(RefreshTTL.Seconds()),
+		"refresh_token_expires_in": AdvertisedExpiresIn,
 		"scope":                    "mcp",
 	})
 }
@@ -313,10 +376,18 @@ func s256(verifier string) string {
 	return base64.RawURLEncoding.EncodeToString(h[:])
 }
 
-func Challenge(w http.ResponseWriter, resourceMeta string) {
-	w.Header().Set("WWW-Authenticate", `Bearer realm="acahti", resource_metadata="`+resourceMeta+`"`)
+func Challenge(w http.ResponseWriter, resourceMeta string, invalidToken bool) {
+	authn := `Bearer realm="acahti", resource_metadata="` + resourceMeta + `"`
+	if invalidToken {
+		authn = `Bearer realm="acahti", error="invalid_token", resource_metadata="` + resourceMeta + `"`
+	}
+	w.Header().Set("WWW-Authenticate", authn)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
+	if invalidToken {
+		_, _ = io.WriteString(w, `{"error":"invalid_token"}`+"\n")
+		return
+	}
 	_, _ = io.WriteString(w, `{"error":"unauthorized"}`+"\n")
 }
 
