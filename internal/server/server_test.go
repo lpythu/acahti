@@ -361,15 +361,25 @@ func TestSkillAndOAuth(t *testing.T) {
 	}
 
 	rr = httptest.NewRecorder()
-	h.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize"}`)))
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("mcp unauth %d", rr.Code)
-	}
-	if !strings.Contains(rr.Header().Get("WWW-Authenticate"), "resource_metadata") {
-		t.Fatalf("challenge %s", rr.Header().Get("WWW-Authenticate"))
+	initReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`))
+	initReq.Header.Set("Content-Type", "application/json")
+	initReq.Header.Set("Accept", "application/json, text/event-stream")
+	h.ServeHTTP(rr, initReq)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("mcp initialize %d %s", rr.Code, rr.Body.String())
 	}
 	if !strings.Contains(rr.Header().Get("Link"), "/acahti.svg") {
 		t.Fatalf("mcp link %s", rr.Header().Get("Link"))
+	}
+	rr = httptest.NewRecorder()
+	callReq := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"whoami"}}`))
+	callReq.Header.Set("Content-Type", "application/json")
+	h.ServeHTTP(rr, callReq)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("mcp call unauth %d", rr.Code)
+	}
+	if !strings.Contains(rr.Header().Get("WWW-Authenticate"), "resource_metadata") {
+		t.Fatalf("challenge %s", rr.Header().Get("WWW-Authenticate"))
 	}
 
 	for _, path := range []string{"/favicon.ico", "/acahti.png", "/apple-touch-icon.png"} {

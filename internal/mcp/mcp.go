@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -138,11 +139,42 @@ func (s *Server) newHandler() http.Handler {
 	return http.NewCrossOriginProtection().Handler(transport)
 }
 
+func rpcMethod(r *http.Request) string {
+	if r.Body == nil {
+		return ""
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	r.Body = io.NopCloser(bytes.NewReader(raw))
+	if err != nil {
+		return ""
+	}
+	var msg struct {
+		Method string `json:"method"`
+	}
+	if json.Unmarshal(raw, &msg) != nil {
+		return ""
+	}
+	return msg.Method
+}
+
+func publicRPC(method string) bool {
+	switch method {
+	case "initialize", "notifications/initialized", "ping", "tools/list":
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Link", brand.Link(s.Cfg.RootURL))
 	raw := auth.Bearer(r)
 	login, ok := s.Auth.Parse(raw)
 	if !ok {
+		if publicRPC(rpcMethod(r)) {
+			s.handler.ServeHTTP(w, r)
+			return
+		}
 		oauth.Challenge(w, oauth.ResourceMetadataURL(oauth.PublicRoot(s.Cfg.RootURL, s.Cfg.Domain, r.Host)), raw != "")
 		return
 	}
