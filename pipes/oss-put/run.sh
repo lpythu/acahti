@@ -41,11 +41,11 @@ region="${region%%.aliyuncs.com}"
 region="${region%-internal}"
 oss_cp() {
 	local src="$1"
-	if "$bin" version >/dev/null 2>&1; then
-		"$bin" cp -f "$src" "$dest" --endpoint "$endpoint" -i "$ak" -k "$sk"
-	else
-		"$bin" cp "$src" "$dest" --region "$region" --endpoint "$endpoint" -i "$ak" -k "$sk"
+	extra=()
+	if ! "$bin" version >/dev/null 2>&1; then
+		extra+=(--region "$region")
 	fi
+	"$bin" cp -f "$src" "$dest" --endpoint "$endpoint" -i "$ak" -k "$sk" "${extra[@]}"
 }
 while IFS= read -r f; do
 	[[ -z "$f" ]] && continue
