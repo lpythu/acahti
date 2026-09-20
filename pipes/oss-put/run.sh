@@ -7,10 +7,19 @@ require_input ENDPOINT
 require_input BUCKET
 require_input PREFIX
 require_input FILES
-command -v ossutil >/dev/null || {
+bindir="${HOME}/.local/lib/acahti"
+mkdir -p "$bindir"
+bin="${bindir}/ossutil"
+url="https://gosspublic.alicdn.com/ossutil/1.7.18/ossutil64"
+if [[ ! -x "$bin" ]]; then
+	echo "==> install ossutil from ${url}"
+	curl -fsSL "$url" -o "$bin"
+	chmod 755 "$bin"
+fi
+if [[ ! -x "$bin" ]]; then
 	echo "error: ossutil required on the Runner" >&2
 	exit 1
-}
+fi
 ak="${OSS_ACCESS_KEY_ID:-}"
 sk="${OSS_ACCESS_KEY_SECRET:-}"
 if [[ -z "$ak" || -z "$sk" ]]; then
@@ -24,6 +33,20 @@ prefix="${prefix#oss://}"
 prefix="${prefix#${bucket}/}"
 dest="oss://${bucket}/${prefix}"
 dest="${dest%/}/"
+region="${endpoint#https://}"
+region="${region#http://}"
+region="${region%%/*}"
+region="${region#oss-}"
+region="${region%%.aliyuncs.com}"
+region="${region%-internal}"
+oss_cp() {
+	local src="$1"
+	if "$bin" version >/dev/null 2>&1; then
+		"$bin" cp -f "$src" "$dest" --endpoint "$endpoint" -i "$ak" -k "$sk"
+	else
+		"$bin" cp "$src" "$dest" --region "$region" --endpoint "$endpoint" -i "$ak" -k "$sk"
+	fi
+}
 while IFS= read -r f; do
 	[[ -z "$f" ]] && continue
 	if [[ "$f" != /* ]]; then
@@ -34,6 +57,6 @@ while IFS= read -r f; do
 		exit 1
 	fi
 	echo "==> oss-put ${f} → ${dest}"
-	ossutil cp -f "$f" "$dest" --endpoint "$endpoint" -i "$ak" -k "$sk"
+	oss_cp "$f"
 done < <(each_line "$(input FILES)")
 echo "OK oss-put ${dest}"
