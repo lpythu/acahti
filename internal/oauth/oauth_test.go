@@ -174,3 +174,93 @@ func TestPublicRoot(t *testing.T) {
 	}
 }
 
+func TestRegisterCannotSetWeb(t *testing.T) {
+	a := auth.New([]byte("secret"), "acahti_bot")
+	s, err := Open(t.TempDir(), "http://acahti.example", "", a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	s.Register(rr, httptest.NewRequest(http.MethodPost, "/oauth/register", strings.NewReader(`{"redirect_uris":["https://evil.example/cb"],"client_name":"x","kind":"web"}`)))
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("register %d %s", rr.Code, rr.Body.String())
+	}
+	var reg map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &reg); err != nil {
+		t.Fatal(err)
+	}
+	cid, _ := reg["client_id"].(string)
+	s.mu.Lock()
+	c := s.clients[cid]
+	s.mu.Unlock()
+	if c.isWeb() || c.Kind != KindMCP {
+		t.Fatalf("dcr kind %q", c.Kind)
+	}
+}
+
+func TestWebClientSkipsConsent(t *testing.T) {
+	a := auth.New([]byte("secret"), "acahti_bot")
+	s, err := Open(t.TempDir(), "http://acahti.example", "", a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	redirect := "https://argos.example/api/auth/sso/acahti/callback"
+	s.SeedWebClient(DashClientID, "Argos", redirect)
+	verifier := "abcdefghijklmnopqrstuvwxyz012345"
+	q := url.Values{
+		"response_type":         {"code"},
+		"client_id":             {DashClientID},
+		"redirect_uri":          {redirect},
+		"state":                 {"st"},
+		"code_challenge":        {s256(verifier)},
+		"code_challenge_method": {"S256"},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil)
+	req.AddCookie(&http.Cookie{Name: auth.Cookie, Value: a.Issue("alice")})
+	rr := httptest.NewRecorder()
+	s.Authorize(rr, req)
+	if rr.Code != http.StatusFound {
+		t.Fatalf("authorize %d %s", rr.Code, rr.Body.String())
+	}
+	loc := rr.Header().Get("Location")
+	u, err := url.Parse(loc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Path != "/api/auth/sso/acahti/callback" || u.Query().Get("state") != "st" || u.Query().Get("code") == "" {
+		t.Fatalf("location %s", loc)
+	}
+	if strings.Contains(loc, "/oauth/consent") {
+		t.Fatalf("hit consent %s", loc)
+	}
+
+	form := url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {u.Query().Get("code")},
+		"redirect_uri":  {redirect},
+		"code_verifier": {verifier},
+		"client_id":     {DashClientID},
+	}
+	tokReq := httptest.NewRequest(http.MethodPost, "/oauth/token", strings.NewReader(form.Encode()))
+	tokReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr = httptest.NewRecorder()
+	s.Token(rr, tokReq)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("token %d %s", rr.Code, rr.Body.String())
+	}
+	var tok map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &tok); err != nil {
+		t.Fatal(err)
+	}
+	at, _ := tok["access_token"].(string)
+	if user, ok := a.Parse(at); !ok || user != "alice" {
+		t.Fatalf("access_token %q %v", at, ok)
+	}
+
+	bare := httptest.NewRequest(http.MethodGet, "/oauth/authorize?"+q.Encode(), nil)
+	rr = httptest.NewRecorder()
+	s.Authorize(rr, bare)
+	if rr.Code != http.StatusFound || !strings.Contains(rr.Header().Get("Location"), "/login?next=") {
+		t.Fatalf("anon %d %s", rr.Code, rr.Header().Get("Location"))
+	}
+}

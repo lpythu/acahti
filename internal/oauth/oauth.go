@@ -35,6 +35,9 @@ const (
 	AccessTTL           = 90 * 24 * time.Hour
 	RefreshTTL          = 400 * 24 * time.Hour
 	AdvertisedExpiresIn = math.MaxInt32
+	KindMCP             = "mcp"
+	KindWeb             = "web"
+	DashClientID        = "argos-dash"
 )
 
 func ResourceMetadataURL(root string) string {
@@ -65,7 +68,12 @@ func PublicRoot(rootURL, domain, host string) string {
 type client struct {
 	ID           string   `json:"client_id"`
 	Name         string   `json:"client_name"`
+	Kind         string   `json:"kind,omitempty"`
 	RedirectURIs []string `json:"redirect_uris"`
+}
+
+func (c client) isWeb() bool {
+	return c.Kind == KindWeb
 }
 
 type codeRec struct {
@@ -127,6 +135,23 @@ func Open(dir, rootURL, domain string, a *auth.Service) (*Server, error) {
 		}
 	}
 	return s, nil
+}
+
+// SeedWebClient registers a first-party web client. DCR cannot set kind=web.
+func (s *Server) SeedWebClient(id, name, redirect string) {
+	id = strings.TrimSpace(id)
+	redirect = strings.TrimSpace(redirect)
+	if id == "" || redirect == "" {
+		return
+	}
+	s.mu.Lock()
+	s.clients[id] = client{
+		ID:           id,
+		Name:         strings.TrimSpace(name),
+		Kind:         KindWeb,
+		RedirectURIs: []string{redirect},
+	}
+	s.mu.Unlock()
 }
 
 func (s *Server) persist() {
@@ -193,6 +218,7 @@ func (s *Server) Metadata(w http.ResponseWriter, r *http.Request) {
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
 		"token_endpoint_auth_methods_supported": []string{"none"},
 		"scopes_supported":                      []string{"mcp"},
+		"userinfo_endpoint":                     root + "/acahti/v1/me",
 		"logo_uri":                              brand.PNGURL(root),
 	})
 }
@@ -219,7 +245,7 @@ func (s *Server) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	id := nonce(16)
-	c := client{ID: id, Name: strings.TrimSpace(body.ClientName), RedirectURIs: body.RedirectURIs}
+	c := client{ID: id, Name: strings.TrimSpace(body.ClientName), Kind: KindMCP, RedirectURIs: body.RedirectURIs}
 	s.mu.Lock()
 	s.clients[id] = c
 	s.persist()
@@ -246,7 +272,42 @@ func (s *Server) Authorize(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login?next="+url.QueryEscape(next), http.StatusFound)
 		return
 	}
+	clientID := q.Get("client_id")
+	redirectURI := q.Get("redirect_uri")
+	s.mu.Lock()
+	c, ok := s.clients[clientID]
+	s.mu.Unlock()
+	if ok && c.isWeb() {
+		if !s.allowRedirect(c, redirectURI) {
+			http.Error(w, "redirect_uri", http.StatusBadRequest)
+			return
+		}
+		s.redirectCode(w, r, user, clientID, redirectURI, q.Get("state"), q.Get("code_challenge"))
+		return
+	}
 	http.Redirect(w, r, "/oauth/consent?"+r.URL.RawQuery, http.StatusFound)
+}
+
+func (s *Server) redirectCode(w http.ResponseWriter, r *http.Request, user, clientID, redirectURI, state, challenge string) {
+	u, err := url.Parse(redirectURI)
+	if err != nil {
+		http.Error(w, "redirect_uri", http.StatusBadRequest)
+		return
+	}
+	code := nonce(20)
+	s.mu.Lock()
+	s.codes[code] = codeRec{
+		User: user, ClientID: clientID, Redirect: redirectURI,
+		Challenge: challenge, Expires: time.Now().Add(5 * time.Minute).Unix(),
+	}
+	s.mu.Unlock()
+	q := u.Query()
+	q.Set("code", code)
+	if state != "" {
+		q.Set("state", state)
+	}
+	u.RawQuery = q.Encode()
+	http.Redirect(w, r, u.String(), http.StatusFound)
 }
 
 func (s *Server) Approve(w http.ResponseWriter, r *http.Request, user string) {

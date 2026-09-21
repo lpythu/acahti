@@ -31,6 +31,9 @@ func New(cfg config.Config, cat *catalog.Catalog, hub *events.Hub) http.Handler 
 		log.Fatalf("invite store: %v", err)
 	}
 	oa, _ := oauth.Open(cfg.DataDir, cfg.RootURL, cfg.Domain, a)
+	if dash := strings.TrimRight(cfg.ArgosDashURL, "/"); dash != "" {
+		oa.SeedWebClient(oauth.DashClientID, "Argos", dash+"/api/auth/sso/acahti/callback")
+	}
 	passwords, err := passwd.Open(cfg.DataDir)
 	if err != nil {
 		log.Fatalf("password store: %v", err)
