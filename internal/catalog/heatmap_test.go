@@ -37,6 +37,18 @@ func TestFillHeatmap(t *testing.T) {
 	}
 }
 
+func TestHeatDate(t *testing.T) {
+	now := time.Date(2026, 9, 21, 15, 0, 0, 0, heatZone)
+	if _, err := heatDate("2026-09-21", now); err != nil {
+		t.Fatal(err)
+	}
+	for _, date := range []string{"", "21-09-2026", "2026-09-22", "2024-01-01"} {
+		if _, err := heatDate(date, now); err == nil {
+			t.Fatalf("accepted %q", date)
+		}
+	}
+}
+
 func TestHeatCounts(t *testing.T) {
 	// 2026-09-17 16:30 UTC is 2026-09-18 00:30 in UTC+8.
 	got := heatCounts([]forgejo.HeatPoint{

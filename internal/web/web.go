@@ -159,6 +159,19 @@ func (p *Pages) BoardHeatmap(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (p *Pages) BoardActivities(w http.ResponseWriter, r *http.Request) {
+	user, _, ok := p.requireJSON(w, r)
+	if !ok {
+		return
+	}
+	out, err := p.cat(r).BoardActivities(user, r.URL.Query().Get("date"), page.Parse(r))
+	if err != nil {
+		writeCatErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 	if _, ok := p.requireAdmin(w, r); !ok {
 		return

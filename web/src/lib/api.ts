@@ -21,6 +21,15 @@ export type HeatDay = { date: string; value: number }
 
 export type Heatmap = { total: number; days: HeatDay[] }
 
+export type Activity = {
+  id: number
+  op_type: string
+  content?: string
+  ref_name?: string
+  created?: string
+  repo?: { full_name?: string; name?: string }
+}
+
 export type PR = {
   number: number
   title: string
@@ -336,6 +345,8 @@ export const api = {
   logout: () => req<{ ok: boolean }>("/ui/logout", { method: "POST" }),
   boardPRs: (q?: PageQuery) => req<Page<PR>>(`/ui/board${pageQS(q)}`),
   boardHeatmap: () => req<Heatmap>("/ui/board/heatmap"),
+  boardActivities: (q?: PageQuery & { date?: string }) =>
+    req<Page<Activity>>(`/ui/board/activities${pageQS(q, { date: q?.date })}`),
   users: (q?: PageQuery) => req<Page<User>>(`/ui/users${pageQS(q)}`),
   createUser: (username: string, password: string, admin: boolean) =>
     req<{ user: User }>("/ui/users", {

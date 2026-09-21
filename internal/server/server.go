@@ -77,6 +77,7 @@ func New(cfg config.Config, cat *catalog.Catalog, hub *events.Hub) http.Handler 
 	mux.HandleFunc("POST /ui/oauth/approve", pages.OAuthApprove)
 	mux.HandleFunc("GET /ui/board", pages.Board)
 	mux.HandleFunc("GET /ui/board/heatmap", pages.BoardHeatmap)
+	mux.HandleFunc("GET /ui/board/activities", pages.BoardActivities)
 	mux.HandleFunc("GET /ui/events", pages.Events)
 	mux.HandleFunc("GET /ui/nav/tree", pages.NavTree)
 	mux.HandleFunc("GET /ui/repos", pages.Repos)

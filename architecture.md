@@ -42,7 +42,7 @@ flowchart TB
 4. `Notify` (SSE).
 5. Return `Present(...)` shape.
 
-Live whitelist (GET kernel, still through Catalog): git contents / commits / diff / branches / tags / PR detail / packages / statuses; CI detail miss or in-flight refresh, step log, `QueueInfo`, agents.
+Live whitelist (GET kernel, still through Catalog): git contents / commits / diff / branches / tags / PR detail / packages / statuses / user activity feeds; CI detail miss or in-flight refresh, step log, `QueueInfo`, agents.
 
 Kernel HTTP transport is shared `internal/httpx` (timeouts, JSON, SoftFail). Domain clients stay in `internal/forgejo` and `internal/woodpecker`.
 

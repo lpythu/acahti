@@ -1,11 +1,13 @@
 package catalog
 
 import (
+	"fmt"
 	"log"
 	"strings"
 	"time"
 
 	"acahti/internal/forgejo"
+	"acahti/internal/page"
 	"acahti/internal/store"
 )
 
@@ -34,6 +36,29 @@ func (c *Catalog) BoardHeatmap(user string) (Heatmap, error) {
 		return Heatmap{}, err
 	}
 	return fillHeatmap(counts, start, end, now), nil
+}
+
+func (c *Catalog) BoardActivities(user, date string, q page.Query) (page.Result[forgejo.Activity], error) {
+	if _, err := heatDate(date, time.Now()); err != nil {
+		return page.Result[forgejo.Activity]{}, err
+	}
+	if c.fj == nil || !c.fj.Ready() {
+		return page.Of([]forgejo.Activity{}, q, false), nil
+	}
+	return c.fj.ListUserActivityFeeds(user, date, q)
+}
+
+func heatDate(date string, now time.Time) (time.Time, error) {
+	d, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(date), heatZone)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("%w: date", ErrInvalid)
+	}
+	start, end := heatRange(now)
+	today := time.Date(now.In(heatZone).Year(), now.In(heatZone).Month(), now.In(heatZone).Day(), 0, 0, 0, 0, heatZone)
+	if d.Before(start) || !d.Before(end) || d.After(today) {
+		return time.Time{}, fmt.Errorf("%w: date", ErrInvalid)
+	}
+	return d, nil
 }
 
 func (c *Catalog) RememberHeat(payload map[string]any) {

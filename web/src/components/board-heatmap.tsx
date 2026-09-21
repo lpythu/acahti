@@ -5,7 +5,13 @@ import { useLoad } from "@/hooks/use-load"
 import { useLocale, useT } from "@/i18n/i18n"
 import { api } from "@/lib/api"
 
-export function BoardHeatmap() {
+export function BoardHeatmap({
+  selected,
+  onSelect,
+}: {
+  selected?: string
+  onSelect?: (date: string) => void
+}) {
   const t = useT()
   const locale = useLocale()
   const { data, loading, reload } = useLoad(() => api.boardHeatmap(), [])
@@ -26,6 +32,8 @@ export function BoardHeatmap() {
         className="mt-3"
         days={data.days}
         locale={locale}
+        selected={selected}
+        onDaySelect={onSelect}
         fewerLabel={t("heatFewer")}
         moreLabel={t("heatMore")}
         renderTooltip={(cell) => {

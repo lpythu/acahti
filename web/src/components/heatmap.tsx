@@ -15,6 +15,8 @@ export function Heatmap({
   fewerLabel,
   moreLabel,
   renderTooltip,
+  selected,
+  onDaySelect,
   className,
 }: {
   days: readonly HeatDay[]
@@ -22,11 +24,14 @@ export function Heatmap({
   fewerLabel?: ReactNode
   moreLabel?: ReactNode
   renderTooltip?: (cell: HeatCell) => string
+  selected?: string
+  onDaySelect?: (date: string) => void
   className?: string
 }) {
   const grid = useMemo(() => calendarGrid(days, locale), [days, locale])
   const levels = useMemo(() => heatLevels(grid.values), [grid.values])
   const n = grid.columns.length
+  const today = todayKey(new Date())
   const [tip, setTip] = useState<{ text: string; left: number; top: number } | null>(null)
   const tipRef = useRef<HTMLDivElement>(null)
 
@@ -74,6 +79,12 @@ export function Heatmap({
               const value = grid.values.get(key) ?? 0
               const date = grid.dates.get(key) ?? ""
               const text = date && renderTooltip ? renderTooltip({ date, value }) : ""
+              const clickable = Boolean(onDaySelect && date && date <= today)
+              const active = Boolean(date && selected === date)
+              const swatch = {
+                backgroundColor: COLORS[levelFor(value, levels)],
+                borderRadius: "min(3px, 20%)",
+              } as const
               return (
                 <div
                   key={key}
@@ -86,15 +97,21 @@ export function Heatmap({
                   }}
                   onPointerLeave={() => setTip(null)}
                 >
-                  <div
-                    role="img"
-                    aria-label={text || undefined}
-                    className="size-full"
-                    style={{
-                      backgroundColor: COLORS[levelFor(value, levels)],
-                      borderRadius: "min(3px, 20%)",
-                    }}
-                  />
+                  {clickable ? (
+                    <button
+                      type="button"
+                      aria-label={text || date}
+                      aria-pressed={active}
+                      className={cn(
+                        "size-full cursor-pointer border-0 p-0",
+                        active && "outline outline-2 outline-offset-1 outline-foreground",
+                      )}
+                      style={swatch}
+                      onClick={() => onDaySelect?.(date)}
+                    />
+                  ) : (
+                    <div role="img" aria-label={text || undefined} className="size-full" style={swatch} />
+                  )}
                 </div>
               )
             }),
