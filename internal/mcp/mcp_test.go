@@ -73,49 +73,23 @@ func TestAsInt64(t *testing.T) {
 	}
 }
 
-func TestWaitChecksEmptyIsDone(t *testing.T) {
-	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`[]`))
-	}))
-	t.Cleanup(hs.Close)
-	s := &Server{Cat: catalog.New(config.Config{}, forgejo.New(hs.URL, "t"), nil, nil)}
+func TestWaitChecksEmptyIndex(t *testing.T) {
+	s := &Server{Cat: catalog.New(config.Config{}, nil, nil, nil)}
 	out, err := s.waitChecks("acme", "demo", "abc")
 	if err != nil {
 		t.Fatal(err)
 	}
 	m, _ := out.(map[string]any)
-	if m["ok"] != true || m["done"] != true {
+	if m["ok"] != false || m["done"] != false {
 		t.Fatalf("%v", out)
 	}
-}
-
-func TestWaitChecksLatestPerContext(t *testing.T) {
-	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`[
-			{"status":"success","context":"ci","created_at":"2026-01-01T02:00:00Z"},
-			{"status":"pending","context":"ci","created_at":"2026-01-01T01:00:00Z"}
-		]`))
-	}))
-	t.Cleanup(hs.Close)
-	s := &Server{Cat: catalog.New(config.Config{}, forgejo.New(hs.URL, "t"), nil, nil)}
-	out, err := s.waitChecks("acme", "demo", "abc")
-	if err != nil {
-		t.Fatal(err)
-	}
-	m, _ := out.(map[string]any)
-	if m["ok"] != true || m["done"] != true {
-		t.Fatalf("%v", out)
+	if _, ok := m["pipelines"]; !ok {
+		t.Fatalf("missing pipelines: %v", out)
 	}
 }
 
 func TestWaitChecksSnapshot(t *testing.T) {
-	var hits int
-	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits++
-		_, _ = w.Write([]byte(`[{"status":"pending","context":"ci"}]`))
-	}))
-	t.Cleanup(hs.Close)
-	s := &Server{Cat: catalog.New(config.Config{}, forgejo.New(hs.URL, "t"), nil, nil)}
+	s := &Server{Cat: catalog.New(config.Config{}, nil, nil, nil)}
 	start := time.Now()
 	out, err := s.waitChecks("acme", "demo", "abc")
 	if err != nil {
@@ -123,9 +97,6 @@ func TestWaitChecksSnapshot(t *testing.T) {
 	}
 	if time.Since(start) > time.Second {
 		t.Fatal("snapshot slept")
-	}
-	if hits != 1 {
-		t.Fatalf("hits=%d", hits)
 	}
 	m, _ := out.(map[string]any)
 	if m["ok"] != false || m["done"] != false {

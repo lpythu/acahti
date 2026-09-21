@@ -80,12 +80,38 @@ func TestParseForgejoRepoEvent(t *testing.T) {
 }
 
 func TestParseForgejoStatus(t *testing.T) {
-	repo, n, ok := ParseForgejoStatus(map[string]any{
-		"target_url": "http://woodpecker:8000/ci/repos/saidc/demo/pipeline/12",
-		"repository": map[string]any{"full_name": "saidc/demo"},
-	})
-	if !ok || repo != "saidc/demo" || n != 12 {
-		t.Fatalf("%s %d %v", repo, n, ok)
+	cases := []struct {
+		url    string
+		number int64
+	}{
+		{"http://woodpecker:8000/ci/repos/saidc/demo/pipeline/12", 12},
+		{"https://acahti.example/repos/saidc/tm-web/pipelines/147", 147},
+		{"https://acahti.example/repos/20/148/pipelines/1", 148},
+		{"/repos/20/148/pipelines/1", 148},
+	}
+	for _, tc := range cases {
+		repo, n, ok := ParseForgejoStatus(map[string]any{
+			"target_url": tc.url,
+			"repository": map[string]any{"full_name": "saidc/tm-web"},
+		})
+		if !ok || repo != "saidc/tm-web" || n != tc.number {
+			t.Fatalf("%s -> %s %d %v want %d", tc.url, repo, n, ok, tc.number)
+		}
+	}
+}
+
+func TestPipelineNumberFromURL(t *testing.T) {
+	if got := pipelineNumberFromURL("https://x/repos/saidc/tm-web/pipelines/147"); got != 147 {
+		t.Fatalf("named %d", got)
+	}
+	if got := pipelineNumberFromURL("/repos/20/148/pipelines/1"); got != 148 {
+		t.Fatalf("kernel %d", got)
+	}
+	if got := pipelineNumberFromURL("/ci/repos/saidc/demo/pipeline/12"); got != 12 {
+		t.Fatalf("ci %d", got)
+	}
+	if got := pipelineNumberFromURL(""); got != 0 {
+		t.Fatalf("empty %d", got)
 	}
 }
 

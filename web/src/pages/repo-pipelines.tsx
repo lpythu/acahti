@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 
 import { PagedList } from "@/components/paged-list"
@@ -17,7 +17,9 @@ export function RepoPipelinesPage() {
   const t = useT()
   const nav = useNavigate()
   const { owner, name, data } = useRepo()
-  const list = usePage((q) => api.repoPipelines(owner, name, q), [owner, name])
+  const [sp] = useSearchParams()
+  const sha = sp.get("sha") || ""
+  const list = usePage((q) => api.repoPipelines(owner, name, { ...q, sha: sha || undefined }), [owner, name, sha])
   useEvents((ev) => {
     if (ev.type !== "pipeline.updated") return
     const next = asPipeline(ev.data)

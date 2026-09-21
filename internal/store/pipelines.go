@@ -172,10 +172,16 @@ func (s *Store) LatestByRepo(repos, status []string, q page.Query) (page.Result[
 	return page.Clip(items, q), nil
 }
 
-// LatestStatusByCommit maps repo+"\n"+lower(sha) to the newest pipeline status
-// whose commit starts with that sha. Missing rows are omitted.
-func (s *Store) LatestStatusByCommit(repos, shas []string) (map[string]string, error) {
-	out := map[string]string{}
+// CommitPipe is the newest indexed pipeline for a commit (by number).
+type CommitPipe struct {
+	Status string
+	Number int64
+}
+
+// LatestByCommit maps repo+"\n"+lower(sha) to the newest pipeline whose commit
+// starts with that sha. Missing rows are omitted.
+func (s *Store) LatestByCommit(repos, shas []string) (map[string]CommitPipe, error) {
+	out := map[string]CommitPipe{}
 	if !s.ready() || len(repos) == 0 || len(shas) == 0 {
 		return out, nil
 	}
@@ -184,7 +190,7 @@ func (s *Store) LatestStatusByCommit(repos, shas []string) (map[string]string, e
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	rows, err := s.pool.Query(ctx, `
-SELECT DISTINCT ON (w.repo, w.sha) w.repo, w.sha, COALESCE(p.status, '')
+SELECT DISTINCT ON (w.repo, w.sha) w.repo, w.sha, COALESCE(p.status, ''), COALESCE(p.number, 0)
 FROM unnest($1::text[], $2::text[]) AS w(repo, sha)
 LEFT JOIN pipelines p ON p.repo = w.repo AND lower(p.commit) LIKE lower(w.sha) || '%'
 ORDER BY w.repo, w.sha, p.number DESC NULLS LAST
@@ -195,13 +201,14 @@ ORDER BY w.repo, w.sha, p.number DESC NULLS LAST
 	defer rows.Close()
 	for rows.Next() {
 		var repo, sha, status string
-		if err := rows.Scan(&repo, &sha, &status); err != nil {
+		var number int64
+		if err := rows.Scan(&repo, &sha, &status, &number); err != nil {
 			return nil, err
 		}
-		if status == "" {
+		if status == "" && number == 0 {
 			continue
 		}
-		out[repo+"\n"+strings.ToLower(sha)] = status
+		out[repo+"\n"+strings.ToLower(sha)] = CommitPipe{Status: status, Number: number}
 	}
 	return out, rows.Err()
 }

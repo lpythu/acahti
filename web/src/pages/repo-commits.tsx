@@ -1,18 +1,19 @@
-import { useMemo, useState } from "react"
+import { useMemo, useState, type FormEvent } from "react"
 import { Link, useSearchParams } from "react-router-dom"
-import { CheckIcon, CopyIcon, FolderTreeIcon, GitBranchIcon } from "lucide-react"
+import { CheckIcon, CopyIcon, FolderTreeIcon, GitBranchIcon, SearchIcon } from "lucide-react"
 
 import { PagedList } from "@/components/paged-list"
 import { RunStatusIcon } from "@/components/run-status-icon"
 import { statusText } from "@/components/status-badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useLoad } from "@/hooks/use-load"
 import { usePage } from "@/hooks/use-page"
 import { useT } from "@/i18n/i18n"
 import { api, type Commit } from "@/lib/api"
 import { dayKey, formatRelative, formatStamp } from "@/lib/format"
-import { commitAuthor, commitTitle, shortSha } from "@/lib/git"
+import { commitAuthor, commitTitle, filterCommitPage, isCommitSha, shortSha } from "@/lib/git"
 import { useRepo } from "@/pages/repo-layout"
 
 function CommitRow({ owner, name, c }: { owner: string; name: string; c: Commit }) {
@@ -22,7 +23,6 @@ function CommitRow({ owner, name, c }: { owner: string; name: string; c: Commit 
   const author = commitAuthor(c)
   const date = c.commit?.author?.date
   const check = c.check_status
-  const checkHref = c.check_url || undefined
 
   async function copySha() {
     await navigator.clipboard.writeText(c.sha)
@@ -50,20 +50,14 @@ function CommitRow({ owner, name, c }: { owner: string; name: string; c: Commit 
       </div>
       <div className="flex shrink-0 items-center gap-1">
         {checkIcon ? (
-          checkHref ? (
-            <Link
-              className="rounded-md p-1.5 text-muted-foreground hover:bg-muted"
-              to={checkHref}
-              aria-label={statusText(check!, t)}
-              title={statusText(check!, t)}
-            >
-              {checkIcon}
-            </Link>
-          ) : (
-            <span className="rounded-md p-1.5" aria-label={statusText(check!, t)} title={statusText(check!, t)}>
-              {checkIcon}
-            </span>
-          )
+          <Link
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted"
+            to={href}
+            aria-label={statusText(check!, t)}
+            title={statusText(check!, t)}
+          >
+            {checkIcon}
+          </Link>
         ) : null}
         <button
           type="button"
@@ -93,12 +87,36 @@ export function RepoCommitsPage() {
   const { owner, name, data: head } = useRepo()
   const [sp, setSp] = useSearchParams()
   const urlRef = sp.get("ref") || ""
+  const urlQ = sp.get("q") || ""
   const currentRef = urlRef || head?.ref || head?.repo.default_branch || ""
   const branches = useLoad(() => api.branches(owner, name, { page: 1, page_size: 100 }), [owner, name])
   const list = usePage(
-    (q) => api.commits(owner, name, { page: q.page, page_size: q.page_size, ref: urlRef || undefined }),
-    [owner, name, urlRef],
+    async (q) => {
+      const query = urlQ.trim()
+      if (query && isCommitSha(query)) {
+        try {
+          const detail = await api.commit(owner, name, query, { page: 1, page_size: 1 })
+          return {
+            items: detail.commit ? [detail.commit] : [],
+            page: 1,
+            page_size: q.page_size ?? 20,
+            has_more: false,
+          }
+        } catch {
+          return { items: [], page: 1, page_size: q.page_size ?? 20, has_more: false }
+        }
+      }
+      const res = await api.commits(owner, name, {
+        page: q.page,
+        page_size: q.page_size,
+        ref: urlRef || undefined,
+        q: query || undefined,
+      })
+      return filterCommitPage(res, query)
+    },
+    [owner, name, urlRef, urlQ],
   )
+
   const branchNames = useMemo(() => {
     const names = (branches.data?.items || []).map((b) => b.name)
     if (currentRef && !names.includes(currentRef)) names.unshift(currentRef)
@@ -114,6 +132,29 @@ export function RepoCommitsPage() {
     setSp(q, { replace: true })
   }
 
+  function setQuery(next: string) {
+    const q = new URLSearchParams(sp)
+    const v = next.trim()
+    if (!v) q.delete("q")
+    else q.set("q", v)
+    q.delete("page")
+    setSp(q, { replace: true })
+  }
+
+  function onSearch(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const field = e.currentTarget.querySelector("input")
+    setQuery(field?.value || "")
+  }
+
+  const searchingSha = Boolean(urlQ) && isCommitSha(urlQ)
+  const searchHint = currentRef ? t("searchCommitsHint", { branch: currentRef }) : t("searchCommitsHintNoBranch")
+  const emptyText = urlQ
+    ? searchingSha
+      ? t("noMatchingCommit")
+      : t("noMatchingCommits", { branch: currentRef || "—" })
+    : t("noCommits")
+
   const groups = useMemo(() => {
     const m = new Map<string, Commit[]>()
     for (const c of list.items) {
@@ -128,24 +169,52 @@ export function RepoCommitsPage() {
   return (
     <PagedList
       list={list}
-      emptyText={t("noCommits")}
+      emptyText={emptyText}
       skeleton="lines"
       header={
-        currentRef ? (
-          <Select value={currentRef} onValueChange={(v) => setRef(String(v ?? ""))}>
-            <SelectTrigger size="sm" className="w-fit min-w-40" aria-label={t("branches")}>
-              <GitBranchIcon className="size-3.5" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {branchNames.map((b) => (
-                <SelectItem key={b} value={b}>
-                  {b}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : null
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {currentRef ? (
+            <Select value={currentRef} onValueChange={(v) => setRef(String(v ?? ""))}>
+              <SelectTrigger size="sm" className="w-fit min-w-40" aria-label={t("branches")}>
+                <GitBranchIcon className="size-3.5" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {branchNames.map((b) => (
+                  <SelectItem key={b} value={b}>
+                    {b}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <span />
+          )}
+          <form key={urlQ} className="relative min-w-56 max-w-sm flex-1" onSubmit={onSearch}>
+            <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              name="q"
+              defaultValue={urlQ}
+              onChange={(e) => {
+                if (!e.target.value.trim() && urlQ) setQuery("")
+              }}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return
+                e.preventDefault()
+                setQuery(e.currentTarget.value)
+              }}
+              placeholder={searchHint}
+              aria-label={searchHint}
+              autoComplete="off"
+              spellCheck={false}
+              className="h-7 pl-8"
+            />
+            <button type="submit" className="sr-only">
+              {t("searchCommits")}
+            </button>
+          </form>
+        </div>
       }
     >
       {() =>

@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"acahti/internal/httpx"
@@ -21,6 +23,7 @@ type Client struct {
 	mu    sync.Mutex
 	ids   map[string]int64
 	names map[int64]string
+	dead  atomic.Bool
 }
 
 func New(base, token string) *Client {
@@ -31,19 +34,29 @@ func New(base, token string) *Client {
 		}
 		return 8 * time.Second
 	}
-	h.OnError = func(method, path string, status int, body []byte) error {
-		return fmt.Errorf("woodpecker %s %s: %d %s", method, path, status, strings.TrimSpace(string(body)))
-	}
-	return &Client{
+	c := &Client{
 		token: token,
 		http:  h,
 		ids:   map[string]int64{},
 		names: map[int64]string{},
 	}
+	h.OnError = func(method, path string, status int, body []byte) error {
+		if status == http.StatusUnauthorized {
+			c.markDead()
+		}
+		return fmt.Errorf("woodpecker %s %s: %d %s", method, path, status, strings.TrimSpace(string(body)))
+	}
+	return c
+}
+
+func (c *Client) markDead() {
+	if c.dead.CompareAndSwap(false, true) {
+		log.Printf("woodpecker: unauthorized, mark unavailable")
+	}
 }
 
 func (c *Client) Ready() bool {
-	return c != nil && c.token != ""
+	return c != nil && c.token != "" && !c.dead.Load()
 }
 
 func (c *Client) Base() string {

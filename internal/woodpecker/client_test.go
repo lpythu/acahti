@@ -228,3 +228,21 @@ func TestQueueInfo(t *testing.T) {
 		t.Fatalf("workers %+v", q.Stats)
 	}
 }
+
+func TestReadyFalseAfter401(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("token"))
+	}))
+	t.Cleanup(s.Close)
+	c := New(s.URL, "bad")
+	if !c.Ready() {
+		t.Fatal("start")
+	}
+	if _, err := c.ListRepos(page.Query{Page: 1, Size: 20}); err == nil {
+		t.Fatal("want 401")
+	}
+	if c.Ready() {
+		t.Fatal("still ready")
+	}
+}

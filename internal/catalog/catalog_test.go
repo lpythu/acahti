@@ -536,21 +536,101 @@ func TestPermFromRole(t *testing.T) {
 	}
 }
 
-func TestAcahtiCheckURL(t *testing.T) {
-	c := New(config.Config{RootURL: "https://acahti.example.com"}, nil, nil, nil)
-	cases := []struct {
-		in, want string
-	}{
-		{"", ""},
-		{"https://acahti.example.com/ci", "https://acahti.example.com/pipelines"},
-		{"https://acahti.example.com/ci/", "https://acahti.example.com/pipelines"},
-		{"https://acahti.example.com/ci/acme/demo/12", "https://acahti.example.com/repos/acme/demo/pipelines/12"},
-		{"https://acahti.example.com/ci/repos/acme/demo/pipeline/12", "https://acahti.example.com/repos/acme/demo/pipelines/12"},
-		{"https://acahti.example.com/repos/acme/demo", "https://acahti.example.com/repos/acme/demo"},
+func TestApplyCommitCheck(t *testing.T) {
+	st, href := applyCommitCheck("saidc", "tm-web", "abc", store.CommitPipe{Status: "canceled", Number: 128})
+	if st != "canceled" || href != "/repos/saidc/tm-web/commits/abc" {
+		t.Fatalf("%q %q", st, href)
 	}
-	for _, tc := range cases {
-		if got := c.acahtiCheckURL(tc.in); got != tc.want {
-			t.Fatalf("acahtiCheckURL(%q)=%q want %q", tc.in, got, tc.want)
+	st, href = applyCommitCheck("saidc", "tm-web", "abc", store.CommitPipe{Status: "success", Number: 140})
+	if st != "success" || href != "/repos/saidc/tm-web/commits/abc" {
+		t.Fatalf("%q %q", st, href)
+	}
+	st, href = applyCommitCheck("saidc", "tm-web", "abc", store.CommitPipe{})
+	if st != "" || href != "" {
+		t.Fatalf("%q %q", st, href)
+	}
+}
+
+func TestPaintCommitChecksNilIndex(t *testing.T) {
+	c := New(config.Config{}, nil, nil, nil)
+	items := []forgejo.Commit{{SHA: "abc"}}
+	c.paintCommitChecks("saidc", "tm-web", items)
+	if items[0].CheckStatus != "" || items[0].CheckURL != "" {
+		t.Fatalf("%+v", items[0])
+	}
+}
+
+func TestLatestPipeGreen(t *testing.T) {
+	if latestPipeGreen(nil) {
+		t.Fatal("empty")
+	}
+	if latestPipeGreen([]woodpecker.Pipeline{{Status: "canceled"}}) {
+		t.Fatal("canceled")
+	}
+	if !latestPipeGreen([]woodpecker.Pipeline{{Status: "success"}}) {
+		t.Fatal("success")
+	}
+}
+
+func TestLatestPipeDone(t *testing.T) {
+	if LatestPipeDone(nil) {
+		t.Fatal("empty")
+	}
+	if LatestPipeDone([]woodpecker.Pipeline{{Status: "pending"}}) {
+		t.Fatal("pending")
+	}
+	if !LatestPipeDone([]woodpecker.Pipeline{{Status: "canceled"}}) {
+		t.Fatal("canceled")
+	}
+	if !LatestPipeDone([]woodpecker.Pipeline{{Status: "success"}}) {
+		t.Fatal("success")
+	}
+}
+
+func TestCommitChecksEmptyIndex(t *testing.T) {
+	c := New(config.Config{}, nil, nil, nil)
+	ok, pipes, err := c.CommitChecks("saidc", "tm-web", "abc")
+	if err != nil || ok || len(pipes) != 0 {
+		t.Fatalf("ok=%v pipes=%+v err=%v", ok, pipes, err)
+	}
+}
+
+func TestCommitDetailPipelinesJSON(t *testing.T) {
+	raw, err := json.Marshal(CommitDetail{
+		Pipelines: []woodpecker.Pipeline{{Number: 147, Status: "success", Repo: "saidc/tm-web"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"pipelines"`) || !strings.Contains(string(raw), `"number":147`) {
+		t.Fatalf("%s", raw)
+	}
+}
+
+func TestCommitSHAQuery(t *testing.T) {
+	for _, q := range []string{"abc1234", "ABCDEF1", "0123456789abcdef"} {
+		if !commitSHAQuery(q) {
+			t.Fatalf("%q", q)
 		}
+	}
+	for _, q := range []string{"", "abc", "fix login", "abc123g", "abcdef "} {
+		if commitSHAQuery(q) {
+			t.Fatalf("%q", q)
+		}
+	}
+}
+
+func TestCommitMatches(t *testing.T) {
+	cm := forgejo.Commit{SHA: "abcdef1234567890", Author: &forgejo.CommitUser{Login: "ada", FullName: "Ada Lovelace"}}
+	cm.Commit.Message = "Fix dest login"
+	cm.Commit.Author.Name = "Ada"
+	cm.Commit.Author.Email = "ada@example.com"
+	for _, q := range []string{"dest", "abcdef", "ada", "lovelace", "example.com"} {
+		if !commitMatches(cm, q) {
+			t.Fatalf("miss %q", q)
+		}
+	}
+	if commitMatches(cm, "missing") {
+		t.Fatal("false match")
 	}
 }

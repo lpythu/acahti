@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { EmptyState } from "@/components/empty-state"
 import { Pager } from "@/components/paged-list"
 import { PageFrame } from "@/components/page-frame"
+import { PipelineRunRow } from "@/components/pipeline-run-row"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
 import { useLoad } from "@/hooks/use-load"
@@ -39,6 +40,7 @@ export function PullPage() {
   }
 
   const pr = data?.pr
+  const pipes = data?.pipelines || []
   return (
     <PageFrame loading={loading && !data} error={error} className="gap-6">
       {pr ? (
@@ -68,17 +70,13 @@ export function PullPage() {
           <p className="text-sm text-muted-foreground">{t("mergeHint")}</p>
 
           <section className="flex flex-col gap-2">
-            <h3 className="text-sm font-medium">{t("checks")}</h3>
-            {(data?.checks || []).length === 0 ? (
-              <EmptyState>{t("noChecks")}</EmptyState>
+            <h3 className="text-sm font-medium">{t("pipelines")}</h3>
+            {pipes.length === 0 ? (
+              <EmptyState>{t("noPipelines")}</EmptyState>
             ) : (
-              <ul className="flex flex-col gap-1 text-sm">
-                {data?.checks.map((c) => (
-                  <li key={c.context} className="flex items-center gap-2">
-                    <StatusBadge status={c.status} />
-                    <span>{c.context}</span>
-                    {c.description ? <span className="text-muted-foreground">{c.description}</span> : null}
-                  </li>
+              <ul className="divide-y rounded-md border">
+                {pipes.map((p) => (
+                  <PipelineRunRow key={p.number} pipe={p} hideRepo />
                 ))}
               </ul>
             )}

@@ -3,8 +3,10 @@ import { Link, useParams } from "react-router-dom"
 import { CheckIcon, CopyIcon, FolderTreeIcon } from "lucide-react"
 
 import { CommitDiff } from "@/components/commit-diff"
+import { EmptyState } from "@/components/empty-state"
 import { Pager } from "@/components/paged-list"
 import { PageFrame } from "@/components/page-frame"
+import { PipelineRunRow } from "@/components/pipeline-run-row"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { usePage } from "@/hooks/use-page"
@@ -28,6 +30,7 @@ export function RepoCommitPage() {
   const login = commitAuthor(c)
   const files = data?.items || []
   const stats = data?.stats
+  const pipes = data?.pipelines || []
   const parents = c?.parents || []
 
   async function copySha() {
@@ -82,6 +85,18 @@ export function RepoCommitPage() {
             <span className="ml-2 tabular-nums text-emerald-700 dark:text-emerald-400">+{stats?.additions || 0}</span>
             <span className="ml-1 tabular-nums text-red-700 dark:text-red-400">−{stats?.deletions || 0}</span>
           </p>
+          <section className="flex flex-col gap-2">
+            <h3 className="text-sm font-medium">{t("pipelines")}</h3>
+            {pipes.length === 0 ? (
+              <EmptyState>{t("noPipelines")}</EmptyState>
+            ) : (
+              <ul className="divide-y rounded-md border">
+                {pipes.map((p) => (
+                  <PipelineRunRow key={p.number} pipe={p} hideRepo />
+                ))}
+              </ul>
+            )}
+          </section>
           <CommitDiff files={files} />
           <Pager page={list.page} hasMore={list.hasMore} onPage={list.setPage} />
         </>

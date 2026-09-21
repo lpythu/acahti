@@ -1,8 +1,6 @@
 package forgejo
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -37,16 +35,6 @@ func TestLatestStatusesNewestFirstWhenNoTime(t *testing.T) {
 	}
 }
 
-func TestLatestRoundKeepsMaxPipeline(t *testing.T) {
-	got := LatestRound([]Status{
-		{Context: "ci/woodpecker/push/ci", Status: "failure", TargetURL: "http://localhost:8000/ci/repos/acme/demo/pipeline/7"},
-		{Context: "ci/woodpecker/pr/ci", Status: "success", TargetURL: "http://localhost:8000/ci/repos/acme/demo/pipeline/12"},
-	})
-	if len(got) != 1 || got[0].Context != "ci/woodpecker/pr/ci" {
-		t.Fatalf("%+v", got)
-	}
-}
-
 func TestNormalizeRef(t *testing.T) {
 	for _, in := range []string{"dev", "heads/dev", "refs/heads/dev"} {
 		got, err := NormalizeRef(in)
@@ -60,31 +48,5 @@ func TestNormalizeRef(t *testing.T) {
 	}
 	if _, err := NormalizeRef("  "); err == nil {
 		t.Fatal("empty")
-	}
-}
-
-func TestRollupStatus(t *testing.T) {
-	if RollupStatus(nil) != "" {
-		t.Fatal("empty")
-	}
-	if got := RollupStatus([]Status{{Status: "success"}, {Status: "pending"}}); got != "running" {
-		t.Fatalf("pending=%s", got)
-	}
-	if got := RollupStatus([]Status{{Status: "success"}, {Status: "failure"}}); got != "failure" {
-		t.Fatalf("fail=%s", got)
-	}
-	if got := RollupStatus([]Status{{Status: "success"}, {Status: "success"}}); got != "success" {
-		t.Fatalf("ok=%s", got)
-	}
-}
-
-func TestChecksGreenEmptyIsGreen(t *testing.T) {
-	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`[]`))
-	}))
-	t.Cleanup(hs.Close)
-	ok, st, err := New(hs.URL, "t").ChecksGreen("acme", "demo", "abc")
-	if err != nil || !ok || len(st) != 0 {
-		t.Fatalf("ok=%v st=%+v err=%v", ok, st, err)
 	}
 }

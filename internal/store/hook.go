@@ -2,14 +2,13 @@ package store
 
 import (
 	"encoding/json"
-	"regexp"
+	"net/url"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"acahti/internal/woodpecker"
 )
-
-var pipelineNum = regexp.MustCompile(`/pipeline/(\d+)`)
 
 type hookPipe struct {
 	Repo     string
@@ -46,6 +45,62 @@ func ParseWoodpecker(raw []byte) (hookPipe, bool) {
 	return hookPipe{Repo: repo, Number: p.Number, Pipeline: p}, true
 }
 
+func ForgejoStatusURL(payload map[string]any) string {
+	if payload == nil {
+		return ""
+	}
+	if s, _ := payload["target_url"].(string); strings.TrimSpace(s) != "" {
+		return s
+	}
+	if commit, _ := payload["commit"].(map[string]any); commit != nil {
+		if s, _ := commit["target_url"].(string); strings.TrimSpace(s) != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+func pipelineNumberFromURL(raw string) int64 {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return 0
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	// /repos/{id}/{n}/pipelines/{wf}
+	if len(parts) >= 4 && parts[0] == "repos" && isDigits(parts[1]) && isDigits(parts[2]) && parts[3] == "pipelines" {
+		return parsePos(parts[2])
+	}
+	// /repos/{owner}/{name}/pipelines/{n}
+	if len(parts) >= 5 && parts[0] == "repos" && parts[3] == "pipelines" {
+		return parsePos(parts[4])
+	}
+	// /ci/repos/{owner}/{name}/pipeline/{n}
+	if len(parts) >= 6 && parts[0] == "ci" && parts[1] == "repos" && parts[4] == "pipeline" {
+		return parsePos(parts[5])
+	}
+	return 0
+}
+
+func isDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func parsePos(s string) int64 {
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
+}
+
 func ParseForgejoStatus(payload map[string]any) (repo string, number int64, ok bool) {
 	if payload == nil {
 		return "", 0, false
@@ -54,19 +109,9 @@ func ParseForgejoStatus(payload map[string]any) (repo string, number int64, ok b
 	if repo == "" {
 		return "", 0, false
 	}
-	target, _ := payload["target_url"].(string)
-	if target == "" {
-		if commit, _ := payload["commit"].(map[string]any); commit != nil {
-			target, _ = commit["target_url"].(string)
-		}
-	}
-	m := pipelineNum.FindStringSubmatch(target)
-	if len(m) < 2 {
-		return "", 0, false
-	}
-	n, err := strconv.ParseInt(m[1], 10, 64)
-	if err != nil || n <= 0 {
-		return "", 0, false
+	n := pipelineNumberFromURL(ForgejoStatusURL(payload))
+	if n <= 0 {
+		return repo, 0, false
 	}
 	return repo, n, true
 }

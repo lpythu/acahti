@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
-	"net/url"
 	"path"
 	"sort"
 	"strings"
@@ -77,9 +76,9 @@ type PackageRow struct {
 }
 
 type PRDetail struct {
-	PR     forgejo.PR       `json:"pr"`
-	Checks []forgejo.Status `json:"checks"`
-	Green  bool             `json:"green"`
+	PR        forgejo.PR            `json:"pr"`
+	Pipelines []woodpecker.Pipeline `json:"pipelines"`
+	Green     bool                  `json:"green"`
 }
 
 type PipelineDetail struct {
@@ -95,8 +94,9 @@ type NavTeam struct {
 
 type CommitDetail struct {
 	page.Result[forgejo.CommitFile]
-	Commit forgejo.Commit      `json:"commit"`
-	Stats  forgejo.CommitStats `json:"stats"`
+	Commit    forgejo.Commit        `json:"commit"`
+	Stats     forgejo.CommitStats   `json:"stats"`
+	Pipelines []woodpecker.Pipeline `json:"pipelines"`
 }
 
 func (c *Catalog) CloneHTTPS(fullName string) string {
@@ -336,7 +336,50 @@ func (c *Catalog) ListTags(user, owner, name string, q page.Query) (page.Result[
 	return page.Of(out, q, res.HasMore), nil
 }
 
-func (c *Catalog) ListCommits(user, owner, name, ref string, q page.Query) (page.Result[forgejo.Commit], error) {
+const commitSearchPages = 8
+
+func commitSHAQuery(q string) bool {
+	if n := len(q); n < 7 || n > 40 {
+		return false
+	}
+	for i := 0; i < len(q); i++ {
+		c := q[i]
+		if c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func commitMatches(c forgejo.Commit, needle string) bool {
+	if needle == "" {
+		return true
+	}
+	if strings.Contains(strings.ToLower(c.SHA), needle) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(c.Commit.Message), needle) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(c.Commit.Author.Name), needle) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(c.Commit.Author.Email), needle) {
+		return true
+	}
+	if c.Author != nil {
+		if strings.Contains(strings.ToLower(c.Author.Login), needle) {
+			return true
+		}
+		if strings.Contains(strings.ToLower(c.Author.FullName), needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Catalog) ListCommits(user, owner, name, ref, query string, q page.Query) (page.Result[forgejo.Commit], error) {
 	if ref == "" {
 		repo, err := c.fj.GetRepo(owner, name, user)
 		if err != nil {
@@ -349,7 +392,23 @@ func (c *Catalog) ListCommits(user, owner, name, ref string, q page.Query) (page
 	} else if err := c.seeOK(user, owner, name); err != nil {
 		return page.Result[forgejo.Commit]{}, err
 	}
-	res, err := c.fj.ListCommits(owner, name, ref, q)
+	query = strings.TrimSpace(query)
+	if query != "" && commitSHAQuery(query) {
+		if cm, err := c.fj.GetCommit(owner, name, query); err == nil && strings.TrimSpace(cm.SHA) != "" {
+			items := []forgejo.Commit{cm}
+			c.paintCommitChecks(owner, name, items)
+			return page.Of(items, q, false), nil
+		}
+	}
+	if query == "" {
+		res, err := c.fj.ListCommits(owner, name, ref, q)
+		if err != nil {
+			return page.Result[forgejo.Commit]{}, err
+		}
+		c.paintCommitChecks(owner, name, res.Items)
+		return res, nil
+	}
+	res, err := c.searchCommits(owner, name, ref, query, q)
 	if err != nil {
 		return page.Result[forgejo.Commit]{}, err
 	}
@@ -357,39 +416,61 @@ func (c *Catalog) ListCommits(user, owner, name, ref string, q page.Query) (page
 	return res, nil
 }
 
+func (c *Catalog) searchCommits(owner, name, ref, query string, q page.Query) (page.Result[forgejo.Commit], error) {
+	q = q.Norm()
+	needle := strings.ToLower(query)
+	need := q.Page*q.Size + 1
+	var matched []forgejo.Commit
+	walk := page.Query{Page: 1, Size: page.MaxSize}
+	for walk.Page <= commitSearchPages && len(matched) < need {
+		res, err := c.fj.ListCommits(owner, name, ref, walk)
+		if err != nil {
+			return page.Result[forgejo.Commit]{}, err
+		}
+		for _, cm := range res.Items {
+			if commitMatches(cm, needle) {
+				matched = append(matched, cm)
+			}
+		}
+		if !res.HasMore {
+			break
+		}
+		walk.Page++
+	}
+	return page.Take(matched, q), nil
+}
+
+func commitCheckURL(owner, name, sha string) string {
+	return "/repos/" + owner + "/" + name + "/commits/" + sha
+}
+
+func applyCommitCheck(owner, name, sha string, row store.CommitPipe) (status, href string) {
+	if strings.TrimSpace(row.Status) == "" {
+		return "", ""
+	}
+	return row.Status, commitCheckURL(owner, name, sha)
+}
+
 func (c *Catalog) paintCommitChecks(owner, name string, items []forgejo.Commit) {
-	if c.fj == nil || !c.fj.Ready() || len(items) == 0 {
+	if c.Idx == nil || len(items) == 0 {
 		return
 	}
-	var wg sync.WaitGroup
-	for i := range items {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			st, err := c.fj.CommitStatuses(owner, name, items[i].SHA)
-			if err != nil || len(st) == 0 {
-				return
-			}
-			st = forgejo.LatestStatuses(forgejo.LatestRound(st))
-			c.rewriteChecks(st)
-			items[i].CheckStatus = forgejo.RollupStatus(st)
-			for _, s := range st {
-				if s.TargetURL == "" {
-					continue
-				}
-				if u, err := url.Parse(s.TargetURL); err == nil && u.Path != "" {
-					items[i].CheckURL = u.Path
-					if u.RawQuery != "" {
-						items[i].CheckURL += "?" + u.RawQuery
-					}
-				} else {
-					items[i].CheckURL = s.TargetURL
-				}
-				break
-			}
-		}(i)
+	repo := owner + "/" + name
+	repos := make([]string, len(items))
+	shas := make([]string, len(items))
+	for i, cm := range items {
+		repos[i] = repo
+		shas[i] = cm.SHA
 	}
-	wg.Wait()
+	by, err := c.Idx.LatestByCommit(repos, shas)
+	if err != nil {
+		return
+	}
+	for i, cm := range items {
+		status, href := applyCommitCheck(owner, name, cm.SHA, by[commitStatusKey(repo, cm.SHA)])
+		items[i].CheckStatus = status
+		items[i].CheckURL = href
+	}
 }
 
 func (c *Catalog) ListPulls(user, owner, name, state string, q page.Query) (page.Result[forgejo.PR], error) {
@@ -472,12 +553,12 @@ func (c *Catalog) PRDetail(user, owner, name string, number int) (PRDetail, erro
 		return PRDetail{}, err
 	}
 	pr.Repo = owner + "/" + name
-	out := PRDetail{PR: pr, Checks: []forgejo.Status{}}
+	out := PRDetail{PR: pr}
 	if pr.Head.SHA != "" {
-		ok, st, err := c.CommitChecks(owner, name, pr.Head.SHA)
+		ok, pipes, err := c.CommitChecks(owner, name, pr.Head.SHA)
 		if err == nil {
 			out.Green = ok
-			out.Checks = st
+			out.Pipelines = pipes
 		}
 	}
 	return out, nil
@@ -491,7 +572,7 @@ func (c *Catalog) MergePR(user, owner, name string, number int) (map[string]any,
 	if err != nil {
 		return nil, err
 	}
-	ok, st, err := c.CommitChecks(owner, name, pr.Head.SHA)
+	ok, pipes, err := c.CommitChecks(owner, name, pr.Head.SHA)
 	if err != nil {
 		return nil, err
 	}
@@ -501,7 +582,7 @@ func (c *Catalog) MergePR(user, owner, name string, number int) (map[string]any,
 	if err := c.fj.MergePR(owner, name, number, user); err != nil {
 		return nil, err
 	}
-	return map[string]any{"merged": true, "statuses": st}, nil
+	return map[string]any{"merged": true, "pipelines": pipes}, nil
 }
 
 func (c *Catalog) ClosePR(user, owner, name string, number int) (map[string]any, error) {
@@ -514,48 +595,39 @@ func (c *Catalog) ClosePR(user, owner, name string, number int) (map[string]any,
 	return map[string]any{"ok": true, "state": "closed"}, nil
 }
 
-func (c *Catalog) CommitChecks(owner, name, sha string) (bool, []forgejo.Status, error) {
-	ok, st, err := c.fj.ChecksGreen(owner, name, sha)
+func (c *Catalog) commitPipes(repo, sha string) ([]woodpecker.Pipeline, error) {
+	if c.Idx == nil || strings.TrimSpace(sha) == "" {
+		return nil, nil
+	}
+	res, err := c.listIndexed(store.Filter{Repos: []string{repo}, SHA: sha}, page.Query{Page: 1, Size: page.MaxSize})
+	if err != nil {
+		return nil, err
+	}
+	return c.paintPipes(res.Items), nil
+}
+
+func latestPipeGreen(pipes []woodpecker.Pipeline) bool {
+	return len(pipes) > 0 && strings.EqualFold(pipes[0].Status, "success")
+}
+
+func LatestPipeDone(pipes []woodpecker.Pipeline) bool {
+	if len(pipes) == 0 {
+		return false
+	}
+	switch strings.ToLower(pipes[0].Status) {
+	case "running", "pending", "started", "created", "blocked":
+		return false
+	default:
+		return true
+	}
+}
+
+func (c *Catalog) CommitChecks(owner, name, sha string) (bool, []woodpecker.Pipeline, error) {
+	pipes, err := c.commitPipes(owner+"/"+name, sha)
 	if err != nil {
 		return false, nil, err
 	}
-	c.rewriteChecks(st)
-	return ok, st, nil
-}
-
-func (c *Catalog) rewriteChecks(st []forgejo.Status) {
-	for i := range st {
-		st[i].TargetURL = c.acahtiCheckURL(st[i].TargetURL)
-	}
-}
-
-func (c *Catalog) acahtiCheckURL(raw string) string {
-	if strings.TrimSpace(raw) == "" {
-		return raw
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		return raw
-	}
-	p := strings.TrimRight(u.Path, "/")
-	root := strings.TrimRight(c.Cfg.RootURL, "/")
-	if p == "/ci" {
-		return root + "/pipelines"
-	}
-	rest, ok := strings.CutPrefix(p, "/ci/")
-	if !ok {
-		return raw
-	}
-	rest = strings.TrimPrefix(rest, "repos/")
-	rest = strings.ReplaceAll(rest, "/pipeline/", "/")
-	parts := strings.Split(rest, "/")
-	if len(parts) >= 3 && parts[0] != "" && parts[1] != "" && parts[2] != "" {
-		return root + "/repos/" + parts[0] + "/" + parts[1] + "/pipelines/" + parts[2]
-	}
-	if len(parts) >= 2 && parts[0] != "" && parts[1] != "" {
-		return root + "/pipelines?repo=" + parts[0] + "/" + parts[1]
-	}
-	return root + "/pipelines"
+	return latestPipeGreen(pipes), pipes, nil
 }
 
 func (c *Catalog) ListRepoPipelines(user, repo, sha, branch, status string, q page.Query) (page.Result[woodpecker.Pipeline], error) {
@@ -760,7 +832,14 @@ func (c *Catalog) CommitDetail(user, owner, name, sha string, q page.Query) (Com
 	}
 	cm.Files = nil
 	cm.Stats = &stats
-	return CommitDetail{Commit: cm, Stats: stats, Result: page.Take(files, q)}, nil
+	painted := []forgejo.Commit{cm}
+	c.paintCommitChecks(owner, name, painted)
+	cm = painted[0]
+	pipes, err := c.commitPipes(owner+"/"+name, sha)
+	if err != nil {
+		return CommitDetail{}, err
+	}
+	return CommitDetail{Commit: cm, Stats: stats, Pipelines: pipes, Result: page.Take(files, q)}, nil
 }
 
 func statusAllowed(status string, want []string) bool {
@@ -1304,6 +1383,7 @@ func (c *Catalog) Refresh(repo string, number int64) (woodpecker.Pipeline, error
 func (c *Catalog) IngestWoodpecker(raw []byte) (woodpecker.Pipeline, bool) {
 	h, ok := store.ParseWoodpecker(raw)
 	if !ok {
+		log.Printf("woodpecker hook: parse failed")
 		return woodpecker.Pipeline{}, false
 	}
 	p := h.Pipeline
@@ -1324,6 +1404,9 @@ func (c *Catalog) IngestForgejo(payload map[string]any) (woodpecker.Pipeline, bo
 			return woodpecker.Pipeline{}, false
 		}
 		return p, true
+	}
+	if target := store.ForgejoStatusURL(payload); target != "" {
+		log.Printf("forgejo hook: parse failed repo=%q url=%q", repo, target)
 	}
 	if !c.ApplyForgejoCatalog(payload) {
 		c.forget()
@@ -1596,13 +1679,13 @@ func (c *Catalog) mergeReadyPRs(prs []forgejo.PR) []forgejo.PR {
 		repos = append(repos, p.Repo)
 		shas = append(shas, p.Head.SHA)
 	}
-	st, err := c.Idx.LatestStatusByCommit(repos, shas)
+	st, err := c.Idx.LatestByCommit(repos, shas)
 	if err != nil {
 		return nil
 	}
 	var out []forgejo.PR
 	for _, p := range prs {
-		if !strings.EqualFold(st[commitStatusKey(p.Repo, p.Head.SHA)], "success") {
+		if !strings.EqualFold(st[commitStatusKey(p.Repo, p.Head.SHA)].Status, "success") {
 			continue
 		}
 		out = append(out, p)

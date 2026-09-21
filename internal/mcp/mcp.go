@@ -78,7 +78,7 @@ func tools() []toolSpec {
 		{Name: "pr_comments", Description: "List pull request comments", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num, "page": num, "page_size": num}, "owner", "name", "number")},
 		{Name: "pr_merge", Description: "Merge a PR when the latest pipeline round on the head SHA is green", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
 		{Name: "pr_close", Description: "Close a pull request", InputSchema: obj(map[string]any{"owner": str, "name": str, "number": num}, "owner", "name", "number")},
-		{Name: "checks_wait", Description: "Snapshot of commit checks for the latest pipeline round. Poll this tool; it does not block", InputSchema: obj(map[string]any{"owner": str, "name": str, "sha": str}, "owner", "name", "sha")},
+		{Name: "checks_wait", Description: "Snapshot of indexed pipelines for a commit. Poll this tool; it does not block", InputSchema: obj(map[string]any{"owner": str, "name": str, "sha": str}, "owner", "name", "sha")},
 		{Name: "pipeline_list", Description: "List pipelines for a repo with wait (queue, deps, concurrency) on in-flight runs. sha is a commit prefix", InputSchema: obj(map[string]any{"repo": str, "sha": str, "branch": str, "status": str, "page": num, "page_size": num}, "repo")},
 		{Name: "pipeline_get", Description: "Get one pipeline with jobs, steps, and wait (queue, deps, concurrency)", InputSchema: obj(map[string]any{"repo": str, "number": num}, "repo", "number")},
 		{Name: "pipeline_log", Description: "Fetch pipeline logs. Omit step for failed steps only", InputSchema: obj(map[string]any{"repo": str, "number": num, "step": num, "tail_lines": num}, "repo", "number")},
@@ -426,22 +426,12 @@ func (s *Server) deleteSecret(token string, str func(string) string) (any, error
 }
 
 func (s *Server) waitChecks(owner, name, sha string) (any, error) {
-	ok, st, err := s.Cat.CommitChecks(owner, name, sha)
+	ok, pipes, err := s.Cat.CommitChecks(owner, name, sha)
 	if err != nil {
 		return nil, err
 	}
-	pending := false
-	failed := false
-	for _, x := range st {
-		switch strings.ToLower(x.Status) {
-		case "pending":
-			pending = true
-		case "failure", "error":
-			failed = true
-		}
-	}
-	done := !pending && (ok || failed)
-	return map[string]any{"ok": ok && done, "done": done, "statuses": st}, nil
+	done := catalog.LatestPipeDone(pipes)
+	return map[string]any{"ok": ok && done, "done": done, "pipelines": pipes}, nil
 }
 
 func (s *Server) listPipes(token, repo, sha, branch, status string, q page.Query) (any, error) {

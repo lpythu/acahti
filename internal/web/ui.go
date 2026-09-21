@@ -100,7 +100,7 @@ func (p *Pages) RepoCommits(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	out, err := p.Cat.ListCommits(user, r.PathValue("owner"), r.PathValue("name"), r.URL.Query().Get("ref"), page.Parse(r))
+	out, err := p.Cat.ListCommits(user, r.PathValue("owner"), r.PathValue("name"), r.URL.Query().Get("ref"), r.URL.Query().Get("q"), page.Parse(r))
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return

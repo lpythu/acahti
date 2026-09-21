@@ -1,5 +1,7 @@
 import { pageQS, type Page, type PageQuery } from "@/lib/page"
 
+export type { Page, PageQuery }
+
 export type Org = {
   name: string
   full_name: string
@@ -177,13 +179,6 @@ export type PackageRow = {
   updated_at: string
 }
 
-export type Status = {
-  status: string
-  context: string
-  description: string
-  target_url: string
-}
-
 export type Comment = {
   id: number
   body: string
@@ -267,11 +262,12 @@ export type RepoContents = Page<ContentEntry> & {
 export type CommitDetail = Page<CommitFile> & {
   commit: Commit
   stats: CommitStats
+  pipelines?: Pipeline[]
 }
 
 export type PRDetail = {
   pr: PR
-  checks: Status[]
+  pipelines?: Pipeline[]
   green: boolean
 }
 
@@ -430,8 +426,8 @@ export const api = {
     req<RepoContents>(
       `/ui/repos/${owner}/${name}/contents${pageQS(opts, { ref: opts?.ref, path: opts?.path })}`,
     ),
-  commits: (owner: string, name: string, opts?: PageQuery & { ref?: string }) =>
-    req<Page<Commit>>(`/ui/repos/${owner}/${name}/commits${pageQS(opts, { ref: opts?.ref })}`),
+  commits: (owner: string, name: string, opts?: PageQuery & { ref?: string; q?: string }) =>
+    req<Page<Commit>>(`/ui/repos/${owner}/${name}/commits${pageQS(opts, { ref: opts?.ref, q: opts?.q })}`),
   branches: (owner: string, name: string, q?: PageQuery) =>
     req<Page<BranchInfo>>(`/ui/repos/${owner}/${name}/branches${pageQS(q)}`),
   patchBranch: (owner: string, name: string, branch: string, body: { default?: boolean; protected?: boolean }) =>
@@ -453,8 +449,8 @@ export const api = {
     req<{ merged: boolean }>(`/ui/repos/${owner}/${name}/pulls/${n}/merge`, { method: "POST" }),
   pipelines: (q?: PageQuery & { repo?: string; team?: string; status?: string }) =>
     req<Page<Pipeline>>(`/ui/pipelines${pageQS(q, { repo: q?.repo, team: q?.team, status: q?.status })}`),
-  repoPipelines: (owner: string, name: string, q?: PageQuery) =>
-    req<Page<Pipeline>>(`/ui/repos/${owner}/${name}/pipelines${pageQS(q)}`),
+  repoPipelines: (owner: string, name: string, q?: PageQuery & { sha?: string }) =>
+    req<Page<Pipeline>>(`/ui/repos/${owner}/${name}/pipelines${pageQS(q, { sha: q?.sha })}`),
   pipeline: (owner: string, name: string, n: number) =>
     req<PipelineDetail>(`/ui/pipelines/${owner}/${name}/${n}`),
   pipelineLog: (owner: string, name: string, n: number, step: number) =>
