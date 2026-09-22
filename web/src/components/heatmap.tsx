@@ -46,76 +46,88 @@ export function Heatmap({
     if (shift) el.style.left = `${tip.left + shift}px`
   }, [tip])
 
+  const cols = `2rem repeat(${n}, var(--heat-cell))`
+  const tracks = {
+    ["--heat-gap" as string]: "3px",
+    ["--heat-cell" as string]: `max(10px, calc((100cqw - 2rem - ${n} * var(--heat-gap)) / ${n}))`,
+  }
+
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      <div className="flex min-w-0">
-        <div className="w-8 shrink-0" />
-        <div
-          className="text-muted-foreground mb-1 grid min-w-0 flex-1 text-[11px] leading-none"
-          style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}
-        >
-          {grid.columns.map((col) => (
-            <span key={col.key} className="overflow-hidden whitespace-nowrap">
-              {col.label}
-            </span>
-          ))}
-        </div>
-      </div>
-      <div className="flex min-w-0 items-start">
-        <div className="text-muted-foreground grid w-8 shrink-0 grid-rows-7 self-stretch pr-1 text-[11px] leading-none">
-          {grid.rows.map((row, rowIndex) => (
-            <span key={row} className="flex items-center justify-end">
-              {rowIndex === 0 || rowIndex === 2 || rowIndex === 4 ? row : ""}
-            </span>
-          ))}
-        </div>
-        <div
-          className="grid min-w-0 flex-1"
-          style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}
-        >
-          {grid.rows.flatMap((row) =>
-            grid.columns.map((col) => {
-              const key = cellKey(col.key, row)
-              const value = grid.values.get(key) ?? 0
-              const date = grid.dates.get(key) ?? ""
-              const text = date && renderTooltip ? renderTooltip({ date, value }) : ""
-              const clickable = Boolean(onDaySelect && date && date <= today)
-              const active = Boolean(date && selected === date)
-              const swatch = {
-                backgroundColor: COLORS[levelFor(value, levels)],
-                borderRadius: "min(3px, 20%)",
-              } as const
-              return (
-                <div
-                  key={key}
-                  className="aspect-square min-w-0"
-                  style={{ padding: "max(0.5px, 12.5%)" }}
-                  onPointerEnter={(e) => {
-                    if (!text) return
-                    const r = e.currentTarget.getBoundingClientRect()
-                    setTip({ text, left: r.left + r.width / 2, top: r.top })
-                  }}
-                  onPointerLeave={() => setTip(null)}
-                >
-                  {clickable ? (
-                    <button
-                      type="button"
-                      aria-label={text || date}
-                      aria-pressed={active}
-                      className={cn(
-                        "size-full cursor-pointer border-0 p-0",
-                        active && "outline outline-2 outline-offset-1 outline-foreground",
-                      )}
-                      style={swatch}
-                      onClick={() => onDaySelect?.(date)}
-                    />
-                  ) : (
-                    <div role="img" aria-label={text || undefined} className="size-full" style={swatch} />
-                  )}
-                </div>
-              )
-            }),
-          )}
+      <div
+        className="@container min-w-0 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        style={tracks}
+        dir="rtl"
+      >
+        <div className="w-max min-w-full" dir="ltr">
+          <div
+            className="text-muted-foreground mb-1 grid text-[11px] leading-none"
+            style={{ gridTemplateColumns: cols, columnGap: "var(--heat-gap)" }}
+          >
+            <span className="bg-background sticky left-0 z-10" />
+            {grid.columns.map((col) => (
+              <span key={col.key} className="overflow-hidden whitespace-nowrap">
+                {col.label}
+              </span>
+            ))}
+          </div>
+          <div
+            className="grid"
+            style={{
+              gridTemplateColumns: cols,
+              gridTemplateRows: "repeat(7, var(--heat-cell))",
+              gap: "var(--heat-gap)",
+            }}
+          >
+            {grid.rows.flatMap((row, rowIndex) => [
+              <span
+                key={`wd-${row}`}
+                className="bg-background text-muted-foreground sticky left-0 z-10 flex items-center justify-end pr-1 text-[11px] leading-none"
+              >
+                {rowIndex === 0 || rowIndex === 2 || rowIndex === 4 ? row : ""}
+              </span>,
+              ...grid.columns.map((col) => {
+                const key = cellKey(col.key, row)
+                const value = grid.values.get(key) ?? 0
+                const date = grid.dates.get(key) ?? ""
+                const text = date && renderTooltip ? renderTooltip({ date, value }) : ""
+                const clickable = Boolean(onDaySelect && date && date <= today)
+                const active = Boolean(date && selected === date)
+                const swatch = {
+                  backgroundColor: COLORS[levelFor(value, levels)],
+                  borderRadius: "min(3px, 20%)",
+                } as const
+                return (
+                  <div
+                    key={key}
+                    className="min-w-0"
+                    onPointerEnter={(e) => {
+                      if (!text) return
+                      const r = e.currentTarget.getBoundingClientRect()
+                      setTip({ text, left: r.left + r.width / 2, top: r.top })
+                    }}
+                    onPointerLeave={() => setTip(null)}
+                  >
+                    {clickable ? (
+                      <button
+                        type="button"
+                        aria-label={text || date}
+                        aria-pressed={active}
+                        className={cn(
+                          "size-full cursor-pointer border-0 p-0",
+                          active && "outline outline-2 outline-offset-1 outline-foreground",
+                        )}
+                        style={swatch}
+                        onClick={() => onDaySelect?.(date)}
+                      />
+                    ) : (
+                      <div role="img" aria-label={text || undefined} className="size-full" style={swatch} />
+                    )}
+                  </div>
+                )
+              }),
+            ])}
+          </div>
         </div>
       </div>
       <div className="text-muted-foreground flex items-center justify-end gap-1.5 text-xs">
