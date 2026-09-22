@@ -1,30 +1,142 @@
+import { ChevronDownIcon } from "lucide-react"
 import { Link } from "react-router-dom"
 
-import { StatusBadge } from "@/components/status-badge"
+import { RunStatusIcon } from "@/components/run-status-icon"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useT } from "@/i18n/i18n"
+import type { MessageKey } from "@/i18n/messages"
 import type { QueueInfo, QueueTask } from "@/lib/api"
 import { repoName } from "@/lib/api"
 import { pipelineHref } from "@/lib/nav"
+import { waitLine } from "@/lib/pipeline"
 
-function TaskLine({ task, status }: { task: QueueTask; status: "running" | "pending" }) {
-  const repo = task.repo || ""
-  const [owner, name] = repo.split("/")
-  const label = `${repoName(repo) || repo}${task.pipeline_number ? ` #${task.pipeline_number}` : ""} ${task.name}`
-  const inner = (
-    <span className="flex min-w-0 items-center gap-2 text-sm">
-      <StatusBadge status={status} />
-      <span className="truncate">{label}</span>
-      {task.agent ? <span className="shrink-0 text-muted-foreground">{task.agent}</span> : null}
-    </span>
+type QueuePipe = {
+  key: string
+  repo: string
+  number: number
+  tasks: QueueTask[]
+}
+
+function pipeKey(task: QueueTask) {
+  if (task.repo && task.pipeline_number) return `${task.repo}#${task.pipeline_number}`
+  return ""
+}
+
+function groupPipes(tasks: QueueTask[], skip: Set<string>) {
+  const out: QueuePipe[] = []
+  const by = new Map<string, QueuePipe>()
+  for (const task of tasks) {
+    const key = pipeKey(task)
+    if (!key || skip.has(key)) continue
+    let pipe = by.get(key)
+    if (!pipe) {
+      pipe = { key, repo: task.repo || "", number: task.pipeline_number || 0, tasks: [] }
+      by.set(key, pipe)
+      out.push(pipe)
+    }
+    pipe.tasks.push(task)
+  }
+  return out
+}
+
+// Same rule as the strip counts: a run with a running job and a queued job is running.
+function queuePipes(queue: QueueInfo) {
+  const running = groupPipes(queue.running || [], new Set())
+  const pending = groupPipes(queue.pending || [], new Set(running.map((pipe) => pipe.key)))
+  return { running, pending }
+}
+
+function pipeTitle(pipe: QueuePipe) {
+  const name = repoName(pipe.repo) || pipe.repo
+  return pipe.number ? `${name} #${pipe.number}` : name
+}
+
+function pipeDetail(
+  pipe: QueuePipe,
+  t: (key: MessageKey, vars?: Record<string, string | number>) => string,
+) {
+  const jobs = [...new Set(pipe.tasks.map((task) => task.name).filter(Boolean))]
+  const agents = [...new Set(pipe.tasks.map((task) => task.agent).filter((agent): agent is string => Boolean(agent)))]
+  const position = pipe.tasks.map((task) => task.queue_position || 0).find((n) => n > 0)
+  const wait = pipe.tasks.find((task) => task.wait)?.wait
+  const bits: string[] = []
+  if (jobs.length) bits.push(jobs.join(", "))
+  if (wait && wait !== "queue") {
+    const line = waitLine({ status: "pending", wait, queue_position: position })
+    if (line) bits.push(t(line.key, line.vars))
+  } else if (position) {
+    bits.push(t("waitQueuedN", { n: position }))
+  } else if (agents.length) {
+    bits.push(agents.map((agent) => t("waitAgent", { agent })).join(", "))
+  }
+  return bits.join(" · ")
+}
+
+function QueuePipeItem({ pipe, status }: { pipe: QueuePipe; status: "running" | "pending" }) {
+  const t = useT()
+  const [owner, name] = pipe.repo.split("/")
+  const title = pipeTitle(pipe)
+  const detail = pipeDetail(pipe, t)
+  const href = owner && name && pipe.number ? pipelineHref(owner, name, pipe.number) : ""
+  const body = (
+    <>
+      <RunStatusIcon status={status} className="mt-0.5" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{title}</span>
+        {detail ? <span className="block truncate text-xs text-muted-foreground">{detail}</span> : null}
+      </span>
+    </>
   )
-  if (owner && name && task.pipeline_number) {
+  if (!href) {
     return (
-      <Link className="block hover:underline" to={pipelineHref(owner, name, task.pipeline_number)}>
-        {inner}
-      </Link>
+      <DropdownMenuItem className="items-start gap-2" disabled label={title}>
+        {body}
+      </DropdownMenuItem>
     )
   }
-  return inner
+  return (
+    <DropdownMenuItem className="items-start gap-2" label={title} render={<Link to={href} />}>
+      {body}
+    </DropdownMenuItem>
+  )
+}
+
+function QueueMenu({
+  label,
+  empty,
+  pipes,
+  status,
+}: {
+  label: string
+  empty: string
+  pipes: QueuePipe[]
+  status: "running" | "pending"
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<Button type="button" variant="ghost" size="sm" className="px-1.5 font-normal text-muted-foreground" />}
+      >
+        {label}
+        <ChevronDownIcon />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-80">
+        {pipes.length ? (
+          pipes.map((pipe) => <QueuePipeItem key={pipe.key} pipe={pipe} status={status} />)
+        ) : (
+          <DropdownMenuItem disabled className="text-muted-foreground">
+            {empty}
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 export function QueuePaused({ paused }: { paused?: boolean }) {
@@ -35,49 +147,24 @@ export function QueuePaused({ paused }: { paused?: boolean }) {
 
 export function QueueStrip({ queue }: { queue: QueueInfo }) {
   const t = useT()
-  const stats = queue.stats || { running_count: 0, pending_count: 0, worker_count: 0 }
+  const { running, pending } = queuePipes(queue)
   return (
-    <p className="text-sm text-muted-foreground">
-      {t("queueCounts", {
-        running: stats.running_count,
-        pending: stats.pending_count,
-      })}
-    </p>
-  )
-}
-
-export function QueueLists({ queue }: { queue: QueueInfo }) {
-  const t = useT()
-  const running = queue.running || []
-  const pending = queue.pending || []
-  if (!running.length && !pending.length) {
-    return <p className="text-sm text-muted-foreground">{t("noQueue")}</p>
-  }
-  return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <QueueColumn title={t("statusRunning")} tasks={running} status="running" />
-      <QueueColumn title={t("statusQueued")} tasks={pending} status="pending" />
-    </div>
-  )
-}
-
-function QueueColumn({ title, tasks, status }: { title: string; tasks: QueueTask[]; status: "running" | "pending" }) {
-  return (
-    <div className="flex flex-col gap-2">
-      <h3 className="text-sm font-medium">
-        {title} ({tasks.length})
-      </h3>
-      {tasks.length ? (
-        <ul className="flex flex-col gap-1">
-          {tasks.map((task, i) => (
-            <li key={`${task.repo}-${task.pipeline_number}-${task.name}-${i}`}>
-              <TaskLine task={task} status={status} />
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-sm text-muted-foreground">—</p>
-      )}
+    <div className="flex items-center">
+      <QueueMenu
+        label={t("queueRunningN", { n: running.length })}
+        empty={t("queueEmptyRunning")}
+        pipes={running}
+        status="running"
+      />
+      <span className="text-sm text-muted-foreground" aria-hidden>
+        ·
+      </span>
+      <QueueMenu
+        label={t("queueQueuedN", { n: pending.length })}
+        empty={t("queueEmptyQueued")}
+        pipes={pending}
+        status="pending"
+      />
     </div>
   )
 }
