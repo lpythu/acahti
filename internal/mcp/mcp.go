@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -139,24 +138,6 @@ func (s *Server) newHandler() http.Handler {
 	return http.NewCrossOriginProtection().Handler(transport)
 }
 
-func rpcMethod(r *http.Request) string {
-	if r.Body == nil {
-		return ""
-	}
-	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	r.Body = io.NopCloser(bytes.NewReader(raw))
-	if err != nil {
-		return ""
-	}
-	var msg struct {
-		Method string `json:"method"`
-	}
-	if json.Unmarshal(raw, &msg) != nil {
-		return ""
-	}
-	return msg.Method
-}
-
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Link", brand.Link(s.Cfg.RootURL))
 	raw := auth.Bearer(r)
@@ -167,15 +148,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !ok {
-		// No ticket: keep HTTP 200 so Cursor does not mark the server Error.
-		// A 401 on tools/call after a public handshake is what showed
-		// "Error · Unauthorized"; Logout then only reconnected without a ticket.
-		// A bad ticket still 401s so the client can refresh.
-		if raw != "" && r.Method == http.MethodPost && rpcMethod(r) == "tools/call" {
-			oauth.Challenge(w, oauth.ResourceMetadataURL(oauth.PublicRoot(s.Cfg.RootURL, s.Cfg.Domain, r.Host)), true)
+		// GET/HEAD/DELETE stay public (Cursor opens GET /mcp for SSE; a 401
+		// there forced Authenticate). Every POST without a ticket must 401 so
+		// Cursor binds the stored OAuth token. A public initialize made it
+		// mark the server not_needs_auth and omit Authorization on tools/call.
+		if r.Method != http.MethodPost {
+			s.handler.ServeHTTP(w, r)
 			return
 		}
-		s.handler.ServeHTTP(w, r)
+		oauth.Challenge(w, oauth.ResourceMetadataURL(oauth.PublicRoot(s.Cfg.RootURL, s.Cfg.Domain, r.Host)), raw != "")
 		return
 	}
 	s.handler.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), loginKey{}, login)))

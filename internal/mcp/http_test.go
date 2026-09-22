@@ -93,17 +93,13 @@ func TestHTTPHandshake(t *testing.T) {
 
 func TestHTTPHandshakePublic(t *testing.T) {
 	hs, _ := testHTTPServer(t)
-	status, _, raw := request(t, hs.URL, "", "POST", `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`)
-	if status != 200 || !strings.Contains(string(raw), `"acahti"`) {
-		t.Fatalf("public initialize: %d %s", status, raw)
-	}
-	status, _, raw = request(t, hs.URL, "", "POST", `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
-	if status != 200 || !strings.Contains(string(raw), `"whoami"`) {
-		t.Fatalf("public tools/list: %d %s", status, raw)
-	}
 	status, headers, _ := request(t, hs.URL, "", "GET", "")
 	if status != 405 || headers.Get("WWW-Authenticate") != "" {
 		t.Fatalf("public GET: %d www-authenticate=%q", status, headers.Get("WWW-Authenticate"))
+	}
+	status, headers, _ = request(t, hs.URL, "", "POST", `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`)
+	if status != 401 || !strings.Contains(headers.Get("WWW-Authenticate"), "oauth-protected-resource") {
+		t.Fatalf("initialize unauth: %d %s", status, headers.Get("WWW-Authenticate"))
 	}
 }
 
@@ -111,14 +107,15 @@ func TestHTTPAuthentication(t *testing.T) {
 	hs, a := testHTTPServer(t)
 	a.TTL = -time.Minute
 	call := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"whoami","arguments":{}}}`
-	status, headers, raw := request(t, hs.URL, "", "POST", call)
-	if status != 200 || headers.Get("WWW-Authenticate") != "" || !strings.Contains(string(raw), "authentication required") {
-		t.Fatalf("no ticket: %d %s %s", status, headers.Get("WWW-Authenticate"), raw)
-	}
-	for _, token := range []string{"invalid", a.Issue("expired")} {
-		status, headers, _ = request(t, hs.URL, token, "POST", call)
-		if status != 401 || !strings.Contains(headers.Get("WWW-Authenticate"), "invalid_token") {
-			t.Fatalf("bad ticket: %d %v", status, headers)
+	for _, token := range []string{"", "invalid", a.Issue("expired")} {
+		status, headers, _ := request(t, hs.URL, token, "POST", call)
+		if status != 401 || !strings.Contains(headers.Get("WWW-Authenticate"), "oauth-protected-resource") {
+			t.Fatalf("auth: %d %v", status, headers)
+		}
+		wantInvalid := token != ""
+		hasInvalid := strings.Contains(headers.Get("WWW-Authenticate"), "invalid_token")
+		if hasInvalid != wantInvalid {
+			t.Fatalf("auth invalid_token=%v want %v token=%q header=%s", hasInvalid, wantInvalid, token, headers.Get("WWW-Authenticate"))
 		}
 	}
 }
