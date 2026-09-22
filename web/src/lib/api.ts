@@ -28,6 +28,7 @@ export type Activity = {
   ref_name?: string
   created?: string
   repo?: { full_name?: string; name?: string }
+  comment?: { html_url?: string; issue_url?: string; pull_request_url?: string }
 }
 
 export type PR = {
@@ -348,10 +349,10 @@ export const api = {
   boardActivities: (q?: PageQuery & { date?: string }) =>
     req<Page<Activity>>(`/ui/board/activities${pageQS(q, { date: q?.date })}`),
   users: (q?: PageQuery) => req<Page<User>>(`/ui/users${pageQS(q)}`),
-  createUser: (username: string, password: string, admin: boolean) =>
+  createUser: (username: string, admin: boolean, author?: string) =>
     req<{ user: User }>("/ui/users", {
       method: "POST",
-      body: JSON.stringify({ username, password, admin }),
+      body: JSON.stringify({ username, admin, author }),
     }),
   stack: () => req<Stack>("/ui/stack"),
   agents: (q?: PageQuery) => req<AgentsPage>(`/ui/agents${pageQS(q)}`),

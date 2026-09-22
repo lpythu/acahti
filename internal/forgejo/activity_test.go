@@ -23,14 +23,18 @@ func TestListUserActivityFeeds(t *testing.T) {
 		}
 		_ = json.NewEncoder(w).Encode([]Activity{{
 			ID:      9,
-			OpType:  "push",
-			Content: "abcdef1234567890",
+			OpType:  "commit_repo",
+			Content: `{"Commits":[{"Sha1":"abcdef1234567890abcdef1234567890abcdef12"}]}`,
 			Repo:    &Repo{FullName: "saidc/tm-web"},
+			Comment: &ActivityComment{PullRequestURL: "https://git.example/saidc/tm-web/pulls/4"},
 		}})
 	}))
 	t.Cleanup(srv.Close)
 	got, err := New(srv.URL, "admin").ListUserActivityFeeds("lipeiyang", "2026-09-21", page.FromInts(1, 20))
-	if err != nil || len(got.Items) != 1 || got.Items[0].OpType != "push" {
+	if err != nil || len(got.Items) != 1 || got.Items[0].OpType != "commit_repo" {
 		t.Fatalf("%+v %v", got, err)
+	}
+	if got.Items[0].Comment == nil || got.Items[0].Comment.PullRequestURL == "" {
+		t.Fatalf("comment %+v", got.Items[0].Comment)
 	}
 }

@@ -6,13 +6,20 @@ import (
 	"acahti/internal/page"
 )
 
+type ActivityComment struct {
+	HTMLURL        string `json:"html_url"`
+	IssueURL       string `json:"issue_url"`
+	PullRequestURL string `json:"pull_request_url"`
+}
+
 type Activity struct {
-	ID      int64  `json:"id"`
-	OpType  string `json:"op_type"`
-	Content string `json:"content"`
-	RefName string `json:"ref_name"`
-	Created string `json:"created"`
-	Repo    *Repo  `json:"repo"`
+	ID      int64            `json:"id"`
+	OpType  string           `json:"op_type"`
+	Content string           `json:"content"`
+	RefName string           `json:"ref_name"`
+	Created string           `json:"created"`
+	Repo    *Repo            `json:"repo"`
+	Comment *ActivityComment `json:"comment,omitempty"`
 }
 
 func (c *Client) ListUserActivityFeeds(login, date string, q page.Query) (page.Result[Activity], error) {

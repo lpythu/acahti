@@ -665,7 +665,7 @@ func (s *Store) NavTree(login string, admin bool) ([]NavTeam, error) {
 	)
 	if admin {
 		q = `
-SELECT t.name, r.full_name, COALESCE(r.default_branch, ''), COALESCE(r.description, ''), COALESCE(r.updated, 0)
+SELECT t.name, COALESCE(r.full_name, ''), COALESCE(r.default_branch, ''), COALESCE(r.description, ''), COALESCE(r.updated, 0)
 FROM teams t
 LEFT JOIN team_repos tr ON tr.team = t.name
 LEFT JOIN repos r ON r.full_name = tr.repo AND NOT r.archived
@@ -674,7 +674,7 @@ ORDER BY t.name, r.full_name`
 		return nil, nil
 	} else {
 		q = `
-SELECT t.name, r.full_name, COALESCE(r.default_branch, ''), COALESCE(r.description, ''), COALESCE(r.updated, 0)
+SELECT t.name, COALESCE(r.full_name, ''), COALESCE(r.default_branch, ''), COALESCE(r.description, ''), COALESCE(r.updated, 0)
 FROM teams t
 JOIN team_members m ON m.team = t.name AND m.login = $1
 LEFT JOIN team_repos tr ON tr.team = t.name

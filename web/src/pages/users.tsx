@@ -233,15 +233,21 @@ function CreateUserMenu({
   admin: boolean
   setAdmin: (v: boolean) => void
   root: string
-  onCreate: (login: string, password: string, admin: boolean) => Promise<string>
+  onCreate: (login: string, author: string, admin: boolean) => Promise<{ login: string; password: string }>
 }) {
   const t = useT()
+  const [login, setLogin] = useState("")
+  const [author, setAuthor] = useState("")
   const [created, setCreated] = useState<{ login: string; password: string } | null>(null)
 
   return (
     <Popover
       onOpenChange={(open) => {
-        if (!open) setCreated(null)
+        if (!open) {
+          setCreated(null)
+          setLogin("")
+          setAuthor("")
+        }
       }}
     >
       <PopoverTrigger render={<Button type="button" size="sm" />}>{t("createUser")}</PopoverTrigger>
@@ -249,15 +255,14 @@ function CreateUserMenu({
         <form
           onSubmit={(e: FormEvent<HTMLFormElement>) => {
             e.preventDefault()
-            const fd = new FormData(e.currentTarget)
-            const login = String(fd.get("username") || "").trim()
-            const password = String(fd.get("password") || "")
-            const form = e.currentTarget
-            void onCreate(login, password, admin)
-              .then((name) => {
+            const name = login.trim()
+            if (!name) return
+            void onCreate(name, author.trim(), admin)
+              .then((user) => {
                 toast.success(t("userCreated"))
-                setCreated({ login: name, password })
-                form.reset()
+                setCreated(user)
+                setLogin("")
+                setAuthor("")
                 setAdmin(false)
               })
               .catch((e: unknown) => {
@@ -268,11 +273,25 @@ function CreateUserMenu({
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="username">{t("username")}</FieldLabel>
-              <Input id="username" name="username" required autoComplete="off" />
+              <Input
+                id="username"
+                name="username"
+                required
+                autoComplete="off"
+                value={login}
+                onChange={(e) => setLogin(e.target.value)}
+              />
             </Field>
             <Field>
-              <FieldLabel htmlFor="password">{t("password")}</FieldLabel>
-              <Input id="password" name="password" type="password" required autoComplete="new-password" />
+              <FieldLabel htmlFor="author">{t("gitName")}</FieldLabel>
+              <Input
+                id="author"
+                name="author"
+                autoComplete="off"
+                placeholder={login.trim() || t("username")}
+                value={author}
+                onChange={(e) => setAuthor(e.target.value)}
+              />
             </Field>
             <div className="flex w-fit items-center gap-2">
               <Switch id="admin" checked={admin} onCheckedChange={(v) => setAdmin(v === true)} />
@@ -487,11 +506,12 @@ export function UsersPage() {
   const invites = invitesLoad.data?.invites || []
   const joinBase = invitesLoad.data?.join || "/join"
 
-  async function onCreate(login: string, password: string, isAdmin: boolean) {
-    const r = await api.createUser(login, password, isAdmin)
+  async function onCreate(login: string, author: string, isAdmin: boolean) {
+    const r = await api.createUser(login, isAdmin, author)
+    const password = r.user.password || ""
     setResets((m) => ({ ...m, [r.user.login]: password }))
     await usersLoad.reload()
-    return r.user.login
+    return { login: r.user.login, password }
   }
 
   async function resetRow(login: string, current: string) {

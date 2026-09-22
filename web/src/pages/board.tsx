@@ -5,12 +5,13 @@ import { toast } from "sonner"
 import { BoardHeatmap } from "@/components/board-heatmap"
 import { PagedList } from "@/components/paged-list"
 import { StatusBadge } from "@/components/status-badge"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useEvents } from "@/hooks/use-events"
 import { usePage } from "@/hooks/use-page"
 import { useLocale, useT } from "@/i18n/i18n"
 import type { MessageKey } from "@/i18n/messages"
-import { activityHref, activityKind } from "@/lib/activity"
+import { activityDetail, activityHref, activityKind, type ActivityKind } from "@/lib/activity"
 import { api, repoName, splitRepo, type Activity, type PR } from "@/lib/api"
 import { displayName } from "@/lib/user"
 
@@ -21,15 +22,35 @@ function heatDateLabel(date: string, locale: string) {
   }).format(new Date(`${date}T00:00:00+08:00`))
 }
 
+const KIND_LABEL: Record<ActivityKind, MessageKey> = {
+  commit: "kindCommit",
+  pr: "kindPR",
+  issue: "kindIssue",
+  release: "kindRelease",
+  repo: "kindRepo",
+  other: "kindOther",
+}
+
+const KIND_CLASS: Record<ActivityKind, string> = {
+  commit: "border-transparent bg-sky-500/10 text-sky-700 dark:text-sky-400",
+  pr: "border-transparent bg-violet-500/10 text-violet-700 dark:text-violet-400",
+  issue: "border-transparent bg-amber-500/10 text-amber-800 dark:text-amber-400",
+  release: "border-transparent bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+  repo: "border-transparent bg-slate-500/10 text-slate-700 dark:text-slate-300",
+  other: "border-transparent bg-slate-500/10 text-slate-700 dark:text-slate-300",
+}
+
 function activityLabel(a: Activity, t: (key: MessageKey, vars?: Record<string, string | number>) => string) {
   const repo = repoName(a.repo?.full_name || a.repo?.name || "")
-  switch (activityKind(a.op_type)) {
-    case "push":
+  switch (activityKind(a)) {
+    case "commit":
       return t("activityPush", { repo })
     case "pr":
       return t("activityPR", { repo })
     case "issue":
       return t("activityIssue", { repo })
+    case "release":
+      return t("activityRelease", { repo })
     case "repo":
       return t("activityRepo", { repo })
     default:
@@ -41,14 +62,23 @@ function ActivityRows({ items }: { items: Activity[] }) {
   const t = useT()
   return (
     <ul className="divide-y rounded-md border">
-      {items.map((a) => (
-        <li key={a.id}>
-          <Link className="block px-3 py-3 text-sm hover:bg-muted/50" to={activityHref(a)}>
-            <span className="font-medium">{activityLabel(a, t)}</span>
-            {a.ref_name ? <span className="mt-0.5 block truncate text-xs text-muted-foreground">{a.ref_name}</span> : null}
-          </Link>
-        </li>
-      ))}
+      {items.map((a) => {
+        const kind = activityKind(a)
+        const detail = activityDetail(a)
+        return (
+          <li key={a.id}>
+            <Link className="flex items-start gap-3 px-3 py-3 text-sm hover:bg-muted/50" to={activityHref(a)}>
+              <Badge variant="outline" className={KIND_CLASS[kind]}>
+                {t(KIND_LABEL[kind])}
+              </Badge>
+              <div className="min-w-0 flex-1">
+                <span className="font-medium">{activityLabel(a, t)}</span>
+                {detail ? <span className="mt-0.5 block truncate text-xs text-muted-foreground">{detail}</span> : null}
+              </div>
+            </Link>
+          </li>
+        )
+      })}
     </ul>
   )
 }

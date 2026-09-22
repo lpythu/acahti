@@ -179,7 +179,7 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		var body struct {
 			Username string `json:"username"`
-			Password string `json:"password"`
+			Author   string `json:"author"`
 			Admin    bool   `json:"admin"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -187,9 +187,8 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		login := strings.TrimSpace(body.Username)
-		pw := body.Password
-		if login == "" || pw == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username and password required"})
+		if login == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username required"})
 			return
 		}
 		email := identity.Email(login, identity.Domain(p.Cfg.RootURL, p.Cfg.Domain))
@@ -197,12 +196,18 @@ func (p *Pages) Users(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "DOMAIN or ROOT_URL required"})
 			return
 		}
-		u, err := p.Cat.CreateUser(login, email, pw, body.Admin)
+		pw, err := passwd.Random()
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		name := identity.Name(login, body.Author)
+		u, err := p.Cat.CreateUser(login, email, pw, name, body.Admin)
 		if err != nil {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 			return
 		}
-		u.FullName = identity.Name(u.Login, u.FullName)
+		u.FullName = name
 		_ = p.rememberPassword(u.Login, pw)
 		u.Password = pw
 		u.HasPassword = true
@@ -354,7 +359,7 @@ func (p *Pages) Join(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	email := identity.Email(login, identity.Domain(p.Cfg.RootURL, p.Cfg.Domain))
-	u, err := p.Cat.CreateUser(login, email, body.Password, false)
+	u, err := p.Cat.CreateUser(login, email, body.Password, identity.Name(login, ""), false)
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return

@@ -33,11 +33,11 @@ func (c *Catalog) ListUsers(q page.Query) (page.Result[forgejo.User], error) {
 	return c.fj.ListUsers(q)
 }
 
-func (c *Catalog) CreateUser(login, email, password string, admin bool) (forgejo.User, error) {
+func (c *Catalog) CreateUser(login, email, password, fullName string, admin bool) (forgejo.User, error) {
 	if c == nil || c.fj == nil || !c.fj.Ready() {
 		return forgejo.User{}, fmt.Errorf("git unavailable")
 	}
-	u, err := c.fj.CreateUser(login, email, password, admin)
+	u, err := c.fj.CreateUser(login, email, password, fullName, admin)
 	if err != nil {
 		return forgejo.User{}, err
 	}

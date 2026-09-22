@@ -367,12 +367,15 @@ func (c *Client) EnsureNoreply(rootURL, domain string) error {
 	return nil
 }
 
-func (c *Client) CreateUser(login, email, password string, admin bool) (User, error) {
+func (c *Client) CreateUser(login, email, password, fullName string, admin bool) (User, error) {
+	if strings.TrimSpace(fullName) == "" {
+		fullName = login
+	}
 	b, _, err := c.do(http.MethodPost, "/api/v1/admin/users", "", "", map[string]any{
 		"source_id":                 0,
 		"login_name":                login,
 		"username":                  login,
-		"full_name":                 login,
+		"full_name":                 fullName,
 		"email":                     email,
 		"password":                  password,
 		"must_change_password":      false,

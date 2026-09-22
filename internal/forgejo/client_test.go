@@ -124,3 +124,24 @@ func TestDecodeCommitKeepsNestedAuthor(t *testing.T) {
 		t.Fatalf("%+v", cm)
 	}
 }
+
+func TestCreateUserSendsAuthorAndPassword(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/admin/users" {
+			t.Fatalf("%s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		_ = json.NewEncoder(w).Encode(User{Login: "linshiyuee", FullName: "林诗月"})
+	}))
+	t.Cleanup(srv.Close)
+	u, err := New(srv.URL, "admin").CreateUser("linshiyuee", "linshiyuee@noreply.example", "initpw", "林诗月", false)
+	if err != nil || u.Login != "linshiyuee" {
+		t.Fatalf("%+v %v", u, err)
+	}
+	if body["username"] != "linshiyuee" || body["full_name"] != "林诗月" || body["password"] != "initpw" {
+		t.Fatalf("%v", body)
+	}
+}
