@@ -1,92 +1,95 @@
 # Acahti
 
-Self-hosted control plane for coding agents. One install: git, required-green checks, language packages, **one MCP**. People sign in with a password; agents use OAuth.
+**One connection from code to checked delivery.**
 
-Pinned versions live in [versions.env](versions.env) (`ACAHTI_VERSION` is this repo). Source of truth: **GitHub `lpythu/acahti`**, branch **`main` only**. A tag `vX.Y.Z` (must match `ACAHTI_VERSION`) is what deploys the acahti host. Never `compose down -v`.
+[![CI](https://github.com/lpythu/acahti/actions/workflows/ci.yml/badge.svg)](https://github.com/lpythu/acahti/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-## Architecture
+[Install](docs/installation.md) · [Architecture](architecture.md) · [Pipeline pipes](pipes.md) · [Agent plugins](https://github.com/lpythu/acahti-plugin) · [Stack guide](https://github.com/benchyard/stack)
 
-See [architecture.md](architecture.md) for the current stack, **identity vs pipeline secrets**, org and pipeline read models, and page contracts. See [pipes.md](pipes.md) for official pipeline pipes (`pipe: helm@v1`). Git, npm, and pypi use one Acahti login. Pipeline secrets are island-external only.
+Acahti is a self-hosted delivery control plane for people and coding agents. It
+combines Git repositories, pull requests, commit checks, CI logs and language
+packages behind one identity and one MCP endpoint. Bring your coding agent;
+Acahti does not host a model or require a particular editor.
 
-```mermaid
-flowchart LR
-  people[people]
-  agents[coding_agents]
-  yourEdge[your_proxy_or_tunnel]
-  acahti[Acahti]
-  runner[Runner]
+![Acahti delivery workflow](docs/assets/delivery.svg)
 
-  people --> yourEdge
-  agents --> yourEdge
-  yourEdge --> acahti
-  acahti --> runner
-  agents -->|"git HTTPS"| acahti
-```
+## Why Acahti
 
-Gateway is the only HTTP app this repo starts. Bind is `GATEWAY_BIND` (default `127.0.0.1:8080`; with `ACAHTI_BUILD`, loopback is rewritten to `0.0.0.0:8080` so the Runner can PUT packages on LAN). TLS and the public hostname are **out of tree**: point your reverse proxy or tunnel at that bind and set `ROOT_URL` / `DOMAIN` to the public URL. Public identity is **Acahti**: SPA, MCP, `/acahti/v1`, git HTTPS, `/api/packages`, pipelines, Runner.
+Writing code is only one step. An agent also needs to identify the right repository,
+read failed checks, repair a change, and hand over an artifact someone can trust.
+Acahti provides a consistent workflow for those operations:
 
-## Host roles
+- **One identity:** Git, npm and PyPI share the member's Acahti identity. Agents use
+  OAuth; external cloud credentials remain separately managed pipeline secrets.
+- **Structured feedback:** query the commit's checks, fetch failed-step logs, rerun
+  a pipeline and inspect its queue state through MCP.
+- **Checked handoff:** the PR merge operation requires a successful latest pipeline
+  on the PR head. Branch protection and repository access remain explicit policy.
+- **An actionable inbox:** find failed or blocked runs and PRs ready for review.
+- **Your infrastructure:** a Go gateway fronts Forgejo and Woodpecker. Mature Git
+  and CI engines do the storage/execution work; Acahti owns the shared workflow.
 
-| Role | Runs |
-|---|---|
-| **Acahti** | control plane (git, pipelines, UI, MCP, packages) |
-| **Runner** | executes `.acahti/pipelines/` (`ACAHTI_BUILD` SSH spec). Official pipes (`acahti-pipe`) plus host tools and credentials |
+GitHub's official MCP already supports repository and CI operations. Acahti's focus
+is a cohesive, self-hosted installation with integrated package identity and a
+small delivery workflow—not exclusive access to agents or universal GitHub API parity.
 
-Repos declare pipelines in `.acahti/pipelines/`. Steps call official **pipes** (`pipe: helm@v1`) or raw `commands:`. Acahti expands `pipe:` before the Runner executes. Catalog: [pipes.md](pipes.md).
+## Connect an agent
 
-**This repo** (acahti itself): `main` only. Release: bump `ACAHTI_VERSION`, `git push origin main`, `bash scripts/tag-release.sh` → tag `v$ACAHTI_VERSION` → GitHub Actions on the **acahti** machine → `scripts/up.sh` (compose + configure + refresh Runner pipes on `ACAHTI_BUILD`).
-
-## Install contract (for an agent)
-
-Chicken and egg: the laptop agent SSHs to an empty host and follows this list. Do not ask a human to click through UIs. Scripts are non-interactive.
-
-1. Probe with `bash scripts/detect.sh`. Stop if no sudo or memory &lt; 2G.
-2. Set `DOMAIN` and `ROOT_URL`. Optional: `ACAHTI_ORG`, `ACAHTI_BUILD` (SSH spec for the Runner, `ROLE=both`). Laptop or no proxy: `GATEWAY_BIND=0.0.0.0:8080`. A remote Runner needs the gateway on LAN (`ACAHTI_BUILD` rewrites loopback to `0.0.0.0:8080`).
-3. Put your reverse proxy or tunnel in front of `GATEWAY_BIND` (default `127.0.0.1:8080`). This repo does not ship Caddy or cloudflared.
-4. On the acahti host, as a sudoer: `bash scripts/install.sh`.
-   - `bootstrap.sh` — Docker, `/var/lib/acahti/{forgejo,woodpecker,postgres,gateway}`
-   - `up.sh` — `compose up` (never `down -v`), then `configure.sh`
-   - `configure.sh` — admin, org, compose-net OAuth, gateway tokens
-   - if `ACAHTI_BUILD` is set, SSH-install one Runner (`ROLE=both`) on that host
-5. Print the Use contract (same two lines as `/`, `/skill.md`, and README Usage). On failure stop and return logs; do not leave a half install.
-
-gRPC is published as `WOODPECKER_GRPC_PUBLISH` (default `127.0.0.1:9000`). With `ACAHTI_BUILD`, install binds the LAN IP. Do not publish it to the internet (`lan` or `ssh-reverse`).
-
-Skills: [skills/acahti-install/SKILL.md](skills/acahti-install/SKILL.md) (stand up acahti) and the live `GET /skill.md` (use after it is up).
-
-## Web preview
-
-Do not tag to look at UI. Local Vite HMR proxies `/ui` to the host `:8080`. Confirm there, then bump `ACAHTI_VERSION` and `bash scripts/tag-release.sh`.
-
-## Usage
+Install Acahti on a host using the [installation guide](docs/installation.md), then
+use the URL served by **your** instance:
 
 ```text
 Install https://acahti.example.com/skill.md
-Join    https://acahti.example.com/join     (invite from an admin)
 ```
 
-Give the first line to any coding agent. It GET `$ROOT_URL/skill.md` this turn, connects `$ROOT_URL/mcp`, and completes OAuth. If the browser has no account, open the second line with an admin invite and pick a username and password; existing accounts use `/login`. Then `whoami` and set `--local` git identity when any remote host is acahti.
+For editor integration, use [acahti-plugin](https://github.com/lpythu/acahti-plugin).
+Connect the instance's `/mcp` endpoint and complete individual OAuth. Verify with
+`whoami`; the result contains the instance URL, Git identity and current skill URL.
+Do not paste tokens into chats or change your global Git identity.
 
-Plugins: [lpythu/acahti-plugin](https://github.com/lpythu/acahti-plugin) (`cursor/` for Cursor, `codex/` for Codex). Do not put `acahti` in `~/.cursor/mcp.json`.
+A typical agent workflow, within the user's authorized scope:
 
-- Git: `https://acahti.example.com/acme/<repo>.git` — username is the Acahti login; password is the account password (same as `/login`) or the OAuth `access_token` the MCP client already holds
-- Packages: same credentials as git — `https://acahti.example.com/api/packages/acme/pypi/simple/` and `…/npm/`. CI uses the triggering user's identity (`docker-build` / publish inject it). Do not add an npm or publish token.
-- REST: `/acahti/v1/…` same verbs as MCP
-- Not public: `/ci` and git-kernel HTML (`/login/oauth`, `/user/login`, `/api/v1`)
-- Acahti upgrade: tag `vX.Y.Z` on `lpythu/acahti` (not a push to `main`)
+```text
+repo_get → branch_list → edit and push
+                           ↓
+                     checks_wait
+                      ↙       ↘
+           failed-step logs    green checks
+                ↓                   ↓
+            fix / rerun       review → pr_merge
+```
 
-Examples use `https://acahti.example.com`. Do not hard-code a live acahti hostname.
+The agent decides and performs repairs. Acahti supplies authenticated operations
+and results; it does not autonomously fix pipelines by itself. A green pipeline
+means its configured checks passed, not that the software has no defects.
 
-## Data
+## Choose what you need
 
-Bind-mount `${ACAHTI_DATA:-/var/lib/acahti}` only. After data exists, never `compose down -v` and never prune named volumes on that host.
+| Need | Component |
+|---|---|
+| Git, CI, packages and MCP identity | **Acahti** |
+| Cursor / Codex installation guidance | [Acahti Plugin](https://github.com/lpythu/acahti-plugin) |
+| Shared tasks and execution UI | [Benchyard Console](https://github.com/benchyard/benchyard-console) |
+| Persistent dev environment and preview | [Skheri](https://github.com/benchyard/skheri) |
+| Once / soak checks and evidence | [Argos](https://github.com/lpythu/argos) |
 
-## Versions
+These are separate products. Acahti can be used without Benchyard or Skheri.
+Acahti is a Git host; adding it as another remote does not automatically migrate
+GitHub issues, integrations or CI settings. See the [stack guide](https://github.com/benchyard/stack)
+for a staged adoption path.
 
-See [versions.env](versions.env). Tag acahti as `v$ACAHTI_VERSION`. The control plane and every Runner must share the same train. Gateway is a Go static binary, memory cap 256M.
+## Development and contribution
 
-### MCP transport
+```bash
+(cd web && npm ci && npm run build:embed)
+GOWORK=off go test ./...
+GOWORK=off go test -race ./internal/mcp ./internal/oauth
+```
 
-The gateway uses the official Go MCP SDK with stateless Streamable HTTP and JSON responses at `/mcp`. Each request authenticates independently using the member's OAuth bearer token. GET streaming and transport sessions are not enabled. Cross-origin browser requests are rejected; native MCP clients do not need an Origin header.
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Third-party components](THIRD_PARTY_NOTICES.md)
 
-Before release, run `GOWORK=off go test ./...` and `GOWORK=off go test -race ./internal/mcp ./internal/oauth`. Acceptance requires a real client to complete initialization, list tools, and call `whoami` with the expected individual identity; a completed OAuth redirect alone is not a connection check.
+Acahti gateway and integration code: [Apache-2.0](LICENSE). Forgejo, Woodpecker and
+other third-party components retain their own licenses. Current tokens represent
+member authority; per-task agent delegation and automatic GitHub migration are
+not features of this release.

@@ -61,9 +61,12 @@ func TestView(t *testing.T) {
 
 func TestInstructions(t *testing.T) {
 	s := Instructions("https://acahti.saidc.ai", "acahti.saidc.ai")
-	for _, need := range []string{"whoami", "git_name", "apply_when_remote_host", "acahti.saidc.ai", "--local", "--global", "directory or repo name", "/skill.md", "ANY remote"} {
+	for _, need := range []string{"whoami", "git_name", "apply_when_remote_host", "acahti.saidc.ai", "--local", "--global", "directory or repo name", "/skill.md", "actual intended push destination", "Preserve original authorship", "Leave non-Acahti destinations unchanged"} {
 		if !strings.Contains(s, need) {
 			t.Fatalf("missing %q in %s", need, s)
 		}
+	}
+	if strings.Contains(s, "ANY remote") {
+		t.Fatal("an unrelated Acahti remote must not change another destination's identity")
 	}
 }

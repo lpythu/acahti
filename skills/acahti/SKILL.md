@@ -1,6 +1,6 @@
 ---
 name: acahti
-description: Use Acahti git, PRs, pipelines, and commit checks. Use when committing or pushing to an acahti remote, opening or merging a PR, reading pipelines, or when the user mentions acahti.saidc.ai, whoami, or island CI. Install from $ROOT_URL/skill.md. Connect MCP at $ROOT_URL/mcp (OAuth).
+description: Use Acahti git, PRs, pipelines, and commit checks. Use when committing or pushing to an acahti remote, opening or merging a PR, reading pipelines, or when the user requests Acahti identity or CI. Install from $ROOT_URL/skill.md. Connect MCP at $ROOT_URL/mcp (OAuth).
 ---
 
 # Use Acahti
@@ -28,15 +28,17 @@ Clone is always `$ACAHTI_ORG/<repo>`. A team (Platform, ModelCamp, …) is acces
 
 If Codeup (or another host) is `origin`, keep it. Fetch and push the island on remote `acahti`. Do not `git fetch --all` to sync the island.
 
-Before any `git commit` in the current repo:
+Apply this policy only to commits intended for Acahti and pushes to Acahti. A repository merely having an Acahti remote does not make its other remotes subject to this policy.
 
-1. `git remote -v`
-2. Call MCP `whoami`
-3. Gate **only** on remote URL host — never on directory or repo name
-4. If **any** remote URL host is in `apply_when_remote_host`, run `setup_local` (`git config --local` only)
-5. If **no** remote host matches, do **not** change `user.name` / `user.email`. If local author was wrongly set to `*@noreply.$DOMAIN`, `git config --local --unset user.name` and `user.email` so the laptop identity applies
+1. Resolve the actual repository and intended push destination from the user's request, explicit push remote/URL, or Git's configured push destination (including push URLs). `git commit` itself has no remote; if multiple destinations are plausible, clarify the intended destination before changing identity. Do not infer it from the directory name, remote name, or whichever remote appears first.
+2. For an Acahti destination, obtain a fresh result from the matching MCP `whoami` before each commit-producing operation and compare the destination HTTPS host with `apply_when_remote_host`. Use `git_name` for Author and `git_email` for email directly; `login` identifies the account and is not a replacement for `git_name`. Do not invent or remap names.
+3. Before creating a commit for that destination, run `setup_local` in the actual repository using local Git config only. If MCP identity cannot be verified, stop before creating the commit and diagnose the connection. Then verify `git var GIT_AUTHOR_IDENT` and `git var GIT_COMMITTER_IDENT`. This includes merge/pull operations that create merge commits, amend, rebase, cherry-pick, revert and their continuation commands. Account for `git -c`, `--author` and `GIT_AUTHOR_*` / `GIT_COMMITTER_*` overrides.
+4. After creating commits, inspect their actual author and committer. For new original commits (including merge commits and reverts), both must match the verified identity. For amend/rebase/cherry-pick, preserve the expected original author and verify the new committer instead. Before pushing to Acahti, inspect the outgoing commits and verify the author and committer of commits created in this task. A push does not change existing commit metadata. If verified identity is unavailable or a newly created commit has an unexpected identity, stop and resolve it before pushing. Do not relabel imported commits as the current user.
+5. Preserve existing authorship when amending, rebasing or cherry-picking another contributor's commit; use the current verified identity for the new committer. Reset an existing author only when the user intends that correction. Never rewrite published history automatically.
 
-Use `whoami.git_name` / `whoami.git_email` as the git author. Do not ask the user for a name or email.
+For GitHub, Codeup or any other non-Acahti target, do not require Acahti OAuth, change identity, block commits, or run island CI. When temporarily applying `setup_local` in a mixed-remote workflow, save and restore the exact prior local identity entries after the Acahti operation so a later non-Acahti commit does not inherit them. Never change global config or delete unrelated identity settings.
+
+Use `whoami.git_name` and `whoami.git_email` from the verified identity.
 
 Protection is per repository, not a global train. Before push: `repo_get` `{owner, name}` and `branch_list` `{owner, name}`. Direct-push branches with `protected: false`. For `protected: true`, open a PR (`pr_create`; `base` defaults to `repo_get.default_branch`). Do not assume `dev` / `test` / `main` / `release`. If the remote declines a push, open a PR to the default branch. Operators set default / protection on the repo **Branches** page in the web UI.
 

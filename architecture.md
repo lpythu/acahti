@@ -210,19 +210,19 @@ Harbor (office) and ACR (hk) are a pair of **user** registries. YAML names the h
 | `codeup_netrc` | still cloning Codeup | name it |
 | `npm_token` / `acahti_publish_token` | none | delete |
 
-Laptop / agent installs use the same identity as git. Repo files only name the registry. Credentials stay in `~/.npmrc` / `~/.netrc` or env, not in git. Harbor and ACR library/base images are named only in pipeline YAML (`BASE_IMAGE=harbor.saidc/base/…`).
+Laptop / agent installs use the same identity as git. Repo files only name the registry. Credentials stay in `~/.npmrc` / `~/.netrc` or env, not in git. Harbor and ACR library/base images are named only in pipeline YAML (`BASE_IMAGE=registry.example.com/base/…`).
 
 **npm** (committed `.npmrc` is registry-only):
 
 ```
-@saidc:registry=https://acahti.saidc.ai/api/packages/saidc/npm/
+@saidc:registry=https://acahti.example.com/api/packages/saidc/npm/
 ```
 
 Local `~/.npmrc` (not committed): username = Acahti login; `_password` = **base64** of the login password or MCP `access_token`; `always-auth=true`.
 
 ```
-//acahti.saidc.ai/api/packages/saidc/npm/:username=YOUR_LOGIN
-//acahti.saidc.ai/api/packages/saidc/npm/:_password=BASE64_PASSWORD
+//acahti.example.com/api/packages/saidc/npm/:username=YOUR_LOGIN
+//acahti.example.com/api/packages/saidc/npm/:_password=BASE64_PASSWORD
 always-auth=true
 ```
 
@@ -233,14 +233,14 @@ CI: YAML does not name npm tokens. Expand injects `ACAHTI_USER` / `ACAHTI_TOKEN`
 ```toml
 [[tool.uv.index]]
 name = "saidc"
-url = "https://acahti.saidc.ai/api/packages/saidc/pypi/simple/"
+url = "https://acahti.example.com/api/packages/saidc/pypi/simple/"
 authenticate = "always"
 ```
 
 Local env: `UV_INDEX_SAIDC_USERNAME` / `UV_INDEX_SAIDC_PASSWORD` (raw password, not base64), or `~/.netrc`:
 
 ```
-machine acahti.saidc.ai
+machine acahti.example.com
 login YOUR_LOGIN
 password YOUR_PASSWORD_OR_MCP_TOKEN
 ```
