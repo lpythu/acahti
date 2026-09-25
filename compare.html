@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Compare — Acahti</title>
+    <meta name="description" content="Acahti vs GitHub, GitLab, Gitea, and Forgejo: agent delivery control plane, not another human forge." />
+    <link rel="icon" href="./assets/acahti.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-page="compare">
+    <div class="glow" aria-hidden="true"></div>
+    <header class="nav" id="site-header"></header>
+    <main>
+      <section class="hero narrow">
+        <p class="eyebrow">Compare</p>
+        <h1>Not another Git host</h1>
+        <p class="lede">Acahti competes as agent-native delivery — not as “lighter GitHub”.</p>
+      </section>
+      <section class="section">
+        <div class="table-wrap">
+          <table class="compare-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>GitHub / GitLab</th>
+                <th>Gitea / Forgejo</th>
+                <th>Acahti</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Primary user</th>
+                <td>Human in UI</td>
+                <td>Human in UI</td>
+                <td><strong>Agent via MCP</strong>; human watches Board</td>
+              </tr>
+              <tr>
+                <th scope="row">Product center</th>
+                <td>Forge + social + market</td>
+                <td>Lightweight forge</td>
+                <td><strong>Git + CI + packages + one identity + green merge</strong></td>
+              </tr>
+              <tr>
+                <th scope="row">Agent access</th>
+                <td>APIs / MCP bolted on</td>
+                <td>Minimal</td>
+                <td><strong>skill.md, OAuth MCP, checks_wait, inbox</strong></td>
+              </tr>
+              <tr>
+                <th scope="row">Identity</th>
+                <td>Separate tokens per surface</td>
+                <td>Git-focused</td>
+                <td><strong>Same identity for Git, npm, PyPI</strong></td>
+              </tr>
+              <tr>
+                <th scope="row">Merge policy</th>
+                <td>Configurable checks</td>
+                <td>Configurable</td>
+                <td><strong>pr_merge requires green latest pipeline</strong></td>
+              </tr>
+              <tr>
+                <th scope="row">Deploy</th>
+                <td>Cloud default / heavy self-host</td>
+                <td>Very light Git</td>
+                <td>Self-hosted control plane; optional Cloud</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section class="section">
+        <h2>When to use what</h2>
+        <ul class="plain-list">
+          <li><strong>GitHub</strong> — network effect is the product (OSS contributors, Actions ecosystem, apps).</li>
+          <li><strong>Gitea / Forgejo</strong> — you only need a light human forge.</li>
+          <li><strong>Acahti</strong> — coding agents must complete a delivery loop on infrastructure you own.</li>
+        </ul>
+        <p class="section-lede">Honest boundary: agents drive the delivery loop; humans still own invites, secrets, branch protection, and <code>deploy_approve</code>.</p>
+      </section>
+    </main>
+    <footer class="foot" id="site-footer"></footer>
+    <script src="./app.js"></script>
+  </body>
+</html>
