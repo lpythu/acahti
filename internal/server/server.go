@@ -57,6 +57,7 @@ func New(cfg config.Config, cat *catalog.Catalog, hub *events.Hub) http.Handler 
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	})
 	mux.HandleFunc("GET /skill.md", pages.Skill)
+	mux.HandleFunc("GET /demo.md", pages.Demo)
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", oa.Metadata)
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource", oa.Resource)
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", oa.Resource)

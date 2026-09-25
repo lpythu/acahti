@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Acahti — Agents ship. You watch.</title>
+    <meta
+      name="description"
+      content="Agent delivery control plane. Self-hosted Git, CI checks, packages and MCP. Agents run the loop; humans watch the Board. Apache-2.0."
+    />
+    <link rel="icon" href="./assets/acahti.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="glow" aria-hidden="true"></div>
+    <header class="nav">
+      <a class="brand" href="./">
+        <img src="./assets/acahti.svg" width="28" height="28" alt="" />
+        Acahti
+      </a>
+      <nav class="nav-links">
+        <a href="#loop">Loop</a>
+        <a href="#compare">Compare</a>
+        <a href="#pricing">Pricing</a>
+        <a href="https://github.com/lpythu/acahti">GitHub</a>
+        <a class="btn ghost" href="https://github.com/lpythu/acahti/blob/main/docs/installation.md">Self-host</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Agent delivery control plane</p>
+        <h1>Agents ship.<br />You watch.</h1>
+        <p class="lede">
+          Not another GitHub clone. Acahti is the self-hosted control plane where coding agents
+          push, check, repair, and merge — and humans supervise on a Board.
+        </p>
+        <div class="cta-row">
+          <button type="button" class="btn primary" data-copy="demo-prompt">Copy demo prompt for agent</button>
+          <a class="btn outline" href="#start">See the one-paste start</a>
+        </div>
+        <p class="hint">Paste into Cursor / Codex / any MCP-capable agent. Open Board in another tab.</p>
+      </section>
+
+      <section class="visual" aria-label="Delivery diagram">
+        <img src="./assets/delivery.svg" alt="Agents ship. You watch. — delivery diagram" />
+      </section>
+
+      <section id="loop" class="section">
+        <h2>One closed loop</h2>
+        <p class="section-lede">Agent does the work. You set policy and watch.</p>
+        <div class="split">
+          <article>
+            <h3>Agent</h3>
+            <ol>
+              <li>Install <code>skill.md</code> + <code>demo.md</code></li>
+              <li>MCP OAuth · <code>whoami</code></li>
+              <li><code>push</code> → <code>checks_wait</code> → fix logs</li>
+              <li><code>pr_merge</code> when the latest pipeline is green</li>
+            </ol>
+          </article>
+          <article>
+            <h3>Human</h3>
+            <ol>
+              <li>Invite members · branch protection</li>
+              <li>Pipeline secrets (never in chat)</li>
+              <li>Board / Inbox — failed runs &amp; ready PRs</li>
+              <li><code>deploy_approve</code> when a gate needs a person</li>
+            </ol>
+          </article>
+        </div>
+      </section>
+
+      <section id="start" class="section">
+        <h2>Fastest path to “it works”</h2>
+        <p class="section-lede">
+          Point these at <strong>your</strong> instance URL after install. On a live host, the
+          unauthenticated home page fills them automatically and offers one-click copy.
+        </p>
+        <div class="copies">
+          <div class="copy-block">
+            <div class="copy-head">
+              <span>1 · Install skill</span>
+              <button type="button" data-copy="install-skill">Copy</button>
+            </div>
+            <pre id="install-skill">Install https://acahti.example.com/skill.md</pre>
+          </div>
+          <div class="copy-block">
+            <div class="copy-head">
+              <span>2 · Install demo loop</span>
+              <button type="button" data-copy="install-demo">Copy</button>
+            </div>
+            <pre id="install-demo">Install https://acahti.example.com/demo.md</pre>
+          </div>
+          <div class="copy-block featured">
+            <div class="copy-head">
+              <span>3 · One prompt (agent runs the whole loop)</span>
+              <button type="button" data-copy="demo-prompt">Copy</button>
+            </div>
+            <pre id="demo-prompt">Install https://acahti.example.com/skill.md
+Install https://acahti.example.com/demo.md
+
+Run the Acahti demo loop on this instance now. Connect MCP with OAuth. Do not paste tokens. Do not change global git config. Create or reuse a disposable demo-* repo under acme, push a trivial branch with a smoke pipeline, wait for checks, open a PR, merge when green (or stop with evidence if no Runner). Reply with repo URL, PR number, and pipeline number. I will only watch the Board.</pre>
+          </div>
+        </div>
+        <p class="host-row">
+          <label for="host">Your instance</label>
+          <input id="host" type="url" value="https://acahti.example.com" spellcheck="false" />
+          <label for="org">Org</label>
+          <input id="org" type="text" value="acme" spellcheck="false" />
+        </p>
+      </section>
+
+      <section id="compare" class="section">
+        <h2>Why not GitHub / Gitea / GitLab?</h2>
+        <div class="compare">
+          <div>
+            <h3>GitHub / GitLab</h3>
+            <p>Human-first forges. Agents are API guests. Cloud gravity, seat sprawl, and a UI built for clicking.</p>
+          </div>
+          <div>
+            <h3>Gitea / Forgejo</h3>
+            <p>Excellent lightweight Git. Still a human forge — little agent-native check feedback or checked merge loop.</p>
+          </div>
+          <div class="accent">
+            <h3>Acahti</h3>
+            <p>
+              Agent delivery control plane on Forgejo + Woodpecker. One identity for Git, npm, PyPI.
+              MCP + skill.md first. Green pipeline required to merge.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section pillars">
+        <h2>Lightweight. Safe. Yours.</h2>
+        <div class="pillars-grid">
+          <div>
+            <h3>Self-hosted</h3>
+            <p>Gateway on your host. Kernels stay private. Your code never needs a SaaS forge.</p>
+          </div>
+          <div>
+            <h3>Secure by default</h3>
+            <p>Per-user OAuth. No tokens in chat. Secrets never echo. Runner isolated from the control plane.</p>
+          </div>
+          <div>
+            <h3>Apache-2.0</h3>
+            <p>Open kernel. Cloud is optional hosting — not a feature lock.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="pricing" class="section">
+        <h2>Self-host free. Cloud when you want zero ops.</h2>
+        <p class="section-lede">
+          Same product. Cloud sells managed uptime, backups, shared CI minutes — not “premium MCP”.
+        </p>
+        <div class="prices">
+          <article>
+            <h3>OSS</h3>
+            <p class="price">$0</p>
+            <p>Self-host forever. Apache-2.0. You run the box.</p>
+          </article>
+          <article>
+            <h3>Hobby</h3>
+            <p class="price">$0</p>
+            <p>Cloud sandbox. 1 seat, limited private repos &amp; CI minutes.</p>
+          </article>
+          <article class="featured">
+            <h3>Team</h3>
+            <p class="price">$29<span>/seat/mo</span></p>
+            <p>Private repos, MCP, packages, Board. Includes CI minutes; overage metered.</p>
+          </article>
+          <article>
+            <h3>Business</h3>
+            <p class="price">$79<span>/seat/mo</span></p>
+            <p>SSO roadmap, audit export, dedicated runner attach, 99.9% SLA.</p>
+          </article>
+        </div>
+        <p class="waitlist">
+          Cloud waitlist:
+          <a href="mailto:hello@acahti.dev?subject=Acahti%20Cloud%20waitlist">hello@acahti.dev</a>
+          · details in
+          <a href="https://github.com/lpythu/acahti/blob/main/docs/product/cloud.md">docs/product/cloud.md</a>
+        </p>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <span>Agents ship. You watch.</span>
+      <a href="https://github.com/lpythu/acahti">Star on GitHub</a>
+    </footer>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

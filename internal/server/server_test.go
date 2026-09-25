@@ -350,6 +350,16 @@ func TestSkillAndOAuth(t *testing.T) {
 	}
 
 	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/demo.md", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("demo %d", rr.Code)
+	}
+	demo := rr.Body.String()
+	if !strings.Contains(demo, "Install http://127.0.0.1/demo.md") || !strings.Contains(demo, "acahti-demo ok") || !strings.Contains(demo, "pr_merge") {
+		t.Fatalf("demo contract missing: %s", demo)
+	}
+
+	rr = httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server", nil))
 	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "/oauth/authorize") {
 		t.Fatalf("as metadata %d %s", rr.Code, rr.Body.String())
