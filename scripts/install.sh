@@ -33,5 +33,7 @@ set +a
 
 echo
 echo "Install ${ROOT_URL}/skill.md"
+echo "Install ${ROOT_URL}/demo.md"
 echo "Join    ${ROOT_URL}/join     (invite from an admin)"
+echo "Paste the home-page demo prompt to an agent, then watch Board."
 echo "    admin   ${ACAHTI_ADMIN_USER}  (password in ${root}/.env)"
