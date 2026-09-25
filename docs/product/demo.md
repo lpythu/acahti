@@ -4,7 +4,7 @@ Shortest path for a human + agent to feel Acahti.
 
 ## Human (30 seconds)
 
-1. Install Acahti ([installation](../installation.md)) or open your instance.
+1. Have an Acahti instance (paste `Install https://lpythu.github.io/acahti/install.md` to an agent if you still need one).
 2. Open the instance home page (logged out).
 3. Click **Copy demo prompt for agent**.
 4. Open **Board** in another tab after joining / logging in.

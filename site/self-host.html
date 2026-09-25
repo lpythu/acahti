@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Self-host — Acahti</title>
-    <meta name="description" content="Install Acahti on your own host. Lightweight relative to GitLab. Apache-2.0. Bring your coding agent." />
+    <meta name="description" content="Self-host Acahti with your coding agent. Paste one Install line; the agent guides config and runs the installer." />
     <link rel="icon" href="./assets/acahti.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -17,39 +17,55 @@
     <main>
       <section class="hero narrow">
         <p class="eyebrow">Self-host</p>
-        <h1>Your infrastructure. Open kernel.</h1>
+        <h1>Agent installs. You answer questions.</h1>
         <p class="lede">
-          Linux host, HTTPS hostname, Compose. Gateway public; Forgejo and Woodpecker stay private.
-          Runner on a separate machine when you run CI.
+          No human bash recipe. Paste one line into Cursor / Codex. The agent gathers domain and SSH,
+          writes <code>.env</code>, runs the installer, and returns skill / join / demo prompts.
         </p>
+        <div class="cta-row">
+          <button type="button" class="btn primary" data-copy="install-agent">Copy install prompt for agent</button>
+          <a class="btn outline" data-base-href="cloud.html" href="./cloud.html">Prefer Cloud?</a>
+        </div>
       </section>
       <section class="section">
-        <h2>Install</h2>
-        <div class="copy-block featured">
-          <div class="copy-head"><span>Bootstrap</span></div>
-          <pre>git clone https://github.com/lpythu/acahti.git
-cd acahti
-cp .env.example .env
-# Set DOMAIN, ROOT_URL, ACAHTI_ORG
-set -a &amp;&amp; . ./.env &amp;&amp; set +a
-bash scripts/install.sh</pre>
+        <h2>One paste</h2>
+        <div class="copies">
+          <div class="copy-block featured">
+            <div class="copy-head">
+              <span>Give this to your coding agent</span>
+              <button type="button" data-copy="install-agent">Copy</button>
+            </div>
+            <pre id="install-agent">Install https://lpythu.github.io/acahti/install.md
+
+Self-host Acahti on my infrastructure. Follow that skill. Ask me for any missing DOMAIN, ROOT_URL, SSH, org, or Runner host. You run the install; I only confirm and watch.</pre>
+          </div>
         </div>
         <p class="section-lede">
-          Full guide:
+          Skill text:
+          <a data-base-href="install.md" href="./install.md">install.md</a>
+          · human overview:
           <a href="https://github.com/lpythu/acahti/blob/main/docs/installation.md">docs/installation.md</a>.
-          Review scripts before running. Keep <code>.env</code> out of chat.
+          Keep <code>.env</code> secrets out of chat.
         </p>
       </section>
       <section class="section">
-        <h2>After install</h2>
+        <h2>What you should have ready</h2>
+        <ul class="plain-list">
+          <li>Linux host with sudo, ≥ 2 GiB RAM</li>
+          <li>Public HTTPS hostname (you terminate TLS)</li>
+          <li>SSH the agent can use (sudoer, not root)</li>
+          <li>Optional second host for the CI Runner</li>
+        </ul>
+      </section>
+      <section class="section">
+        <h2>After the agent finishes</h2>
         <ol class="plain-ol">
-          <li>Open your <code>ROOT_URL</code> — copy the demo prompt for your agent.</li>
+          <li>Open your <code>ROOT_URL</code> — copy the demo prompt.</li>
           <li>Invite members · each completes MCP OAuth.</li>
           <li>Open Board and watch while the agent runs <code>/demo.md</code>.</li>
         </ol>
         <div class="cta-row">
           <a class="btn primary" data-base-href="index.html" href="./index.html">Back to product home</a>
-          <a class="btn outline" data-base-href="cloud.html" href="./cloud.html">Prefer managed Cloud?</a>
         </div>
       </section>
     </main>

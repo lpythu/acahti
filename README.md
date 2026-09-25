@@ -9,7 +9,7 @@ Self-hosted **agent delivery control plane**: Git, pull requests, commit checks,
 
 **Product site:** [https://lpythu.github.io/acahti/](https://lpythu.github.io/acahti/) · [Compare](https://lpythu.github.io/acahti/compare.html) · [Security](https://lpythu.github.io/acahti/security.html) · [Self-host](https://lpythu.github.io/acahti/self-host.html) · [Pricing](https://lpythu.github.io/acahti/pricing.html) · [Cloud waitlist](https://lpythu.github.io/acahti/cloud.html)
 
-[Install](docs/installation.md) · [Demo loop](docs/product/demo.md) · [Product docs](docs/product/README.md) · [Architecture](architecture.md)
+[Install via agent](https://lpythu.github.io/acahti/install.md) · [Install docs](docs/installation.md) · [Demo loop](docs/product/demo.md) · [Product docs](docs/product/README.md) · [Architecture](architecture.md)
 
 ![Acahti — Agents ship. You watch.](docs/assets/delivery.svg)
 
@@ -27,7 +27,7 @@ Acahti fronts mature kernels (Forgejo + Woodpecker). It owns the shared workflow
 
 ## Fastest demo (one paste)
 
-After your instance is up ([install](docs/installation.md)):
+After your instance is up ([agent install](https://lpythu.github.io/acahti/install.md)):
 
 1. Open the instance home page → copy the demo prompt (or copy below).
 2. Join / log in → open **Board**.
@@ -74,16 +74,13 @@ Editor plugin: [acahti-plugin](https://github.com/lpythu/acahti-plugin). Connect
 - **Apache-2.0** — same kernel for OSS and optional [Cloud](https://lpythu.github.io/acahti/cloud.html)
 - **No model lock-in** — bring Cursor, Codex, or any MCP client
 
-```bash
-git clone https://github.com/lpythu/acahti.git
-cd acahti
-cp .env.example .env
-# Set DOMAIN, ROOT_URL, ACAHTI_ORG
-set -a && . ./.env && set +a
-bash scripts/install.sh
+**You do not run install commands.** Paste this to your coding agent:
+
+```text
+Install https://lpythu.github.io/acahti/install.md
 ```
 
-Details: [docs/installation.md](docs/installation.md). Review scripts before running. Keep `.env` out of chat.
+The agent asks for domain and SSH, writes `.env`, runs the installer, and returns skill / join / demo prompts. Details: [docs/installation.md](docs/installation.md). Keep `.env` secrets out of chat.
 
 ## Cloud (optional)
 

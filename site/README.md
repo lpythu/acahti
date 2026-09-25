@@ -8,6 +8,7 @@ Static marketing site (no build). Multi-page layout per product packaging:
 | Compare | [`compare.html`](./compare.html) |
 | Security | [`security.html`](./security.html) |
 | Self-host | [`self-host.html`](./self-host.html) |
+| Install skill (for agents) | [`install.md`](./install.md) |
 | Cloud + waitlist | [`cloud.html`](./cloud.html) |
 | Pricing | [`pricing.html`](./pricing.html) |
 
