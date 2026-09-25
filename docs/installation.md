@@ -23,9 +23,11 @@ into an agent conversation. Terminate TLS at your reverse proxy and forward to
 GATEWAY_BIND. Use loopback unless a trusted LAN Runner needs access. CI gRPC must
 stay on the private network or an authenticated tunnel.
 
-The final output gives the instance's skill URL and invite URL. An administrator
+The final output gives the instance's skill URL, demo URL and invite URL. An administrator
 invites members. Each member completes their own MCP OAuth. A web login alone does
-not connect an agent's MCP client. Verify with MCP `whoami`, then `inbox`.
+not connect an agent's MCP client. Verify with MCP `whoami`, then paste the home-page
+**demo prompt** (or `Install …/demo.md`) for the shortest closed loop. See
+[product demo](product/demo.md).
 
 ## CI and packages
 

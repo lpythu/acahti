@@ -1,54 +1,46 @@
 # Acahti
 
-**One connection from code to checked delivery.**
+**Agents ship. You watch.**
 
 [![CI](https://github.com/lpythu/acahti/actions/workflows/ci.yml/badge.svg)](https://github.com/lpythu/acahti/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-[Install](docs/installation.md) · [Architecture](architecture.md) · [Pipeline pipes](pipes.md) · [Agent plugins](https://github.com/lpythu/acahti-plugin) · [Stack guide](https://github.com/benchyard/stack)
+Self-hosted **agent delivery control plane**: Git, pull requests, commit checks, CI logs, and language packages behind **one identity** and **one MCP endpoint**. Bring your coding agent. Humans supervise on the Board.
 
-Acahti is a self-hosted delivery control plane for people and coding agents. It
-combines Git repositories, pull requests, commit checks, CI logs and language
-packages behind one identity and one MCP endpoint. Bring your coding agent;
-Acahti does not host a model or require a particular editor.
+**Product site:** [https://lpythu.github.io/acahti/](https://lpythu.github.io/acahti/) · [Compare](https://lpythu.github.io/acahti/compare.html) · [Security](https://lpythu.github.io/acahti/security.html) · [Self-host](https://lpythu.github.io/acahti/self-host.html) · [Pricing](https://lpythu.github.io/acahti/pricing.html) · [Cloud waitlist](https://lpythu.github.io/acahti/cloud.html)
 
-![Acahti delivery workflow](docs/assets/delivery.svg)
+[Install](docs/installation.md) · [Demo loop](docs/product/demo.md) · [Product docs](docs/product/README.md) · [Architecture](architecture.md)
 
-## Why Acahti
+![Acahti — Agents ship. You watch.](docs/assets/delivery.svg)
 
-Writing code is only one step. An agent also needs to identify the right repository,
-read failed checks, repair a change, and hand over an artifact someone can trust.
-Acahti provides a consistent workflow for those operations:
+## Not another GitHub / Gitea / GitLab
 
-- **One identity:** Git, npm and PyPI share the member's Acahti identity. Agents use
-  OAuth; external cloud credentials remain separately managed pipeline secrets.
-- **Structured feedback:** query the commit's checks, fetch failed-step logs, rerun
-  a pipeline and inspect its queue state through MCP.
-- **Checked handoff:** the PR merge operation requires a successful latest pipeline
-  on the PR head. Branch protection and repository access remain explicit policy.
-- **An actionable inbox:** find failed or blocked runs and PRs ready for review.
-- **Your infrastructure:** a Go gateway fronts Forgejo and Woodpecker. Mature Git
-  and CI engines do the storage/execution work; Acahti owns the shared workflow.
+| | GitHub / GitLab | Gitea / Forgejo | **Acahti** |
+|---|---|---|---|
+| Who drives delivery | Humans click | Humans click | **Agents via MCP** |
+| What you get | Forge + social | Light forge | **Git + CI + packages + checked merge** |
+| Agent UX | APIs bolted on | Minimal | **`skill.md` · `/demo.md` · OAuth MCP** |
 
-GitHub's official MCP already supports repository and CI operations. Acahti's focus
-is a cohesive, self-hosted installation with integrated package identity and a
-small delivery workflow—not exclusive access to agents or universal GitHub API parity.
+Acahti fronts mature kernels (Forgejo + Woodpecker). It owns the shared workflow: identity, structured check feedback, inbox, and merge policy.
 
-## Connect an agent
+**Honest boundary:** agents drive the delivery loop; humans still own invites, secrets, branch protection, and `deploy_approve`. Acahti does not host a model and does not replace Cursor/Codex.
 
-Install Acahti on a host using the [installation guide](docs/installation.md), then
-use the URL served by **your** instance:
+## Fastest demo (one paste)
+
+After your instance is up ([install](docs/installation.md)):
+
+1. Open the instance home page → copy the demo prompt (or copy below).
+2. Join / log in → open **Board**.
+3. Paste into Cursor, Codex, or any MCP-capable agent.
 
 ```text
 Install https://acahti.example.com/skill.md
+Install https://acahti.example.com/demo.md
+
+Run the Acahti demo loop on this instance now. Connect MCP with OAuth. Do not paste tokens. Do not change global git config. Create or reuse a disposable demo-* repo under acme, push a trivial branch with a smoke pipeline, wait for checks, open a PR, merge when green (or stop with evidence if no Runner). Reply with repo URL, PR number, and pipeline number. I will only watch the Board.
 ```
 
-For editor integration, use [acahti-plugin](https://github.com/lpythu/acahti-plugin).
-Connect the instance's `/mcp` endpoint and complete individual OAuth. Verify with
-`whoami`; the result contains the instance URL, Git identity and current skill URL.
-Do not paste tokens into chats or change your global Git identity.
-
-A typical agent workflow, within the user's authorized scope:
+Replace the host and org with yours. Live instances expose the filled prompt at `/ui/public` (`agent_prompt`) and serve `/demo.md`.
 
 ```text
 repo_get → branch_list → edit and push
@@ -60,26 +52,56 @@ repo_get → branch_list → edit and push
             fix / rerun       review → pr_merge
 ```
 
-The agent decides and performs repairs. Acahti supplies authenticated operations
-and results; it does not autonomously fix pipelines by itself. A green pipeline
-means its configured checks passed, not that the software has no defects.
+The agent decides and repairs. Acahti supplies authenticated operations and results. A green pipeline means configured checks passed — not that the software has no defects.
 
-## Choose what you need
+## Who does what
 
-| Need | Component |
-|---|---|
-| Git, CI, packages and MCP identity | **Acahti** |
-| Cursor / Codex installation guidance | [Acahti Plugin](https://github.com/lpythu/acahti-plugin) |
-| Shared tasks and execution UI | [Benchyard Console](https://github.com/benchyard/benchyard-console) |
-| Persistent dev environment and preview | [Skheri](https://github.com/benchyard/skheri) |
-| Once / soak checks and evidence | [Argos](https://github.com/lpythu/argos) |
+**Agent:** OAuth · push · `checks_wait` · `pipeline_log` · `pr_merge` · packages  
+**You:** Board / Inbox · invites · branch protection · secrets · `deploy_approve`
 
-These are separate products. Acahti can be used without Benchyard or Skheri.
-Acahti is a Git host; adding it as another remote does not automatically migrate
-GitHub issues, integrations or CI settings. See the [stack guide](https://github.com/benchyard/stack)
-for a staged adoption path.
+## Connect an agent (everyday)
 
-## Development and contribution
+```text
+Install https://acahti.example.com/skill.md
+```
+
+Editor plugin: [acahti-plugin](https://github.com/lpythu/acahti-plugin). Connect `/mcp`, complete OAuth, verify with `whoami`. Do not paste tokens into chats or change global Git identity.
+
+## Self-host · safe · open
+
+- **Your infrastructure** — gateway public; git/CI kernels stay private ([security](https://lpythu.github.io/acahti/security.html))
+- **Lightweight relative to GitLab** — Go gateway + Compose; Runner on a separate host
+- **Apache-2.0** — same kernel for OSS and optional [Cloud](https://lpythu.github.io/acahti/cloud.html)
+- **No model lock-in** — bring Cursor, Codex, or any MCP client
+
+```bash
+git clone https://github.com/lpythu/acahti.git
+cd acahti
+cp .env.example .env
+# Set DOMAIN, ROOT_URL, ACAHTI_ORG
+set -a && . ./.env && set +a
+bash scripts/install.sh
+```
+
+Details: [docs/installation.md](docs/installation.md). Review scripts before running. Keep `.env` out of chat.
+
+## Cloud (optional)
+
+| Plan | Price | Notes |
+|---|---|---|
+| OSS self-host | $0 | Forever free software |
+| Hobby Cloud | $0 | Limited sandbox |
+| Team | $29 / seat / mo | Private repos, MCP, packages, CI minutes |
+| Business | $79 / seat / mo | SLA, audit, dedicated runner attach |
+| Enterprise | Contact | Residency, VPC, custom |
+
+We meter **seats + CI minutes + storage**, not MCP calls. [Pricing](https://lpythu.github.io/acahti/pricing.html) · [Waitlist](https://lpythu.github.io/acahti/cloud.html) · [spec](docs/product/cloud.md).
+
+## Status / non-goals
+
+Not in this release: full GitHub API / social parity, automatic issue/Actions migration, autonomous code repair, or per-task agent delegation.
+
+## Development
 
 ```bash
 (cd web && npm ci && npm run build:embed)
@@ -87,9 +109,8 @@ GOWORK=off go test ./...
 GOWORK=off go test -race ./internal/mcp ./internal/oauth
 ```
 
-[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Third-party components](THIRD_PARTY_NOTICES.md)
+Marketing preview: `python3 -m http.server 4173 --directory site` → http://127.0.0.1:4173/
 
-Acahti gateway and integration code: [Apache-2.0](LICENSE). Forgejo, Woodpecker and
-other third-party components retain their own licenses. Current tokens represent
-member authority; per-task agent delegation and automatic GitHub migration are
-not features of this release.
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Product docs](docs/product/README.md) · [Third-party](THIRD_PARTY_NOTICES.md)
+
+Acahti gateway and integration code: [Apache-2.0](LICENSE). Forgejo, Woodpecker and other third-party components retain their own licenses.

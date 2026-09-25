@@ -177,6 +177,8 @@ fi
 "${COMPOSE[@]}" up -d gateway
 
 echo "Install ${ROOT_URL}/skill.md"
+echo "Install ${ROOT_URL}/demo.md"
 echo "Join    ${ROOT_URL}/join     (invite from an admin)"
+echo "Paste the home-page demo prompt to an agent, then watch Board."
 echo "    admin=${ACAHTI_ADMIN_USER}  org=${ACAHTI_ORG}"
 echo "    password is in ${root}/.env (ACAHTI_ADMIN_PASSWORD); do not commit"

@@ -213,13 +213,13 @@ function InviteMenu({
   )
 }
 
-function OnboardCopy({ root, login, password }: { root: string; login: string; password: string }) {
+function OnboardCopy({ root, org, login, password }: { root: string; org?: string; login: string; password: string }) {
   const t = useT()
   return (
     <>
       <p className="text-sm text-muted-foreground">{t("onboardHint")}</p>
       <CopyField label={t("onboardYou")} multiline value={onboardYou(root, login, password)} />
-      <CopyField label={t("onboardAgent")} multiline value={onboardAgent(root)} />
+      <CopyField label={t("onboardAgent")} multiline value={onboardAgent(root, org)} />
     </>
   )
 }
@@ -228,11 +228,13 @@ function CreateUserMenu({
   admin,
   setAdmin,
   root,
+  org,
   onCreate,
 }: {
   admin: boolean
   setAdmin: (v: boolean) => void
   root: string
+  org?: string
   onCreate: (login: string, author: string, admin: boolean) => Promise<{ login: string; password: string }>
 }) {
   const t = useT()
@@ -300,7 +302,7 @@ function CreateUserMenu({
             <Button type="submit">{t("create")}</Button>
           </FieldGroup>
         </form>
-        {created ? <OnboardCopy root={root} login={created.login} password={created.password} /> : null}
+        {created ? <OnboardCopy root={root} org={org} login={created.login} password={created.password} /> : null}
       </PopoverContent>
     </Popover>
   )
@@ -440,10 +442,12 @@ function UserReposMenu({
 function OnboardMenu({
   login,
   root,
+  org,
   onPassword,
 }: {
   login: string
   root: string
+  org?: string
   onPassword: (pw: string) => void
 }) {
   const t = useT()
@@ -484,7 +488,7 @@ function OnboardMenu({
       </PopoverTrigger>
       <PopoverContent className="flex w-[28rem] flex-col gap-3">
         <MenuPanel loading={loading} error={error}>
-          {password !== null ? <OnboardCopy root={root} login={login} password={password} /> : null}
+          {password !== null ? <OnboardCopy root={root} org={org} login={login} password={password} /> : null}
         </MenuPanel>
       </PopoverContent>
     </Popover>
@@ -560,7 +564,7 @@ export function UsersPage() {
                 }
               }}
             />
-            <CreateUserMenu admin={admin} setAdmin={setAdmin} root={root} onCreate={onCreate} />
+            <CreateUserMenu admin={admin} setAdmin={setAdmin} root={root} org={me?.org} onCreate={onCreate} />
           </div>
         </div>
       }
@@ -626,6 +630,7 @@ export function UsersPage() {
                       <OnboardMenu
                         login={u.login}
                         root={root}
+                        org={me?.org}
                         onPassword={(pw) => setResets((m) => ({ ...m, [u.login]: pw }))}
                       />
                     </div>

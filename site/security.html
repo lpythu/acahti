@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Security — Acahti</title>
+    <meta name="description" content="Acahti security model: public gateway, private kernels, OAuth agents, secrets that never echo, Runner isolation." />
+    <link rel="icon" href="./assets/acahti.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-page="security">
+    <div class="glow" aria-hidden="true"></div>
+    <header class="nav" id="site-header"></header>
+    <main>
+      <section class="hero narrow">
+        <p class="eyebrow">Security</p>
+        <h1>Edge in front. Kernels private.</h1>
+        <p class="lede">Acahti’s public surface is one gateway. Agents authenticate as people. Secrets never come back out.</p>
+      </section>
+      <section class="section pillars">
+        <div class="pillars-grid">
+          <div>
+            <h3>Public surface</h3>
+            <p>SPA, MCP (<code>/mcp</code>), git HTTPS, packages, <code>skill.md</code> / <code>demo.md</code>.</p>
+          </div>
+          <div>
+            <h3>Private kernels</h3>
+            <p>Forgejo UI, Woodpecker UI, and CI gRPC stay off the internet.</p>
+          </div>
+          <div>
+            <h3>Agent OAuth</h3>
+            <p>Individual OAuth. Do not paste access tokens into chat. Tokens are member authority.</p>
+          </div>
+          <div>
+            <h3>Secrets</h3>
+            <p>Pipeline secrets inject as env. Values are never listed or returned. Humans own ACL.</p>
+          </div>
+          <div>
+            <h3>Runner isolation</h3>
+            <p>Untrusted jobs run on a separate Runner host — not on the control plane.</p>
+          </div>
+          <div>
+            <h3>Checked merge</h3>
+            <p><code>pr_merge</code> succeeds only when the newest pipeline on the head SHA is green.</p>
+          </div>
+        </div>
+        <p class="section-lede">A green pipeline means configured checks passed — not that the software is defect-free. Details: <a href="https://github.com/lpythu/acahti/blob/main/docs/product/security.md">docs/product/security.md</a>.</p>
+      </section>
+    </main>
+    <footer class="foot" id="site-footer"></footer>
+    <script src="./app.js"></script>
+  </body>
+</html>

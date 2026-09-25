@@ -328,7 +328,17 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  public: () => req<{ root_url: string; org: string; skill: string; join: string; mcp: string }>("/ui/public"),
+  public: () =>
+    req<{
+      root_url: string
+      org: string
+      skill: string
+      demo: string
+      join: string
+      mcp: string
+      agent_prompt: string
+      demo_sha?: string
+    }>("/ui/public"),
   me: () => req<Me>("/ui/me"),
   orgs: () => req<{ items: Org[] }>("/ui/orgs"),
   createOrg: (name: string, full_name?: string) =>

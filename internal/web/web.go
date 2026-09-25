@@ -328,13 +328,22 @@ func (p *Pages) Skill(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte(skills.Acahti(p.Cfg.RootURL, p.Cfg.Org, identity.Domain(p.Cfg.RootURL, p.Cfg.Domain))))
 }
 
+func (p *Pages) Demo(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	_, _ = w.Write([]byte(skills.Demo(p.Cfg.RootURL, p.Cfg.Org, identity.Domain(p.Cfg.RootURL, p.Cfg.Domain))))
+}
+
 func (p *Pages) Public(w http.ResponseWriter, _ *http.Request) {
+	d := identity.Domain(p.Cfg.RootURL, p.Cfg.Domain)
 	writeJSON(w, http.StatusOK, map[string]string{
-		"root_url": p.Cfg.RootURL,
-		"org":      p.Cfg.Org,
-		"skill":    p.Cfg.RootURL + "/skill.md",
-		"join":     p.Cfg.RootURL + "/join",
-		"mcp":      p.Cfg.RootURL + "/mcp",
+		"root_url":     p.Cfg.RootURL,
+		"org":          p.Cfg.Org,
+		"skill":        p.Cfg.RootURL + "/skill.md",
+		"demo":         p.Cfg.RootURL + "/demo.md",
+		"join":         p.Cfg.RootURL + "/join",
+		"mcp":          p.Cfg.RootURL + "/mcp",
+		"agent_prompt": skills.AgentPrompt(p.Cfg.RootURL, p.Cfg.Org),
+		"demo_sha":     skills.DemoSHA(p.Cfg.RootURL, p.Cfg.Org, d),
 	})
 }
 

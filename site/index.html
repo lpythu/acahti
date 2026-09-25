@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Acahti — Agents ship. You watch.</title>
+    <meta
+      name="description"
+      content="Agent delivery control plane. Self-hosted Git, CI checks, packages and MCP. Agents run the loop; humans watch the Board. Apache-2.0."
+    />
+    <link rel="icon" href="./assets/acahti.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-page="home">
+    <div class="glow" aria-hidden="true"></div>
+    <header class="nav" id="site-header"></header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Agent delivery control plane</p>
+        <h1>Agents ship.<br />You watch.</h1>
+        <p class="lede">
+          Not another GitHub clone. Acahti is the self-hosted control plane where coding agents
+          push, check, repair, and merge — and humans supervise on a Board.
+        </p>
+        <div class="cta-row">
+          <button type="button" class="btn primary" data-copy="demo-prompt">Copy demo prompt for agent</button>
+          <a class="btn outline" data-base-href="self-host.html">Self-host</a>
+          <a class="btn outline" data-base-href="cloud.html">Cloud waitlist</a>
+        </div>
+        <p class="hint">Paste into Cursor / Codex / any MCP-capable agent. Open Board in another tab.</p>
+      </section>
+
+      <section class="visual" aria-label="Delivery diagram">
+        <img data-base-src="assets/delivery.svg" src="./assets/delivery.svg" alt="Agents ship. You watch. — delivery diagram" />
+      </section>
+
+      <section id="loop" class="section">
+        <h2>One closed loop</h2>
+        <p class="section-lede">Agent does the work. You set policy and watch.</p>
+        <div class="split">
+          <article>
+            <h3>Agent</h3>
+            <ol>
+              <li>Install <code>skill.md</code> + <code>demo.md</code></li>
+              <li>MCP OAuth · <code>whoami</code></li>
+              <li><code>push</code> → <code>checks_wait</code> → fix logs</li>
+              <li><code>pr_merge</code> when the latest pipeline is green</li>
+            </ol>
+          </article>
+          <article>
+            <h3>Human</h3>
+            <ol>
+              <li>Invite members · branch protection</li>
+              <li>Pipeline secrets (never in chat)</li>
+              <li>Board / Inbox — failed runs &amp; ready PRs</li>
+              <li><code>deploy_approve</code> when a gate needs a person</li>
+            </ol>
+          </article>
+        </div>
+      </section>
+
+      <section id="start" class="section">
+        <h2>Fastest path to “it works”</h2>
+        <p class="section-lede">
+          Point these at <strong>your</strong> instance URL after install. On a live host, the
+          unauthenticated home page fills them automatically and offers one-click copy.
+        </p>
+        <div class="copies">
+          <div class="copy-block">
+            <div class="copy-head">
+              <span>1 · Install skill</span>
+              <button type="button" data-copy="install-skill">Copy</button>
+            </div>
+            <pre id="install-skill">Install https://acahti.example.com/skill.md</pre>
+          </div>
+          <div class="copy-block">
+            <div class="copy-head">
+              <span>2 · Install demo loop</span>
+              <button type="button" data-copy="install-demo">Copy</button>
+            </div>
+            <pre id="install-demo">Install https://acahti.example.com/demo.md</pre>
+          </div>
+          <div class="copy-block featured">
+            <div class="copy-head">
+              <span>3 · One prompt (agent runs the whole loop)</span>
+              <button type="button" data-copy="demo-prompt">Copy</button>
+            </div>
+            <pre id="demo-prompt">Install https://acahti.example.com/skill.md
+Install https://acahti.example.com/demo.md
+
+Run the Acahti demo loop on this instance now. Connect MCP with OAuth. Do not paste tokens. Do not change global git config. Create or reuse a disposable demo-* repo under acme, push a trivial branch with a smoke pipeline, wait for checks, open a PR, merge when green (or stop with evidence if no Runner). Reply with repo URL, PR number, and pipeline number. I will only watch the Board.</pre>
+          </div>
+        </div>
+        <p class="host-row">
+          <label for="host">Your instance</label>
+          <input id="host" type="url" value="https://acahti.example.com" spellcheck="false" />
+          <label for="org">Org</label>
+          <input id="org" type="text" value="acme" spellcheck="false" />
+        </p>
+      </section>
+
+      <section class="section pillars">
+        <h2>Go deeper</h2>
+        <div class="pillars-grid">
+          <div>
+            <h3><a data-base-href="compare.html" href="./compare.html">Compare</a></h3>
+            <p>Why this is not GitHub, GitLab, or Gitea.</p>
+          </div>
+          <div>
+            <h3><a data-base-href="security.html" href="./security.html">Security</a></h3>
+            <p>Gateway edge, OAuth agents, secrets that never echo.</p>
+          </div>
+          <div>
+            <h3><a data-base-href="pricing.html" href="./pricing.html">Pricing</a></h3>
+            <p>OSS free. Cloud seats + CI minutes — not MCP metering.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot" id="site-footer"></footer>
+    <script src="./app.js"></script>
+  </body>
+</html>
