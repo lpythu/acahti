@@ -1,3 +1,10 @@
+function siteBase() {
+  // Project Pages live under /acahti/; local/file and custom roots stay relative.
+  const parts = location.pathname.split("/").filter(Boolean)
+  if (parts[0] === "acahti") return "/acahti/"
+  return "./"
+}
+
 function rootHost() {
   const el = document.getElementById("host")
   return (el && el.value ? el.value : "https://acahti.example.com").replace(/\/$/, "")
@@ -58,15 +65,72 @@ function flash(id) {
   }
 }
 
-document.querySelectorAll("[data-copy]").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    void copyById(btn.getAttribute("data-copy"))
+function mountChrome(active) {
+  const base = siteBase()
+  const header = document.getElementById("site-header")
+  const footer = document.getElementById("site-footer")
+  if (header) {
+    header.innerHTML = `
+      <a class="brand" href="${base}">
+        <img src="${base}assets/acahti.svg" width="28" height="28" alt="" />
+        Acahti
+      </a>
+      <nav class="nav-links">
+        <a href="${base}compare.html"${active === "compare" ? ' aria-current="page"' : ""}>Compare</a>
+        <a href="${base}security.html"${active === "security" ? ' aria-current="page"' : ""}>Security</a>
+        <a href="${base}self-host.html"${active === "self-host" ? ' aria-current="page"' : ""}>Self-host</a>
+        <a href="${base}cloud.html"${active === "cloud" ? ' aria-current="page"' : ""}>Cloud</a>
+        <a href="${base}pricing.html"${active === "pricing" ? ' aria-current="page"' : ""}>Pricing</a>
+        <a href="https://github.com/lpythu/acahti">GitHub</a>
+        <a class="btn ghost" href="${base}self-host.html">Install</a>
+      </nav>`
+  }
+  if (footer) {
+    footer.innerHTML = `
+      <span>Agents ship. You watch.</span>
+      <span class="foot-links">
+        <a href="${base}pricing.html">Pricing</a>
+        ·
+        <a href="${base}cloud.html">Cloud waitlist</a>
+        ·
+        <a href="https://github.com/lpythu/acahti">GitHub</a>
+      </span>`
+  }
+  document.querySelectorAll("[data-base-href]").forEach((el) => {
+    const path = el.getAttribute("data-base-href") || ""
+    el.setAttribute("href", base + path.replace(/^\.\//, ""))
   })
-})
+  document.querySelectorAll("[data-base-src]").forEach((el) => {
+    const path = el.getAttribute("data-base-src") || ""
+    el.setAttribute("src", base + path.replace(/^\.\//, ""))
+  })
+}
 
-;["host", "org"].forEach((id) => {
-  const el = document.getElementById(id)
-  if (el) el.addEventListener("input", refreshPrompts)
-})
+document.addEventListener("DOMContentLoaded", () => {
+  mountChrome(document.body.dataset.page || "")
+  document.querySelectorAll("[data-copy]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      void copyById(btn.getAttribute("data-copy"))
+    })
+  })
+  ;["host", "org"].forEach((id) => {
+    const el = document.getElementById(id)
+    if (el) el.addEventListener("input", refreshPrompts)
+  })
+  refreshPrompts()
 
-refreshPrompts()
+  const form = document.getElementById("waitlist-form")
+  if (form) {
+    form.addEventListener("submit", (e) => {
+      e.preventDefault()
+      const email = /** @type {HTMLInputElement} */ (form.querySelector('[name="email"]'))?.value?.trim()
+      const size = /** @type {HTMLSelectElement} */ (form.querySelector('[name="size"]'))?.value || ""
+      const prefer = /** @type {HTMLSelectElement} */ (form.querySelector('[name="prefer"]'))?.value || ""
+      const subject = encodeURIComponent("Acahti Cloud waitlist")
+      const body = encodeURIComponent(
+        `Email: ${email}\nTeam size: ${size}\nPreference: ${prefer}\n\n(Same OSS kernel; export anytime.)`
+      )
+      window.location.href = `mailto:hello@acahti.dev?subject=${subject}&body=${body}`
+    })
+  }
+})

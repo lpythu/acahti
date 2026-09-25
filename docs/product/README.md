@@ -1,5 +1,7 @@
 # Product docs
 
+Public product site (GitHub Pages): **https://lpythu.github.io/acahti/**
+
 - [Positioning](./positioning.md) — what Acahti is (and is not)
 - [Compare](./compare.md) — vs GitHub, GitLab, Gitea / Forgejo
 - [Security](./security.md) — trust boundaries for agents and humans

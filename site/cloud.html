@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cloud — Acahti</title>
+    <meta name="description" content="Acahti Cloud: managed hosting of the same open-source control plane. Waitlist for Team and Business." />
+    <link rel="icon" href="./assets/acahti.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-page="cloud">
+    <div class="glow" aria-hidden="true"></div>
+    <header class="nav" id="site-header"></header>
+    <main>
+      <section class="hero narrow">
+        <p class="eyebrow">Cloud</p>
+        <h1>Same OSS kernel. Zero forge ops.</h1>
+        <p class="lede">
+          Cloud is managed hosting — uptime, backups, shared CI capacity, support.
+          Not a feature-gated fork. Export Git and move back to self-host anytime.
+        </p>
+        <div class="cta-row">
+          <a class="btn primary" href="#waitlist">Join waitlist</a>
+          <a class="btn outline" data-base-href="pricing.html" href="./pricing.html">See pricing</a>
+        </div>
+      </section>
+      <section class="section pillars">
+        <div class="pillars-grid">
+          <div>
+            <h3>Feature isomorphic</h3>
+            <p>MCP, skill.md, Board, packages — same contract as self-host.</p>
+          </div>
+          <div>
+            <h3>First region</h3>
+            <p>Initial region: <strong>us-east</strong>. Data-residency options on the Enterprise roadmap.</p>
+          </div>
+          <div>
+            <h3>Exit anytime</h3>
+            <p>Your Git objects export. Skill and MCP URLs stay understandable on your own box.</p>
+          </div>
+        </div>
+      </section>
+      <section id="waitlist" class="section">
+        <h2>Waitlist</h2>
+        <p class="section-lede">Tell us team size and whether you lean self-host or Cloud. Opens your mail client (no account required).</p>
+        <form id="waitlist-form" class="waitlist-form">
+          <label>
+            Email
+            <input name="email" type="email" required placeholder="you@company.com" />
+          </label>
+          <label>
+            Team size
+            <select name="size" required>
+              <option value="">Select…</option>
+              <option>1–5</option>
+              <option>6–20</option>
+              <option>21–100</option>
+              <option>100+</option>
+            </select>
+          </label>
+          <label>
+            Preference
+            <select name="prefer" required>
+              <option value="">Select…</option>
+              <option value="cloud">Cloud first</option>
+              <option value="self-host">Self-host first</option>
+              <option value="unsure">Not sure yet</option>
+            </select>
+          </label>
+          <button type="submit" class="btn primary">Email waitlist</button>
+        </form>
+      </section>
+    </main>
+    <footer class="foot" id="site-footer"></footer>
+    <script src="./app.js"></script>
+  </body>
+</html>

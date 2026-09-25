@@ -407,6 +407,108 @@ code {
   text-decoration: none;
 }
 
+.hero.narrow {
+  max-width: 42rem;
+  padding-bottom: 0.5rem;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.compare-table th,
+.compare-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  color: var(--muted);
+}
+
+.compare-table thead th {
+  color: var(--fg);
+  font-family: var(--display);
+  font-weight: 700;
+}
+
+.compare-table tbody th {
+  color: var(--fg);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.compare-table strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.plain-list,
+.plain-ol {
+  margin: 1rem 0 0;
+  padding-left: 1.2rem;
+  color: var(--muted);
+}
+
+.plain-list li + li,
+.plain-ol li + li {
+  margin-top: 0.55rem;
+}
+
+.plain-list strong,
+.plain-ol strong {
+  color: var(--fg);
+}
+
+.pillars-grid a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.pillars-grid a:hover {
+  text-decoration: underline;
+}
+
+.waitlist-form {
+  display: grid;
+  gap: 0.9rem;
+  max-width: 28rem;
+  margin-top: 1.25rem;
+}
+
+.waitlist-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.waitlist-form input,
+.waitlist-form select {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  border-radius: 0.45rem;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+}
+
+.nav-links a[aria-current="page"] {
+  color: var(--accent);
+}
+
+.foot-links a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
 @keyframes rise {
   from {
     opacity: 0;

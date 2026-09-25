@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pricing — Acahti</title>
+    <meta name="description" content="Acahti pricing: OSS free forever. Cloud Hobby $0, Team $29/seat, Business $79/seat. Meter seats, CI minutes, storage — not MCP calls." />
+    <link rel="icon" href="./assets/acahti.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-page="pricing">
+    <div class="glow" aria-hidden="true"></div>
+    <header class="nav" id="site-header"></header>
+    <main>
+      <section class="hero narrow">
+        <p class="eyebrow">Pricing</p>
+        <h1>Self-host free. Cloud when you want zero ops.</h1>
+        <p class="lede">We meter <strong>seats + CI minutes + storage</strong>. We do not meter MCP tool calls.</p>
+      </section>
+      <section class="section">
+        <div class="prices">
+          <article>
+            <h3>OSS</h3>
+            <p class="price">$0</p>
+            <p>Self-host forever. Apache-2.0. You run the box.</p>
+          </article>
+          <article>
+            <h3>Hobby</h3>
+            <p class="price">$0</p>
+            <p>Cloud sandbox. 1 seat, 1 private repo, 500 CI min/mo, 1 GB.</p>
+          </article>
+          <article class="featured">
+            <h3>Team</h3>
+            <p class="price">$29<span>/seat/mo</span></p>
+            <p>≈ $24 annual. Private repos, MCP, packages, Board. 3 000 CI min/seat/mo · 10 GB/seat. CI overage ≈ $0.008/min.</p>
+          </article>
+          <article>
+            <h3>Business</h3>
+            <p class="price">$79<span>/seat/mo</span></p>
+            <p>SSO/SAML (roadmap), audit export, dedicated Runner attach, 99.9% SLA.</p>
+          </article>
+        </div>
+        <p class="section-lede" style="margin-top:1.5rem">
+          <strong>Enterprise</strong> — contact for VPC / data residency, security reviews, custom pipes.
+          Optional <strong>self-host Support</strong> subscription (docs + tickets; not a license key).
+        </p>
+        <div class="cta-row" style="margin-top:1.25rem">
+          <a class="btn primary" data-base-href="cloud.html" href="./cloud.html">Cloud waitlist</a>
+          <a class="btn outline" data-base-href="self-host.html" href="./self-host.html">Self-host guide</a>
+        </div>
+      </section>
+    </main>
+    <footer class="foot" id="site-footer"></footer>
+    <script src="./app.js"></script>
+  </body>
+</html>

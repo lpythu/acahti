@@ -7,7 +7,9 @@
 
 Self-hosted **agent delivery control plane**: Git, pull requests, commit checks, CI logs, and language packages behind **one identity** and **one MCP endpoint**. Bring your coding agent. Humans supervise on the Board.
 
-[Product site](site/index.html) · [Install](docs/installation.md) · [Demo loop](docs/product/demo.md) · [Compare](docs/product/compare.md) · [Cloud pricing](docs/product/cloud.md) · [Architecture](architecture.md)
+**Product site:** [https://lpythu.github.io/acahti/](https://lpythu.github.io/acahti/) · [Compare](https://lpythu.github.io/acahti/compare.html) · [Security](https://lpythu.github.io/acahti/security.html) · [Self-host](https://lpythu.github.io/acahti/self-host.html) · [Pricing](https://lpythu.github.io/acahti/pricing.html) · [Cloud waitlist](https://lpythu.github.io/acahti/cloud.html)
+
+[Install](docs/installation.md) · [Demo loop](docs/product/demo.md) · [Product docs](docs/product/README.md) · [Architecture](architecture.md)
 
 ![Acahti — Agents ship. You watch.](docs/assets/delivery.svg)
 
@@ -21,11 +23,13 @@ Self-hosted **agent delivery control plane**: Git, pull requests, commit checks,
 
 Acahti fronts mature kernels (Forgejo + Woodpecker). It owns the shared workflow: identity, structured check feedback, inbox, and merge policy.
 
+**Honest boundary:** agents drive the delivery loop; humans still own invites, secrets, branch protection, and `deploy_approve`. Acahti does not host a model and does not replace Cursor/Codex.
+
 ## Fastest demo (one paste)
 
 After your instance is up ([install](docs/installation.md)):
 
-1. Open the instance home page → **Copy demo prompt for agent** (or copy below).
+1. Open the instance home page → copy the demo prompt (or copy below).
 2. Join / log in → open **Board**.
 3. Paste into Cursor, Codex, or any MCP-capable agent.
 
@@ -65,9 +69,9 @@ Editor plugin: [acahti-plugin](https://github.com/lpythu/acahti-plugin). Connect
 
 ## Self-host · safe · open
 
-- **Your infrastructure** — gateway public; git/CI kernels stay private
+- **Your infrastructure** — gateway public; git/CI kernels stay private ([security](https://lpythu.github.io/acahti/security.html))
 - **Lightweight relative to GitLab** — Go gateway + Compose; Runner on a separate host
-- **Apache-2.0** — same kernel for OSS and optional [Cloud](docs/product/cloud.md)
+- **Apache-2.0** — same kernel for OSS and optional [Cloud](https://lpythu.github.io/acahti/cloud.html)
 - **No model lock-in** — bring Cursor, Codex, or any MCP client
 
 ```bash
@@ -91,7 +95,11 @@ Details: [docs/installation.md](docs/installation.md). Review scripts before run
 | Business | $79 / seat / mo | SLA, audit, dedicated runner attach |
 | Enterprise | Contact | Residency, VPC, custom |
 
-We meter **seats + CI minutes + storage**, not MCP calls. Waitlist: see [docs/product/cloud.md](docs/product/cloud.md).
+We meter **seats + CI minutes + storage**, not MCP calls. [Pricing](https://lpythu.github.io/acahti/pricing.html) · [Waitlist](https://lpythu.github.io/acahti/cloud.html) · [spec](docs/product/cloud.md).
+
+## Status / non-goals
+
+Not in this release: full GitHub API / social parity, automatic issue/Actions migration, autonomous code repair, or per-task agent delegation.
 
 ## Development
 
@@ -101,8 +109,8 @@ GOWORK=off go test ./...
 GOWORK=off go test -race ./internal/mcp ./internal/oauth
 ```
 
-Marketing preview: open [`site/index.html`](site/index.html) in a browser (static, no build).
+Marketing preview: `python3 -m http.server 4173 --directory site` → http://127.0.0.1:4173/
 
 [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Product docs](docs/product/README.md) · [Third-party](THIRD_PARTY_NOTICES.md)
 
-Acahti gateway and integration code: [Apache-2.0](LICENSE). Forgejo, Woodpecker and other third-party components retain their own licenses. Per-task agent delegation and automatic GitHub migration are not features of this release.
+Acahti gateway and integration code: [Apache-2.0](LICENSE). Forgejo, Woodpecker and other third-party components retain their own licenses.
