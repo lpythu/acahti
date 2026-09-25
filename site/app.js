@@ -82,7 +82,7 @@ function mountChrome(active) {
         <a href="${base}cloud.html"${active === "cloud" ? ' aria-current="page"' : ""}>Cloud</a>
         <a href="${base}pricing.html"${active === "pricing" ? ' aria-current="page"' : ""}>Pricing</a>
         <a href="https://github.com/lpythu/acahti">GitHub</a>
-        <a class="btn ghost" href="${base}self-host.html">Install</a>
+        <a class="btn ghost" href="${base}self-host.html">Self-host</a>
       </nav>`
   }
   if (footer) {

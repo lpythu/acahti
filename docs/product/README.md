@@ -8,4 +8,4 @@ Public product site (GitHub Pages): **https://lpythu.github.io/acahti/**
 - [Cloud](./cloud.md) — hosted offering and pricing
 - [Demo loop](./demo.md) — one-paste agent closed loop
 
-Install: [../installation.md](../installation.md)
+Install via agent: [https://lpythu.github.io/acahti/install.md](https://lpythu.github.io/acahti/install.md) · [installation overview](../installation.md)
